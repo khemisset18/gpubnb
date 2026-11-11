@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f8faf8">
+  <meta name="description" content="GPUbnb : comparez la rentabilité de minage de votre GPU ou CPU, l'électricité et le bénéfice net.">
+  <title>Comparateur GPU et CPU — GPUbnb</title>
+  <link rel="stylesheet" href="rentabilite.css">
+  <script defer src="rentabilite.js"></script>
+</head>
+<body>
+  <a class="skip" href="#comparateur">Aller au comparateur</a>
+  <header class="topbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html" aria-label="GPUbnb, accueil"><span class="brand-icon">G</span><span>GPUbnb</span></a>
+      <nav aria-label="Navigation principale"><a href="index.html#market">Marketplace</a><a aria-current="page" href="rentabilite.html">Comparateur</a><a href="dashboard.html">Tableau de bord</a></nav>
+      <a class="header-link" href="index.html">Retour au site <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <main id="comparateur" class="container">
+    <section class="intro">
+      <div class="eyebrow"><span class="eyebrow-dot"></span> OUTIL GRATUIT · SANS INSCRIPTION</div>
+      <h1>La rentabilité de votre<br><span>GPU ou CPU, en clair.</span></h1>
+      <p>Choisissez votre matériel, indiquez le coût de votre électricité et découvrez votre bénéfice net estimé. Simple, transparent, sans promesse de gains.</p>
+      <div id="feedStatus" class="status" role="status" aria-live="polite"><span class="status-dot"></span><span>Vérification des données de minage…</span></div>
+    </section>
+
+    <div class="workspace">
+      <div class="form-stack">
+        <section class="paper step-card" aria-labelledby="hardwareHeading">
+          <div class="step-heading"><span class="step-number">01</span><div><h2 id="hardwareHeading">Votre matériel</h2><p>Sélectionnez votre carte graphique ou processeur.</p></div></div>
+          <div class="switch" role="group" aria-label="Type de matériel">
+            <button id="gpuTab" type="button" class="selected" aria-pressed="true">Carte graphique (GPU)</button>
+            <button id="cpuTab" type="button" aria-pressed="false">Processeur (CPU)</button>
+          </div>
+          <label for="searchDevice">Rechercher un modèle</label>
+          <input id="searchDevice" type="search" placeholder="Ex. RTX 3060, RX 7800 XT, Ryzen 9…" autocomplete="off">
+          <label for="deviceSelect">Choisir votre matériel <span class="required">*</span></label>
+          <select id="deviceSelect" aria-describedby="hardwareHelp"></select>
+          <p class="helper" id="hardwareHelp">Les consommations proposées sont indicatives, ajustez-les selon vos mesures.</p>
+          <div class="two-col">
+            <div><label for="quantity">Nombre d'appareils</label><input id="quantity" type="number" min="1" max="100" step="1" value="1"></div>
+            <div><label for="watts">Consommation par appareil (W)</label><input id="watts" type="number" min="1" max="1500" step="1"></div>
+          </div>
+        </section>
+
+        <section class="paper step-card" aria-labelledby="settingsHeading">
+          <div class="step-heading"><span class="step-number">02</span><div><h2 id="settingsHeading">Vos coûts</h2><p>Personnalisez le calcul à votre situation.</p></div></div>
+          <div class="two-col">
+            <div><label for="electricity">Électricité (€ / kWh)</label><input id="electricity" type="number" min="0" max="5" step="0.001" value="0.20"></div>
+            <div><label for="hours">Heures de minage / jour</label><input id="hours" type="number" min="0" max="24" step="0.5" value="24"></div>
+          </div>
+          <div class="two-col">
+            <div><label for="poolFee">Frais de pool (%)</label><input id="poolFee" type="number" min="0" max="100" step="0.1" value="1"></div>
+            <div><label for="purchasePrice">Prix d'achat (€) <span class="optional">facultatif</span></label><input id="purchasePrice" type="number" min="0" max="1000000" step="1" placeholder="Ex. 450"></div>
+          </div>
+        </section>
+
+        <section class="paper step-card" aria-labelledby="revenueHeading">
+          <div class="step-heading"><span class="step-number">03</span><div><h2 id="revenueHeading">Rendement de minage</h2><p id="revenueDescription">Renseignez un revenu brut observé ou connectez une source de données.</p></div></div>
+          <div id="liveCoinGroup" class="hidden">
+            <label for="coinSelect">Cryptomonnaie / algorithme</label>
+            <select id="coinSelect"><option value="best">La plus rentable selon vos coûts</option></select>
+          </div>
+          <label for="grossRevenue">Revenu brut pour 1 appareil (€ / 24 h)</label>
+          <div class="input-with-note"><input id="grossRevenue" type="number" min="0" max="100000" step="0.0001" placeholder="À saisir pour calculer le profit"><span id="grossSource" class="input-pill">Manuel</span></div>
+          <p id="revenueHelp" class="helper">Sans revenu brut renseigné, aucun bénéfice n'est inventé. Vous pouvez utiliser la valeur réelle fournie par votre pool.</p>
+          <button id="reset" class="subtle-button" type="button">Réinitialiser les paramètres</button>
+        </section>
+      </div>
+
+      <aside class="result-panel" aria-labelledby="resultsHeading">
+        <div class="paper results">
+          <div class="result-header"><div><span class="overline">VOTRE ESTIMATION</span><h2 id="resultsHeading">Bénéfice net</h2></div><span id="resultMode" class="chip">Calcul manuel</span></div>
+          <div class="headline-amount" id="profitDay" aria-live="polite">—</div>
+          <div class="per-day">par jour après frais et électricité</div>
+          <p id="profitMessage" class="result-message">Saisissez un revenu brut pour afficher une estimation.</p>
+          <div class="periods">
+            <div><span>Par semaine</span><strong id="profitWeek">—</strong></div>
+            <div><span>Par mois (30 j)</span><strong id="profitMonth">—</strong></div>
+            <div><span>Par an (365 j)</span><strong id="profitYear">—</strong></div>
+          </div>
+          <div class="breakdown">
+            <h3>Détail par jour</h3>
+            <div><span>Revenu brut</span><strong id="revenueDaily">—</strong></div>
+            <div><span>Coût électrique</span><strong id="electricCost">—</strong></div>
+            <div><span>Frais de pool</span><strong id="feesDaily">—</strong></div>
+            <div class="total"><span>Bénéfice net</span><strong id="netDaily">—</strong></div>
+          </div>
+          <div class="extra-metrics">
+            <div><span>Énergie / jour</span><strong id="energyDaily">—</strong></div>
+            <div><span>Amortissement théorique</span><strong id="roi">—</strong></div>
+          </div>
+          <p class="footnote">Projection théorique, pas un revenu garanti. Les cours, les récompenses, la difficulté, l'usure et les impôts peuvent modifier le résultat.</p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="compare" aria-labelledby="compareHeading">
+      <div class="compare-heading"><div><span class="overline">COMPARAISON</span><h2 id="compareHeading">Comparer les modèles</h2><p>Choisissez un appareil dans le tableau pour le retrouver dans le calculateur.</p></div><div class="compare-controls"><label for="tableFilter" class="sr-only">Filtrer les modèles</label><input id="tableFilter" type="search" placeholder="Filtrer les modèles…"></div></div>
+      <div class="paper table-scroller">
+        <table><thead><tr><th>Matériel</th><th>Consommation indicative</th><th>Coût électrique / jour</th><th>Revenu brut / jour</th><th>Profit net / jour</th><th><span class="sr-only">Action</span></th></tr></thead><tbody id="comparisonBody"></tbody></table>
+        <p id="tableEmpty" class="empty hidden">Aucun modèle trouvé pour cette recherche.</p>
+        <div class="table-note" id="tableNote">Les profits n'apparaissent que lorsque des données minières validées sont disponibles. L'électricité est calculée avec vos paramètres.</div>
+      </div>
+    </section>
+
+    <section class="information" aria-label="Informations">
+      <article><span class="information-icon" aria-hidden="true">↗</span><h3>Comment est calculé le bénéfice ?</h3><p>Revenu brut – frais de pool – électricité. Le revenu saisi correspond à 24 heures pour un seul appareil. Le nombre d'heures et d'appareils ajuste ensuite le résultat.</p></article>
+      <article><span class="information-icon" aria-hidden="true">i</span><h3>Pourquoi pas de chiffres inventés ?</h3><p>Le rendement dépend de la monnaie minée, de l'algorithme, de la difficulté et des cours. Sans source fiable, GPUbnb affiche un calcul manuel plutôt qu'un faux temps réel.</p></article>
+    </section>
+  </main>
+  <footer class="footer"><div class="container footer-flex"><span>© GPUbnb · Comparateur GPU / CPU</span><span>Outil informatif · Aucun conseil d'investissement</span><a href="index.html">Retour à GPUbnb</a></div></footer>
+</body>
+</html>
