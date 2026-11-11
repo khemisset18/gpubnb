@@ -19,8 +19,8 @@ def run(binary, expected_sha, parent, output):
     output.mkdir(mode=0o700,exist_ok=False)
     report={'sourceCommit':'e0a1c157791544e818c901bd9341896965afbf9d','binarySha256':expected_sha,
             'buildKind':'SOURCE_DIAGNOSTIC_NOT_D0','qualificationStatus':'BLOCKED',
-            'probeStatus':'FAIL','namespaceBefore':links,'maxBlocks':240,'maxCpuSeconds':180,
-            'networkLoadBenchmark':False,'syntheticPressureEntries':1}
+            'probeStatus':'FAIL','namespaceBefore':links,'maxBlocks':1594,'maxFixtureBlocks':1354,'maxCpuSeconds':180,
+            'networkLoadBenchmark':False,'syntheticPressureEntries':2,'maxPressureEntriesPerFixture':1}
     resource.setrlimit(resource.RLIMIT_CPU,(180,180))
     resource.setrlimit(resource.RLIMIT_AS,(2*1024**3,2*1024**3))
     resource.setrlimit(resource.RLIMIT_FSIZE,(64*1024**2,64*1024**2))
@@ -33,8 +33,9 @@ def run(binary, expected_sha, parent, output):
         validate_namespace(parent,os.readlink('/proc/self/ns/net'),after);report['namespaceAfter']=after
         result.check_returncode()
         log=(output/'policy-tests.log').read_text()
-        if '2 test cases out of 2 passed' not in log or 'rolling-floor paid=' not in log or 'soft-dust aggregate=' not in log:
-            raise ValueError('both native probes must actually execute and pass')
+        if '3 test cases out of 3 passed' not in log or any(marker not in log for marker in
+                ('rolling-floor paid=','soft-dust aggregate=','bounded-refund old-fee=')):
+            raise ValueError('all three native probes must actually execute and pass')
         report['probeStatus']='PASS'
     finally:
         (output/'report.json').write_text(json.dumps(report,indent=2)+'\n')
