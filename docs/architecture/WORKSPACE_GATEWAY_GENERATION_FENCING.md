@@ -45,10 +45,21 @@ of stale authority from a snapshot).
 The valid lease is deliberately short but authoritative for its remaining
 lifetime. Therefore loss of PostgreSQL after a successful renewal can leave at
 most two seconds of already-issued authority; it cannot create or extend a
-lease. Per-frame readiness updates do not refresh it. A Redis-only hot-path
-frame also does not refresh browser, channel or readiness TTLs because it has no
-authoritative session expiry snapshot. The next PostgreSQL-backed lease renewal
-may refresh those keys, bounded by the freshly read `expiresAt`.
+lease. Per-frame readiness updates do not refresh it. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:0359434e2c82381996268ddeba8385b83d725e5ee9464c9ff53492a3c6dd25b7 -->
+
+A Redis-only hot-path
+frame does not refresh browser, channel or authority TTLs because it has no
+authoritative session expiry snapshot. It does publish the legacy upstream-ready
+hint, bounded atomically by the minimum remaining browser/channel PTTL, after
+checking the exact channel binding and generation. Missing or persistent
+bindings are refused. This lets a second legacy channel open while another
+channel keeps the session generation hot. The hint does not authorize delivery.
+The next PostgreSQL-backed lease renewal may refresh bindings, bounded by the
+freshly read `expiresAt`.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## First-frame billing
 

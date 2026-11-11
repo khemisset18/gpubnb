@@ -177,6 +177,16 @@ const MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT=`
 -- prevent periodic PostgreSQL revalidation. STOP between enqueue and this mark
 -- also suppresses publication of a fresh upstream-ready hint.
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+if redis.call('GET', KEYS[4]) ~= ARGV[3] then return 0 end
+if redis.call('EXISTS', KEYS[2]) ~= 1 then return 0 end
+if ARGV[2] == '0' then
+  -- A hot frame has no SQL expiry snapshot. Publish legacy readiness using
+  -- only the remaining binding lifetimes; never extend any authorization.
+  local ttl = math.min(redis.call('PTTL', KEYS[2]), redis.call('PTTL', KEYS[4]))
+  if ttl <= 0 then return 0 end
+  redis.call('SET', KEYS[3], '1', 'PX', ttl)
+  return 1
+end
 redis.call('EXPIRE', KEYS[2], ARGV[2])
 redis.call('SET', KEYS[3], '1', 'EX', ARGV[2])
 redis.call('EXPIRE', KEYS[4], ARGV[2])
@@ -764,16 +774,12 @@ export async function committedGatewayFrame(db:PrismaClient,sessionId:string,cha
 }
 
 export async function markAcceptedGatewayFrame(redis:Redis,sessionId:string,channelId:string,binding:GatewayChannelBinding,authorityId:string|undefined,expiresAt?:Date){
-  // A Redis-only hot-path admission intentionally has no database expiry
-  // snapshot. Never turn that absence into the one-hour fallback TTL: the
-  // browser/channel bindings already carry their session-bounded TTL, and the
-  // next lease renewal (at most two seconds later) can refresh them from a
-  // fresh PostgreSQL expiry. This also keeps a stale readiness hint from
-  // outliving the workspace merely because frames remain busy.
-  if(!authorityId||!expiresAt)return false;
+  // Hot frames still prove that a legacy upstream is alive. Lua derives the
+  // hint's TTL from existing bindings, without renewing their authority.
+  if(!authorityId)return false;
   return Number(await boundedGatewayRedis(redis.eval(
     MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT,4,wsSessionActivatedKey(sessionId),binding.browserSessionKey,
-    wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,String(gatewaySessionTtl(expiresAt)),
+    wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,expiresAt?String(gatewaySessionTtl(expiresAt)):'0',JSON.stringify(binding),
   )))===1;
 }
 
