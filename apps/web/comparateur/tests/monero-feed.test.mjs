@@ -15,7 +15,7 @@ function fixtures() {
   return {
     info:{result:{status:'OK',untrusted:false,synchronized:true,nettype:'mainnet',
       offline:false,height:tipHeight+1}},
-    last:{result:{status:'OK',untrusted:false,block_header:headers.at(-1)}},
+    last:{result:{status:'OK',untrusted:false,block_header:{...headers.at(-1)}}},
     range:{result:{status:'OK',untrusted:false,headers}}
   };
 }
