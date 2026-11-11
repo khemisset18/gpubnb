@@ -108,3 +108,18 @@ test('a cached own-node snapshot still obeys its stricter 20-minute limit',()=>{
   assert.ok(validateOwnPoWSnapshot(p,now+19*60000));
   assert.equal(validateOwnPoWSnapshot(p,now+21*60000),null);
 });
+
+test('status identifies which verified backup operator is active',async()=>{
+ const {data,env}=kvWithPrevious();
+ data.set('net:xmr',{...xmrSample(),operators:['nodely.io','hostingwire.net'],
+   activeOperator:'nodely.io',usedFallback:true});
+ data.set('net:etc',{...powSample('ETC'),operator:'ETC ETCMC',usedFallback:true});
+ const status=await route('/api/status',env,now+HOUR);
+ const xmr=status.sources.find(x=>x.coin==='XMR');
+ const etc=status.sources.find(x=>x.coin==='ETC');
+ const rvn=status.sources.find(x=>x.coin==='RVN');
+ assert.equal(xmr.operator,'nodely.io');assert.equal(xmr.fallback,true);
+ assert.equal(etc.operator,'ETC ETCMC');assert.equal(etc.fallback,true);
+ assert.equal(rvn.fallback,false);
+ assert.equal(xmr.status,'fresh');
+});
