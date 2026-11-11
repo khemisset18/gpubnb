@@ -1,0 +1,79 @@
+{
+  "candidate": {
+    "amd64Digest": "sha256:a697f71bfd66a04519dcab6c68991fc29da077969eac3af5e26983e81e44a16a",
+    "descriptorCount": 2,
+    "indexDigest": "sha256:db3f583fa49121942168bd6383a773b2cde3384c9a99bf7193560b9a0f3a28fd",
+    "registry": "cgr.dev/chainguard/minio",
+    "tag": "latest"
+  },
+  "candidateStatus": "PASS_AT_RECORDED_RUN",
+  "oldAmd64Digest": "sha256:abdbe7d805b4dc931053275bc65d6c96ea88e66fd121aa3bb87d7354ecd875c5",
+  "oldArtifactId": 13872688563,
+  "oldArtifactSha256": "f2071c0aa1f73cfee04fe08632a8acb93038c80b5ebae38acd2579a17b0dae02",
+  "oldFindings": {
+    "CVE-2026-116591": [
+      "mc",
+      "minio"
+    ],
+    "CVE-2026-84243": [
+      "glibc-2.44",
+      "glibc-2.44-locale-posix",
+      "ld-linux-2.44"
+    ]
+  },
+  "oldScanRun": "https://github.com/khemisset18/gpubnb/actions/runs/43061441056",
+  "qualificationStatus": "BLOCKED",
+  "requirements": [
+    "Existing exact vendor certificate/issuer verification",
+    "Existing signed SBOM verification",
+    "All-severity Trivy scan with ignore-unfixed=false",
+    "Private container network and synthetic S3 credentials",
+    "Actual put/get and historical migration roundtrips"
+  ],
+  "schemaVersion": 1,
+  "validatedArtifact": {
+    "id": 13876080172,
+    "sha256": "2a508c3a2b921d2fdf656e5bfac694dc7fc3591c583497267a5cb5f8278651f1"
+  },
+  "validatedExecutionCommit": "0923d0dc7469bd977ef0a5b176fc891fa257a99b",
+  "validatedRun": "https://github.com/khemisset18/gpubnb/actions/runs/43064350230",
+  "validation": {
+    "allSeverityScan": {
+      "osPackages": 23,
+      "scanCreatedAt": "2026-11-11T17:03:50.757049511Z",
+      "vulnerabilities": 0
+    },
+    "amd64SbomSubjects": [
+      {
+        "digest": {
+          "sha256": "a697f71bfd66a04519dcab6c68991fc29da077969eac3af5e26983e81e44a16a"
+        },
+        "name": "cgr.dev/chainguard/minio"
+      }
+    ],
+    "exactVendorSignature": "PASS",
+    "originalArtifactFileSha256": {
+      "image-signature.json": "2b3f43551a7056e18edd403a0e5a4cfbfe6145d7434b5921c1e236cdcbdf7c35",
+      "image-trivy.json": "136ec7a4b8df1157162b365e3931813bdcf45629934582000b3cdfe4653e050c",
+      "migration.log": "3cbe7c8318616060a3fe0b770613030b81a53316ff33c554e73cd94a36e4ed3c",
+      "minio-container.log": "59b47af221e295df128ca2bbfcc70a6cdde2fc24ea53da2aeacd0bc05d600c0a",
+      "roundtrip.log": "c4f6bed549323ab159a5028aa97908f6f565ab80b6a57f43bc06d59721f7367d",
+      "signed-sbom.jsonl": "c4738908d90904458b6d1f407f9c11c39ed57866061fe76f477ad204f8ea90e9"
+    },
+    "realHistoricalMigration": {
+      "failed": 0,
+      "passed": 1,
+      "skipped": 0
+    },
+    "realPutGet": {
+      "failed": 0,
+      "passed": 1,
+      "skipped": 0
+    },
+    "signedSpdxSbom": "PASS"
+  },
+  "vendorReferences": [
+    "https://images.chainguard.dev/security/CGA-52rq-vccq-x6mp",
+    "https://images.chainguard.dev/directory/image/minio/provenance"
+  ]
+}

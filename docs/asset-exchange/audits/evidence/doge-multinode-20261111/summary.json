@@ -1,0 +1,175 @@
+{
+  "artifactId": 13869537839,
+  "artifactSha256": "532da0a82be8951fb37eb5c38f5cea71c44b2f5b7ec7ff2682e95749b09f3dea",
+  "checks": {
+    "allInternalDigests": true,
+    "artifactSha256": true,
+    "confirmationHeightRelations": true,
+    "exactDaemonRpcMethodCounteraudit": true,
+    "publicRefundSignaturesAndTerms": true
+  },
+  "executionCommit": "4a253fc15503e9e9a164ce96375f1729c915c020",
+  "experimentStatus": "PASS",
+  "fork": {
+    "aHeight": 1357,
+    "aRollbackDepth": 3,
+    "bHeight": 1359,
+    "commonHeight": 1354,
+    "winningBranchLength": 5
+  },
+  "fundingTxid": "b8cb428019d659500a45c7764ea8c9a2c6d676e81a006fdb04d98bad22e1a989",
+  "generatedBlocks": 1363,
+  "harnessCommit": "e0694a9916ac705f345cf10b88ece1075adb88ed",
+  "jobId": 130631601685,
+  "limits": [
+    "independent external review",
+    "AuxPoW malformed-parent/merkle adversarial matrix",
+    "production watcher deployment",
+    "all D0-D9 requirements",
+    "physical separate-machine recovery",
+    "hardware signer",
+    "native keyless fee escalation in this first run"
+  ],
+  "localPolicyDifferential": {
+    "aAdmitted": true,
+    "aHardDustDoge": "0.001",
+    "bAcceptedConfirmedBlock": true,
+    "bHardDustDoge": "0.002",
+    "bRejected": "dust",
+    "outputKoinu": 150000
+  },
+  "members": {
+    "dogecoin-cli": {
+      "member": "dogecoin-1.14.9/bin/dogecoin-cli",
+      "sha256": "2d3c69c56db3c3c51f0f7540ce05e723f0df59b308a3d78e424b5dfff0a1b3b3"
+    },
+    "dogecoind": {
+      "member": "dogecoin-1.14.9/bin/dogecoind",
+      "sha256": "897494db97d4a0be43a712151dafd4b06d0a66339d55350457505506fd5a6aca"
+    },
+    "libdogecoinconsensus.so.0.0.0": {
+      "member": "dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0",
+      "sha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b"
+    }
+  },
+  "paidFeeKoinu": "100000000",
+  "qualificationStatus": "BLOCKED",
+  "recoveredKoinu": "9900000000",
+  "recoveryBundleSha256": "3fe71927cff1b92e36693be759ec73c1f8c4df75dbfe8912bf688a75cb9fae51",
+  "recoveryFundingKoinu": "10000000000",
+  "recoveryIsolation": {
+    "backendUnavailable": true,
+    "isolatedPython": true,
+    "nodeADataUnavailable": true,
+    "originalSigningKeysUnavailable": true,
+    "separateMountNamespace": true,
+    "standalonePackageSha256": "1250e13bcf8eec24b41c412be8e36a3d3df94fb0f59ee3f422c77bc8a5b3d438",
+    "walletKeysProvided": false
+  },
+  "recoveryTransitions": [
+    "PENDING",
+    "CONFIRMED",
+    "REORGED",
+    "CONFIRMED"
+  ],
+  "recoveryTxid": "57829b2f05b0952412af235f460f79c767c287051c0927b15f825307b36c7de9",
+  "rpcCalls": 202,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43052066409",
+  "schemaVersion": 1,
+  "scope": "native private two-node Regtest and backend-hidden standalone recovery; not external security audit",
+  "settlementAllowed": false,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "version": "1.14.9",
+  "watcherStates": {
+    "converged_refund": {
+      "canAdvance": true,
+      "chainId": "dogecoin",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "networkId": "regtest",
+      "qualificationStatus": "BLOCKED",
+      "settlementAllowed": false,
+      "states": {
+        "doge-a": "CONFIRMED",
+        "doge-b": "CONFIRMED"
+      },
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT"
+    },
+    "local_recovery_reorg": {
+      "canAdvance": false,
+      "chainId": "dogecoin",
+      "consistency": "UNCERTAIN",
+      "everyFresh": true,
+      "networkId": "regtest",
+      "qualificationStatus": "BLOCKED",
+      "settlementAllowed": false,
+      "states": {
+        "doge-a": "CONFIRMED",
+        "doge-b": "REORGED"
+      },
+      "tipConsistency": "UNCERTAIN",
+      "transactionConsistency": "CONSISTENT"
+    },
+    "local_recovery_restored": {
+      "canAdvance": false,
+      "chainId": "dogecoin",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "networkId": "regtest",
+      "qualificationStatus": "BLOCKED",
+      "settlementAllowed": false,
+      "states": {
+        "doge-a": "CONFIRMED",
+        "doge-b": "CONFIRMED"
+      },
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT"
+    },
+    "partitioned_claim": {
+      "canAdvance": false,
+      "chainId": "dogecoin",
+      "consistency": "UNCERTAIN",
+      "everyFresh": true,
+      "networkId": "regtest",
+      "qualificationStatus": "BLOCKED",
+      "settlementAllowed": false,
+      "states": {
+        "doge-a": "CONFIRMED",
+        "doge-b": "UNKNOWN"
+      },
+      "tipConsistency": "UNCERTAIN",
+      "transactionConsistency": "CONSISTENT"
+    },
+    "recovery_refund_confirmed": {
+      "canAdvance": false,
+      "chainId": "dogecoin",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "networkId": "regtest",
+      "qualificationStatus": "BLOCKED",
+      "settlementAllowed": false,
+      "states": {
+        "doge-a": "CONFIRMED",
+        "doge-b": "CONFIRMED"
+      },
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT"
+    },
+    "reorged_claim": {
+      "canAdvance": false,
+      "chainId": "dogecoin",
+      "consistency": "CONFLICT",
+      "everyFresh": true,
+      "networkId": "regtest",
+      "qualificationStatus": "BLOCKED",
+      "settlementAllowed": false,
+      "states": {
+        "doge-a": "CONFLICTED",
+        "doge-b": "CONFLICTED"
+      },
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONFLICT"
+    }
+  }
+}

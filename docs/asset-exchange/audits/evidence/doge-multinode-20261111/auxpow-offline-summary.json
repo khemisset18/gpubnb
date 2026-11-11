@@ -1,0 +1,39 @@
+{
+  "d2": {
+    "failed": 0,
+    "passed": 95
+  },
+  "logsSha256": {
+    "d2.log": "d335a57b0b6c6dfed7c8575cd10fe4c8bb8bdda61c3455f1ac198f298e781707",
+    "multinode.log": "2fb4668cea3d561ed8a305fc5154dc0b67cdadb815ef86d8037edecad4f03d9c",
+    "policy.log": "3e60f2c9ab4f527244be797f528c5881a2f457b728374381e101101a1eee10a6",
+    "recovery.log": "df3a132b018703afdd0e6e758795bb2890d11f0821d4815ca4ea284e2aae1cce",
+    "signer.log": "32f7ac280dde883273ce746bca49fa1f23d89d65cd510bc049e2b006e627ac7b",
+    "watchers.log": "bfcc286f4ca511c8df139b9d63ffa8e7dd6dc3466105232fa3bf85392e3f38ec",
+    "watchers.tap": "31b0b6a9b8e82de31cf09ef50fa1fa1f347e488605a3633c01dd2f718a4a013c"
+  },
+  "multinode": {
+    "failed": 0,
+    "passed": 18
+  },
+  "policy": {
+    "failed": 0,
+    "passed": 9
+  },
+  "recovery": {
+    "failed": 0,
+    "passed": 16
+  },
+  "retainedCombinedLog": "auxpow-offline.log",
+  "retainedCombinedLogSha256": "ff08d593c24c49f2e222a6e2c03ac045581dda50eb5cfd66be4943e0a2251104",
+  "scope": "Offline software guards only; native results are recorded separately",
+  "signer": {
+    "failed": 0,
+    "passed": 12
+  },
+  "totalPassed": 174,
+  "watchers": {
+    "failed": 0,
+    "passed": 24
+  }
+}

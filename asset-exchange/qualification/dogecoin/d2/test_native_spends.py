@@ -9,6 +9,16 @@ from unittest.mock import patch
 import native_spends
 
 class NativeSpendsGuards(unittest.TestCase):
+    def test_retry_is_allowed_at_unique_fixture_cap_but_new_transaction_is_not(self):
+        submitted=set()
+        for n in range(32):native_spends.register_fixture(submitted,n.to_bytes(2,'little'))
+        original=native_spends.register_fixture(submitted,b'\0\0')
+        self.assertEqual(len(submitted),32)
+        self.assertEqual(original,native_spends.hash256(b'\0\0')[::-1].hex())
+        with self.assertRaisesRegex(ValueError,'fixture budget'):
+            native_spends.register_fixture(submitted,b'new transaction')
+        self.assertEqual(len(submitted),32)
+
     def test_unsafe_fixture_generation_requires_exact_refund_boundary(self):
         for raw in [None,b'',b'\x67\x02\x4b\x05\xb1\x75'*2]:
             with self.assertRaises(ValueError):native_spends.adversarial_redeems(raw)

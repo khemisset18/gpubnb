@@ -1,0 +1,56 @@
+{
+  "adaptation": "Pinned upstream AuxPoW test serialization and mutations; hashlib.scrypt uses the same N1024/r1/p1 parameters, checked against all five upstream known-answer vectors. This is fixture construction, not a second consensus engine.",
+  "commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "license": "MIT",
+  "licenseFile": "../d2/DOGECOIN_COPYING",
+  "nativeStatusAtPreparation": "NOT_TESTED",
+  "qualificationStatus": "BLOCKED",
+  "schemaVersion": 1,
+  "scope": {
+    "acceptedBlocks": 1,
+    "childBits": "207fffff",
+    "negativeCases": 7,
+    "originalSigningKeys": "already removed",
+    "parentAttemptsPerProof": 256,
+    "proofs": 8
+  },
+  "softwareGuards": {
+    "failed": 0,
+    "passed": 18
+  },
+  "sourceFiles": [
+    {
+      "path": "qa/rpc-tests/test_framework/scrypt_auxpow.py",
+      "sha256": "2468af157161d7b7ff5e2ffae83fa56004872d447fc085cfc85a3e73cd69e2af"
+    },
+    {
+      "path": "qa/rpc-tests/test_framework/auxpow.py",
+      "sha256": "5686dd6f6beab3819693b35ebe2e1c4301a01046d6257fddd58ce5976e5a38a3"
+    },
+    {
+      "path": "qa/rpc-tests/createauxblock.py",
+      "sha256": "be031a3b2aebdc9bf4ad2784fae8416450fd1eba9514e0d727086157e9f008a8"
+    },
+    {
+      "path": "src/auxpow.cpp",
+      "sha256": "b22c836336b15e4902af21631423e98120846948424f277c31ccd04fa0f0e414"
+    },
+    {
+      "path": "src/test/auxpow_tests.cpp",
+      "sha256": "b561e482848e8d5160d7b492d7da86b16939f3c14cdecc85103adef8db72ac00"
+    },
+    {
+      "path": "src/test/scrypt_tests.cpp",
+      "sha256": "0aa4d65c04d736e4b54bbacba918b1601f72cfc9fca9abc4a08203610a58b2d7"
+    },
+    {
+      "path": "src/dogecoin.cpp",
+      "sha256": "f2aa3eee4d84fe3eca14279888fa442e70740cd31117d902defd0957abec34da"
+    },
+    {
+      "path": "src/rpc/mining.cpp",
+      "sha256": "90e11cddd7fa3918978b2fb362d3b111bf102c9f307395205baa8b15a930954d"
+    }
+  ],
+  "upstream": "dogecoin/dogecoin"
+}

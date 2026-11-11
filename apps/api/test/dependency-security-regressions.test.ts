@@ -2,9 +2,43 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Connection, SolanaJSONRPCError } from '@solana/web3.js';
 import { z, ZodError } from 'zod';
 import { sanitizeAccelerators } from '../src/accelerator-telemetry.js';
+import { publicClientError } from '../src/http-errors.js';
+
+test('patched static dependencies preserve file discovery and reject traversal through the public error handler', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'gpubnb-static-regression-'));
+  const root = join(directory, 'public');
+  await mkdir(join(root, 'nested'), {recursive: true});
+  await writeFile(join(root, 'index.html'), '<p>public fixture</p>');
+  await writeFile(join(root, 'nested', 'item.txt'), 'nested fixture');
+  await writeFile(join(directory, 'private.txt'), 'outside fixture must stay unreadable');
+  const app = Fastify();
+  t.after(async () => { await app.close(); await rm(directory, {recursive: true, force: true}); });
+  app.setErrorHandler((error, _request, reply) => {
+    const client = publicClientError(error);
+    return client ? reply.code(client.statusCode).send({error: client.code})
+      : reply.code(500).send({error: 'internal_error'});
+  });
+  // wildcard=false exercises the plugin's actual glob-based file discovery.
+  await app.register(fastifyStatic, {root, prefix: '/assets/', wildcard: false});
+  app.get('/forbidden', async (_request, reply) => reply.sendFile('../private.txt'));
+  for (const [url, body] of [['/assets/index.html', '<p>public fixture</p>'],
+    ['/assets/nested/item.txt', 'nested fixture']]) {
+    const response = await app.inject({method: 'GET', url});
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body, body);
+  }
+  assert.equal((await app.inject({method: 'GET', url: '/assets/missing.txt'})).statusCode, 404);
+  const blocked = await app.inject({method: 'GET', url: '/forbidden'});
+  assert.equal(blocked.statusCode, 403);
+  assert.deepEqual(blocked.json(), {error: 'request_error'});
+});
 
 test('Zod rejects oversized constrained collections without accumulating per-element issues', () => {
   const parsed = z.array(z.string()).max(4).safeParse(Array(100_000).fill(42));

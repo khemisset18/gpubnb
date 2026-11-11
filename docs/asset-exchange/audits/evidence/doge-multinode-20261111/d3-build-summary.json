@@ -1,0 +1,14 @@
+{
+  "artifactId": 13871863816,
+  "artifactSha256": "9ec592c8701ac7c4776934f62158236464cb2ac18341e1a1777d90157b44c0b7",
+  "cause": "Test translation unit lacked chainparams.h for Params(); implementation files unchanged",
+  "correction": "Add explicit chainparams.h include; rerun native suite required",
+  "dependencyBuild": "PASS",
+  "diagnosticCompilation": "FAIL",
+  "executionCommit": "bebd9a5fa07a184b3fa7b497edc4b987997b93d5",
+  "jobId": 130650977102,
+  "nativeExecution": "NOT_TESTED",
+  "qualificationStatus": "BLOCKED",
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43057545782",
+  "schemaVersion": 1
+}

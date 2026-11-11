@@ -1,0 +1,51 @@
+{
+  "artifactId": 13873608252,
+  "artifactSha256": "cdfcd5c56061b70c8d8a54c7052322a6d66b5071b617a92a61a07c799d591002",
+  "assertionsPassed": 2357,
+  "buildKind": "SOURCE_DIAGNOSTIC_NOT_D0",
+  "cases": [
+    {
+      "assertionsPassed": 1134,
+      "name": "bip65_block_activation_differs_from_mempool_policy",
+      "scope": "NATIVE_CHAIN"
+    },
+    {
+      "assertionsPassed": 1141,
+      "name": "timestamp_mtp_finality_and_height_domain",
+      "scope": "NATIVE_CHAIN"
+    },
+    {
+      "assertionsPassed": 70,
+      "name": "signed_legacy_sighash_mutation_matrix",
+      "scope": "NATIVE_SIGNED_PRIMITIVE_WITH_SYNTHETIC_OUTPOINTS"
+    },
+    {
+      "assertionsPassed": 12,
+      "name": "legacy_scriptsig_malleability_changes_funding_txid",
+      "scope": "NATIVE_SIGNED_PRIMITIVE_WITH_SYNTHETIC_OUTPOINTS"
+    }
+  ],
+  "checks": {
+    "artifactAndInternalHashes": true,
+    "currentRepositoryTestSourcesMatch": true,
+    "everyCasePassedInDetailedBoostReport": true,
+    "loopbackOnlyBeforeAndAfter": true,
+    "pinnedUpstreamImplementationsUnmodified": true
+  },
+  "diagnosticBinarySha256": "858826c8b7d9d2db2613e5ff7162124809fab23701b4ed496cf2e53ed879281b",
+  "executionCommit": "66afc5bf1fdff1666280a74c8f45604a14ca89b8",
+  "harnessCommit": "f875ff245092a8c309a604d90d736a56404aeb51",
+  "jobId": 130660374503,
+  "limits": [
+    "Not the qualified D0 executable",
+    "Not all253 upstream cases",
+    "D2 exact-profile prerequisites still blocked",
+    "Hardware signer/external audit not tested"
+  ],
+  "qualificationStatus": "BLOCKED",
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43060202035",
+  "schemaVersion": 1,
+  "selectedCasesPassed": 4,
+  "settlementAllowed": false,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d"
+}

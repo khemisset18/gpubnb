@@ -1,0 +1,88 @@
+{
+  "artifactId": 13871149596,
+  "artifactSha256": "3d1b4abd71da35bf798ebae30566f2c3b7e6fbdaad48b053cee31db4f887485f",
+  "checks": {
+    "artifactAndAllInternalHashes": true,
+    "backendAndOriginalKeysHiddenEachCall": true,
+    "exactDaemonRpcMethodCounteraudit": true,
+    "publicRefundSignaturesAndTerms": true,
+    "samePendingBytesAcrossTwoNodes": true
+  },
+  "executionCommit": "bebd9a5fa07a184b3fa7b497edc4b987997b93d5",
+  "experimentStatus": "PASS",
+  "fork": {
+    "aHeight": 1357,
+    "aRollbackDepth": 3,
+    "bHeight": 1359,
+    "commonHeight": 1354,
+    "winningBranchLength": 5
+  },
+  "generatedBlocks": 1363,
+  "harnessCommit": "0201f0392cbd5c9b10d025c64fa74159f5b2d84d",
+  "jobId": 130650976959,
+  "keylessFees": {
+    "feeCapKoinu": "1000000",
+    "fundingValueKoinu": "100000000",
+    "keysUnavailable": true,
+    "lowFeeKoinu": "100000",
+    "lowFeeTxid": "fa0ef372c8e668d0da8dc08e620f7f2427604be3639891cdb745d21da2300136",
+    "lowerFloorPendingRerelay": {
+      "nodeRelayDogePerKb": "0.00100000",
+      "samePendingTxid": true,
+      "sameSignedBytes": true,
+      "selectedFeeKoinu": "1000000",
+      "source": "a"
+    },
+    "nativeLowFeeRejection": {
+      "exitCode": 26,
+      "reason": "error code: -26\nerror message:\n66: insufficient priority\n"
+    },
+    "newSignatureCreated": false,
+    "nodeBRelayDogePerKb": "0.01000000",
+    "pendingReplacementAttempted": false,
+    "retainedValueKoinu": "99000000",
+    "selectedFeeKoinu": "1000000",
+    "selectedTxid": "51ecc6f96bd4535e57d1ca8e7d990b2a67fb3843fe0fac3aaa4f8de509a4bfcb"
+  },
+  "limits": [
+    "Finite pre-signed fee coverage",
+    "No pending RBF/pinning matrix",
+    "No physical second machine/hardware signer",
+    "External D9 audit missing"
+  ],
+  "qualificationStatus": "BLOCKED",
+  "recoveryBundleSha256": "97ea26d40ba8c13edb1e389b79c10d9ce9963bde100c1b61d3a155e58b7e46af",
+  "recoveryTransitions": [
+    {
+      "source": "b",
+      "state": "PENDING",
+      "transition": "PENDING"
+    },
+    {
+      "source": "a",
+      "state": "PENDING",
+      "transition": "PENDING"
+    },
+    {
+      "source": "b",
+      "state": "CONFIRMED",
+      "transition": "CONFIRMED"
+    },
+    {
+      "source": "b",
+      "state": "PENDING",
+      "transition": "REORGED"
+    },
+    {
+      "source": "b",
+      "state": "CONFIRMED",
+      "transition": "CONFIRMED"
+    }
+  ],
+  "rpcCalls": 240,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43057545782",
+  "schemaVersion": 1,
+  "scope": "native private two-node Regtest, keyless fee selection and exact pending rerelay at a lower observed fee floor",
+  "settlementAllowed": false,
+  "standalonePackageSha256": "f7190e81872e7fbad7806f863feb2a83509c15bd55c699a8b491e6967c2e4303"
+}

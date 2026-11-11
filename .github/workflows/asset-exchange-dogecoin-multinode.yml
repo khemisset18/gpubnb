@@ -1,0 +1,106 @@
+name: Asset Exchange DOGE Private Multi-node Experiment
+
+# Manual only: no native signing, mining or broadcast on push/pull_request.
+on:
+  workflow_dispatch:
+    inputs:
+      execution_commit:
+        description: Exact 40-character commit dispatched on this branch
+        type: string
+        required: true
+      harness_commit:
+        description: Reviewed 40-character commit whose executable sources must match
+        type: string
+        required: true
+      authorization:
+        description: AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      execution_commit:
+        type: string
+        required: true
+      harness_commit:
+        type: string
+        required: true
+      authorization:
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: doge-private-multinode-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  private-multinode:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout dispatched commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require explicit exact scope and unchanged reviewed harness
+        env:
+          EXECUTION_COMMIT: ${{ inputs.execution_commit }}
+          HARNESS_COMMIT: ${{ inputs.harness_commit }}
+          LAB_AUTHORIZATION: ${{ inputs.authorization }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re
+          assert re.fullmatch('[0-9a-f]{40}',os.environ['EXECUTION_COMMIT'])
+          assert re.fullmatch('[0-9a-f]{40}',os.environ['HARNESS_COMMIT'])
+          assert os.environ['EXECUTION_COMMIT']==os.environ['GITHUB_SHA']
+          assert os.environ['LAB_AUTHORIZATION']=='AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST'
+          PY
+          git diff --exit-code "$HARNESS_COMMIT" HEAD -- asset-exchange/qualification/dogecoin/ asset-exchange/chain-watchers/ asset-exchange/recovery/ asset-exchange/wallet-agent/ asset-exchange/core/src/errors.mjs .github/workflows/asset-exchange-dogecoin-multinode.yml
+          bash -n asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh
+          bash -n asset-exchange/qualification/dogecoin/d6/run-multinode.sh
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d6 -p 'test_*.py' -v
+          python3 -m unittest discover -s asset-exchange/wallet-agent/dogecoin -p 'test_*.py' -v
+          python3 -m unittest discover -s asset-exchange/recovery/dogecoin -p 'test_*.py' -v
+          node --test asset-exchange/chain-watchers/test/*.test.mjs
+          python3 asset-exchange/qualification/dogecoin/d6/multinode.py --manifest
+      - name: Download preserved qualified D0 archive and attestations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: dist/doge-d0-verified
+      - name: Execute bounded two-node lab in distinct loopback-only namespace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LAB_AUTHORIZATION: ${{ inputs.authorization }}
+        run: |
+          bash asset-exchange/qualification/dogecoin/d6/run-multinode.sh \
+            "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-multinode" "$LAB_AUTHORIZATION"
+      - name: Check watcher behavior against native paired observations
+        run: |
+          node asset-exchange/qualification/dogecoin/d6/check-watcher-evidence.mjs \
+            "$RUNNER_TEMP/doge-multinode/lab/evidence/multinode-report.json" \
+            "$RUNNER_TEMP/doge-multinode/lab/evidence/watcher-review.json"
+      - name: Preserve non-secret evidence including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dogecoin-private-multinode-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/doge-multinode/verification/
+            ${{ runner.temp }}/doge-multinode/lab/evidence/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Keep experiment success distinct from financial qualification
+        run: |
+          python3 - "$RUNNER_TEMP/doge-multinode/lab/evidence/multinode-report.json" <<'PY'
+          import json,sys
+          r=json.load(open(sys.argv[1]))
+          assert r['experimentStatus']=='PASS'
+          assert r['qualificationStatus']=='BLOCKED' and r['settlementAllowed'] is False
+          print('Private two-node experiment PASS; full D6/financial qualification remains BLOCKED.')
+          PY

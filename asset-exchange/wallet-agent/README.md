@@ -1,4 +1,5 @@
 # asset-exchange-wallet-agent
-NOT IMPLEMENTED.
 
-The local Wallet Agent remains blocked until signing/recovery semantics are approved. When implemented it must bind loopback + pairing + origin and expose no shell/private-key export/arbitrary-file capability.
+The network-facing Wallet Agent service is NOT IMPLEMENTED. It remains blocked until transport pairing, origin and signing/recovery semantics are reviewed; it must expose no shell, private-key export or arbitrary-file capability.
+
+The Regtest-only [DOGE policy library](dogecoin/README.md) now validates bounded pre-signed refund ladders and narrow external software-signer requests/responses. It does not hold keys, expose a service, assert hardware support or activate financial routes.
