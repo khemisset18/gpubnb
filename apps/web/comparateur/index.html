@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="style.css">
   <script defer src="model.js"></script>
   <script defer src="app.js"></script>
+  <script type="module" src="monero-ui.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#calculateur">Aller au calculateur</a>
@@ -85,6 +86,55 @@
           <p class="disclaimer">Une estimation ne garantit aucun gain. La difficulté de minage, les cours, les interruptions, l’usure et les impôts peuvent changer le rendement réel.</p>
         </article>
       </aside>
+    </section>
+    <section class="xmr-section" id="monero-rendement" aria-labelledby="xmrTitle">
+      <div class="compare-header">
+        <div>
+          <span class="section-kicker">CALCUL INDÉPENDANT · XMR / RANDOMX</span>
+          <h2 id="xmrTitle">Estimez le rendement Monero sans API payante</h2>
+          <p>Nous calculons la quantité de XMR à partir de la difficulté du réseau et de votre hashrate mesuré. Aucun benchmark ni cours fictif.</p>
+        </div>
+        <span class="mode-pill" id="xmrState" role="status">Réseau non connecté</span>
+      </div>
+      <div class="surface xmr-layout">
+        <div class="xmr-settings">
+          <div class="xmr-choice"><span>Matériel sélectionné</span><strong id="xmrDevice">—</strong><small>RandomX favorise généralement les CPU. La compatibilité et les H/s réels doivent être mesurés.</small></div>
+          <label for="xmrHashrate">Hashrate mesuré sur RandomX (H/s) <span class="required">*</span></label>
+          <input id="xmrHashrate" type="number" min="0.001" max="1000000000" step="any" placeholder="Ex. votre valeur mesurée">
+          <p class="field-hint">Saisissez le hashrate pour UN appareil. La quantité, la puissance et le coût électrique sont repris du calculateur ci-dessus.</p>
+          <label for="xmrPrice">Cours du XMR (€ / XMR) <small>facultatif, saisi manuellement</small></label>
+          <input id="xmrPrice" type="number" min="0.000001" max="10000000" step="any" placeholder="Laisser vide pour afficher uniquement les XMR">
+          <div class="xmr-network">
+            <div class="xmr-network-head">
+              <strong>Données du réseau</strong>
+              <span id="xmrUpdated">En attente d'un nœud Monero synchronisé</span>
+            </div>
+            <label class="xmr-toggle" for="xmrManual"><input type="checkbox" id="xmrManual"> Saisir moi-même la difficulté et la récompense d'un bloc</label>
+            <div id="xmrManualFields" hidden>
+              <label for="xmrDifficulty">Difficulté réseau <span class="required">*</span></label>
+              <input id="xmrDifficulty" type="number" min="1" step="any" placeholder="Valeur observée sur votre nœud">
+              <label for="xmrReward">Récompense par bloc (XMR) <span class="required">*</span></label>
+              <input id="xmrReward" type="number" min="0.000001" max="25" step="any" placeholder="Récompense réelle observée">
+              <p class="field-hint">Données manuelles : leur fraîcheur n'est pas vérifiable. Ce n'est pas du temps réel.</p>
+            </div>
+          </div>
+        </div>
+        <div class="xmr-output">
+          <span class="section-kicker">QUANTITÉ THÉORIQUE</span>
+          <div class="xmr-stats">
+            <div><span>Par jour</span><strong id="xmrDay">—</strong><small>XMR / jour</small></div>
+            <div><span>Par mois <small>30 jours</small></span><strong id="xmrMonth">—</strong><small>XMR / mois</small></div>
+            <div><span>Par an <small>365 jours</small></span><strong id="xmrYear">—</strong><small>XMR / an</small></div>
+          </div>
+          <div class="xmr-eur">
+            <div><span>Profit estimé / jour</span><strong id="xmrNetDay">—</strong></div>
+            <div><span>Profit estimé / mois</span><strong id="xmrNetMonth">—</strong></div>
+            <div><span>Profit estimé / an</span><strong id="xmrNetYear">—</strong></div>
+          </div>
+          <p id="xmrExplanation" class="xmr-explanation" aria-live="polite">Renseignez votre hashrate et connectez un nœud ou saisissez les données du réseau.</p>
+          <p class="field-hint">Projection mathématique, pas une promesse de gains : difficulté, frais réels, variation du cours, disponibilité et consommation mesurée peuvent changer les résultats.</p>
+        </div>
+      </div>
     </section>
     <section class="compare-section" id="comparaison">
       <div class="compare-header"><div><span class="section-kicker">COMPARATIF</span><h2>Les modèles en détail</h2><p>Retrouvez rapidement votre GPU ou CPU. Les gains ne s’affichent que lorsqu’une donnée de rendement est disponible.</p></div><div><label class="visually-hidden" for="tableSearch">Rechercher dans le tableau</label><input id="tableSearch" class="table-search" type="search" placeholder="Filtrer les modèles…"></div></div>
