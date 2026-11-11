@@ -269,7 +269,7 @@ const GATEWAY_AUTHORITY_REVOKED_PREFIX='revoked:';
 const GATEWAY_AUTHORITY_ID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GATEWAY_AUTHORITY_LEASE_SECONDS=2;
 const GATEWAY_AUTHORITY_QUERY_TIMEOUT_MS=4_000;
-// Covers first-frame lock wait + transaction, and stays below the 60s tombstone.
+// Bounds the age of a snapshot at Redis installation, below the 60s tombstone.
 const GATEWAY_AUTHORITY_VALIDATION_MS=15_000;
 const GATEWAY_AUTHORITY_REDIS_TIMEOUT_MS=5_000;
 
@@ -690,6 +690,15 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
   // validity. Do not refresh this deadline during receipt/commit recovery.
   const [seconds,micros]=await boundedGatewayRedis(redis.time());
   const validationDeadline=Number(seconds)*1000+Math.floor(Number(micros)/1000)+GATEWAY_AUTHORITY_VALIDATION_MS;
+  const revalidateAuthority=async(authorityId:string):Promise<Date|undefined>=>{
+    // Never extend an old snapshot. A new deadline is valid only with a new
+    // PostgreSQL read and the same durable receipt; the Redis CAS still fences STOP.
+    const [retrySeconds,retryMicros]=await boundedGatewayRedis(redis.time());
+    const retryDeadline=Number(retrySeconds)*1000+Math.floor(Number(retryMicros)/1000)+GATEWAY_AUTHORITY_VALIDATION_MS;
+    const fresh=await liveGatewayFrameAuthority(db,sessionId,machineId,binding.runtimeBackend);
+    if(!fresh?.booking.workspaceActivatedAt||fresh.gatewayAcceptance?.id!==authorityId)return undefined;
+    return await installGatewayAuthority(redis,sessionId,authorityId,fresh.expiresAt,retryDeadline)?fresh.expiresAt:undefined;
+  };
   const live=await liveGatewayFrameAuthority(db,sessionId,machineId,binding.runtimeBackend);
   if(!live||(!live.booking.workspaceActivatedAt&&(live.startedAt!==null||
     live.booking.status!==BookingStatus.STARTING&&live.booking.status!==BookingStatus.ACTIVE)))return {enqueued:-2};
@@ -729,10 +738,20 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
       return {enqueued,expiresAt:activation.expiresAt,authorityId:receiptId!};
     },{maxWait:5000,timeout:10000});
     if(outcome.enqueued!==-3){
-      if(outcome.enqueued===1&&outcome.authorityId)await installGatewayAuthority(redis,sessionId,outcome.authorityId,outcome.expiresAt,validationDeadline);
+      if(outcome.enqueued===1&&outcome.authorityId){
+        const installed=await installGatewayAuthority(redis,sessionId,outcome.authorityId,outcome.expiresAt,validationDeadline);
+        if(!installed){
+          const freshExpiry=await revalidateAuthority(outcome.authorityId);
+          return freshExpiry?{...outcome,expiresAt:freshExpiry}:{enqueued:outcome.enqueued,expiresAt:outcome.expiresAt};
+        }
+      }
       return outcome;
     }
-    if(!await installGatewayAuthority(redis,sessionId,outcome.authorityId!,outcome.expiresAt!,validationDeadline))return {enqueued:-2};
+    if(!await installGatewayAuthority(redis,sessionId,outcome.authorityId!,outcome.expiresAt!,validationDeadline)){
+      const freshExpiry=await revalidateAuthority(outcome.authorityId!);
+      if(!freshExpiry)return {enqueued:-2};
+      return {enqueued:await enqueue(outcome.authorityId!),expiresAt:freshExpiry,authorityId:outcome.authorityId!};
+    }
     return {enqueued:await enqueue(outcome.authorityId!),expiresAt:outcome.expiresAt!,authorityId:outcome.authorityId!};
   }catch(error){
     // A DB commit acknowledgement can be lost. Preserve a committed receipt
@@ -747,8 +766,9 @@ export async function acceptGatewayFrame({db,redis,sessionId,machineId,channelId
         throw error;
       }
       if(committed){
-        await installGatewayAuthority(redis,sessionId,committed.id,committed.expiresAt,validationDeadline);
-        return {enqueued:1,expiresAt:committed.expiresAt,authorityId:committed.id};
+        const installed=await installGatewayAuthority(redis,sessionId,committed.id,committed.expiresAt,validationDeadline);
+        const freshExpiry=installed?committed.expiresAt:await revalidateAuthority(committed.id);
+        return freshExpiry?{enqueued:1,expiresAt:freshExpiry,authorityId:committed.id}:{enqueued:1,expiresAt:committed.expiresAt};
       }
     }
     // Only uncommitted first-frame admissions require compensation. An already

@@ -171,3 +171,109 @@ integration('real browser sockets accept modern ws_open ACK and legacy first-fra
     await app.close();await redis.del(...keys);redis.disconnect();await fixture.cleanup();await db.$disconnect();
   }
 });
+
+integration('slow first-frame contender revalidates before installing an expired snapshot',async t=>{
+  const {acceptGatewayFrame,revokeGatewayAuthority}=await import('../src/workspace-gateway.js');
+  const {seedReadySession}=await import('./fixtures/native-gateway-session.js');
+  for(const scenario of ['active','stop'] as const)await t.test(scenario,async()=>{
+    const db=new PrismaClient(),redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:1});
+    const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
+    const sessionId=fixture.session.id,machineId=fixture.machine.id,channelId=crypto.randomUUID();
+    const browserSessionKey='gpubnb:test:slow-browser:'+channelId;
+    const authorityKey='workspace-gateway:ws-session-activated:'+sessionId;
+    const channelKey='workspace-gateway:ws-channel:'+channelId;
+    const keys=[authorityKey,browserSessionKey,channelKey,'workspace-gateway:ws-input:'+channelId,'workspace-gateway:ws-input-bytes:'+channelId];
+    const bindingRaw=JSON.stringify({sessionId,machineId,browserSessionKey,runtimeBackend:'WINDOWS_NATIVE'});
+    const frame={dataBase64:'AA==',binary:true,close:false};
+    try{
+      await redis.set(browserSessionKey,'1','EX',60);await redis.set(channelKey,bindingRaw,'EX',60);
+      assert.equal((await acceptGatewayFrame({db,redis,sessionId,machineId,channelId,bindingRaw,frame})).enqueued,1);
+      await redis.del(authorityKey);
+      const actualFind=db.workspaceSession.findFirst.bind(db.workspaceSession);
+      let reads=0;
+      const dbProxy=new Proxy(db,{get(target,key){
+        if(key==='workspaceSession')return new Proxy(target.workspaceSession,{get(model,method){
+          if(method==='findFirst')return async (...args:unknown[])=>{
+            const row=await (actualFind as (...args:unknown[])=>Promise<any>)(...args);
+            reads++;
+            // The first snapshot predates a concurrent activation; the row lock
+            // observes the real committed receipt from the first call above.
+            if(reads===1&&row)return {...row,startedAt:null,booking:{...row.booking,workspaceActivatedAt:null},gatewayAcceptance:null};
+            return row;
+          };
+          return Reflect.get(model,method);
+        }});
+        const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+      }});
+      const actualTime=redis.time.bind(redis),actualEval=redis.eval.bind(redis);
+      let samples=0;
+      redis.time=(async()=>{const time=await actualTime();samples++;return samples===1?[String(Number(time[0])-16),time[1]]:time;}) as typeof redis.time;
+      redis.eval=(async(script:unknown,...args:unknown[])=>{
+        const result=await (actualEval as (...args:unknown[])=>Promise<unknown>)(script,...args);
+        if(scenario==='stop'&&String(script).includes("current ~= ARGV[1] and current ~= '1'")&&Number(result)===0){
+          await db.workspaceSession.update({where:{id:sessionId},data:{status:'STOPPING'}});
+          await revokeGatewayAuthority(redis,sessionId);
+        }
+        return result;
+      }) as typeof redis.eval;
+      const before=await redis.llen('workspace-gateway:ws-input:'+channelId);
+      const result=await acceptGatewayFrame({db:dbProxy,redis,sessionId,machineId,channelId,bindingRaw,frame});
+      if(scenario==='active'){
+        assert.equal(result.enqueued,1,'a fresh snapshot restores progress after a delayed contender');
+        assert.equal(reads,2);assert.equal(samples,2);
+        assert.equal(await db.workspaceGatewayAcceptance.count({where:{sessionId}}),1);
+      }else{
+        assert.equal(result.enqueued,-2,'STOP between the expired install and retry remains final');
+        assert.equal(await redis.llen('workspace-gateway:ws-input:'+channelId),before);
+        assert.match((await redis.get(authorityKey))!,/^revoked:/);
+      }
+    }finally{await redis.del(...keys);redis.disconnect();await fixture.cleanup();await db.$disconnect();}
+  });
+});
+
+integration('slow first activation and lost commit ACK can republish only after a fresh validation',async t=>{
+  const {acceptGatewayFrame,markAcceptedGatewayFrame,revokeGatewayAuthority}=await import('../src/workspace-gateway.js');
+  const {seedReadySession}=await import('./fixtures/native-gateway-session.js');
+  for(const scenario of ['committed','lost-ack','stop'] as const)await t.test(scenario,async()=>{
+    const db=new PrismaClient(),redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:1});
+    const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
+    const sessionId=fixture.session.id,machineId=fixture.machine.id,channelId=crypto.randomUUID();
+    const browserSessionKey='gpubnb:test:slow-first-browser:'+channelId;
+    const binding={sessionId,machineId,browserSessionKey,runtimeBackend:'WINDOWS_NATIVE' as const};
+    const authorityKey='workspace-gateway:ws-session-activated:'+sessionId,channelKey='workspace-gateway:ws-channel:'+channelId;
+    const keys=[authorityKey,browserSessionKey,channelKey,'workspace-gateway:ws-input:'+channelId,'workspace-gateway:ws-input-bytes:'+channelId,'workspace-gateway:ws-upstream-ready:'+channelId];
+    try{
+      await redis.set(browserSessionKey,'1','EX',60);await redis.set(channelKey,JSON.stringify(binding),'EX',60);
+      const actualTime=redis.time.bind(redis);let samples=0;
+      redis.time=(async()=>{const time=await actualTime();samples++;return samples===1?[String(Number(time[0])-16),time[1]]:time;}) as typeof redis.time;
+      const actualEval=redis.eval.bind(redis);
+      redis.eval=(async(script:unknown,...args:unknown[])=>{
+        const result=await (actualEval as (...args:unknown[])=>Promise<unknown>)(script,...args);
+        if(scenario==='stop'&&String(script).includes("current ~= ARGV[1] and current ~= '1'")&&Number(result)===0){
+          await db.workspaceSession.update({where:{id:sessionId},data:{status:'STOPPING'}});
+          await revokeGatewayAuthority(redis,sessionId);
+        }
+        return result;
+      }) as typeof redis.eval;
+      const faultDb=scenario==='lost-ack'?new Proxy(db,{get(target,key){
+        if(key==='$transaction')return async(...args:unknown[])=>{
+          await (db.$transaction as (...args:unknown[])=>Promise<unknown>).apply(db,args);
+          throw new Error('lost-commit-ack');
+        };
+        const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+      }}):db;
+      const accepted=await acceptGatewayFrame({db:faultDb,redis,sessionId,machineId,channelId,bindingRaw:JSON.stringify(binding),frame:{dataBase64:'AA==',binary:true,close:false}});
+      assert.equal(accepted.enqueued,1);assert.equal(samples,2);
+      if(scenario==='stop'){
+        assert.equal(accepted.authorityId,undefined,'an admitted first frame does not publish a fresh readiness hint after STOP');
+        assert.match((await redis.get(authorityKey))!,/^revoked:/);
+        assert.equal(await markAcceptedGatewayFrame(redis,sessionId,channelId,binding,accepted.authorityId,accepted.expiresAt),false);
+      }else{
+        assert.ok(accepted.authorityId);
+        assert.equal(await redis.get(authorityKey),accepted.authorityId);
+        assert.equal(await markAcceptedGatewayFrame(redis,sessionId,channelId,binding,accepted.authorityId,accepted.expiresAt),true);
+      }
+      assert.equal(await db.workspaceGatewayAcceptance.count({where:{sessionId}}),1);
+    }finally{await redis.del(...keys);redis.disconnect();await fixture.cleanup();await db.$disconnect();}
+  });
+});

@@ -27,8 +27,17 @@ created for the first accepted upstream frame. Redis stores that UUID under
 - Before the PostgreSQL read, renewal samples Redis `TIME` and fixes a
   15-second validation deadline. The install Lua checks that deadline using
   Redis's clock, including after a first-frame transaction or lost commit ACK.
-  It is never refreshed during recovery. Caller timeouts do not cancel queued
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e07c17b1471b52c2747a437f4511211a0e0ed90bbf3098caba39dc5881c8d56f -->
+
+  It is never refreshed during recovery. If a first-frame transaction outlives
+  that deadline, one new attempt samples Redis again and reads a fresh active
+  PostgreSQL snapshot with the same committed receipt; the Redis CAS still
+  refuses a tombstone or different generation. Caller timeouts do not cancel queued
   Redis commands: an expired validation must be refused even after the STOP
+
+<!-- /coderabbit-ai-generated:v1 -->
   tombstone has disappeared. The deadline is shorter than the 60-second minimum
   tombstone lifetime. Only renewal/first activation adds this `TIME` call; the
   hot frame path remains unchanged. Missing deadlines fail closed, so mixed
