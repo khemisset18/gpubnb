@@ -179,3 +179,14 @@ Le fichier optionnel \`_headers\` de **ce seul dossier comparateur** configure u
 **Attention** : le fichier \`_headers\` s'applique automatiquement seulement lorsque **le contenu de \`apps/web/comparateur/\` est déployé comme racine d'un site statique compatible, par exemple un site Netlify indépendant**. Il n'est pas appliqué automatiquement au site GPUbnb actuel. Pour d'autres hébergeurs, configurer les mêmes en-têtes dans le serveur HTTP. La balise CSP de \`index.html\` apporte une protection côté navigateur mais ne remplace pas \`frame-ancestors\` en en-tête serveur.
 
 Les seuls accès réseau attendus du comparateur sont les fichiers JSON locaux de notre propre hébergement. **Pas de script externe, de publicité, de portefeuille, de mineur lancé ni de clé privée côté navigateur.**
+
+
+## Sauvegarde automatique 24 heures en cas de panne
+
+**Nouvelle règle validée :** actualisation prévue toutes les **2 heures** ; si une source échoue ou renvoie des informations incohérentes, le dernier instantané validé reste disponible **24 heures maximum à partir de sa collecte**, sans réhorodatage. La page indique « Dernier relevé sauvegardé » avec son heure d'origine. Après 24 h, elle masque les valeurs automatiques et affiche « Service indisponible ». Le mode manuel reste disponible.
+
+- Worker Cloudflare isolé : \`edge/worker.mjs\`, \`wrangler.jsonc\` et KV (mise en cache 86 400 secondes).
+- Tests : \`tests/backup-24h.test.mjs\` et \`tests/model.test.mjs\`.
+- [Documentation du secours 24 h et de ses limites](docs/SECOURS_24_HEURES.md).
+
+**Ce système est codé mais pas déployé** : les sources publiques et les conditions de réutilisation doivent encore être vérifiées avec des réponses réelles. Ni le comparateur ni son Worker ne sont fusionnés avec GPUbnb. Le coût d'infrastructure dépend des limites de l'offre gratuite de l'hébergeur.
