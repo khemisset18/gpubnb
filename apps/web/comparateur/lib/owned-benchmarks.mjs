@@ -23,6 +23,7 @@ export function validateOwnedBenchmark(raw,knownDeviceIds,now=Date.now()){
   if(!raw||typeof raw!=='object'||Array.isArray(raw)||
      !knownDeviceIds||typeof knownDeviceIds.has!=='function')return null;
   if(!validId(raw.deviceId)||!knownDeviceIds.has(raw.deviceId))return null;
+  if(typeof raw.coin!=='string'||!Object.hasOwn(ALGORITHMS,raw.coin))return null;
   const algo=ALGORITHMS[raw.coin];
   if(!algo||raw.algorithm!==algo.name||raw.unit!==algo.unit||
     !isNum(raw.hashrate,0.000001,1e15)||!isNum(raw.watts,1,2000)||
