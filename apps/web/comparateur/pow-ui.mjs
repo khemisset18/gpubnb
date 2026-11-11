@@ -7,6 +7,8 @@ const crypto = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:10});
 const manualValues = new Map();
 let feed = new Map();
 let currentCoin = 'RVN';
+let lastFetchFailed = false;
+const REFRESH_MS = 2 * 60 * 60 * 1000;
 const number = (id,min,max,optional=false) => {
   const raw=byId(id).value.trim();
   if(optional && raw==='') return null;
@@ -72,14 +74,20 @@ function render(){
   const coin=currentCoin;
   const snapshot=freshFeed(coin);
   const manual=byId('powNetworkRate').dataset.manual==='true';
-  if(!manual && !snapshot && feed.has(coin)){
+  if(!manual && !snapshot){
+    // Never calculate from abandoned form values after the 24h cache limit.
     for(const id of networkFields.filter(x=>x!=='powNetworkScale'))byId(id).value='';
   }
   const useNode=!manual&&Boolean(snapshot);
-  byId('powMode').textContent=useNode?(snapshot.source==='public-chain-rpc'?'Données publiques estimées':'Nœud GPUbnb'):'Réseau manuel';
-  byId('powObservedAt').textContent=useNode?
-    (snapshot.operator||'Observation propre')+' · '+new Date(snapshot.collectedAt).toLocaleString('fr-FR'):
-    'Saisie manuelle, non vérifiée en temps réel';
+  const saved=useNode && snapshot.source==='public-chain-rpc' &&
+    (lastFetchFailed || Date.now()-Date.parse(snapshot.collectedAt)>REFRESH_MS);
+  byId('powMode').textContent=manual?'Mesures manuelles':
+    !useNode?'Service indisponible':saved?'Dernier relevé sauvegardé':
+    snapshot.source==='public-chain-rpc'?'Réseau public · actualisé':'Nœud GPUbnb';
+  byId('powObservedAt').textContent=manual?'Saisie manuelle · fraîcheur non vérifiée':
+    !useNode?'Aucune mesure réseau valide de moins de 24 h':
+    (saved?'Dernière mesure conservée : ':'Mesure : ')+new Date(snapshot.collectedAt).toLocaleString('fr-FR')+
+    (saved?' · maximum 24 h':' · '+(snapshot.operator||'source indépendante'));
   for(const [id,suffix] of [['powDayUnit','jour'],['powMonthUnit','mois'],['powYearUnit','an']])
     byId(id).textContent=coin+' / '+suffix;
   const deviceRate=number('powDeviceRate',.000001,1e18)*number('powDeviceScale',1,1e12);
@@ -124,8 +132,17 @@ async function refresh(){
       const item=validateOwnPoWSnapshot(record);
       if(item&&!next.has(item.coin))next.set(item.coin,record);
     }
+    // If an individual KV lookup is temporarily empty, keep an earlier *valid*
+    // in-memory observation. Never extend its original collectedAt timestamp.
+    for(const [coin,previous] of feed){
+      if(!next.has(coin) && validateOwnPoWSnapshot(previous))next.set(coin,previous);
+    }
     feed=next;
-  }catch{feed=new Map();}
+    lastFetchFailed=false;
+  }catch{
+    // Browser-to-worker outage: retain previous verified values for at most 24h.
+    lastFetchFailed=true;
+  }
   if(byId('powNetworkRate').dataset.manual!=='true'){
     const snapshot=freshFeed(currentCoin);
     if(snapshot)setNetworkFromFeed(snapshot);
