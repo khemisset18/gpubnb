@@ -190,3 +190,20 @@ Les seuls accès réseau attendus du comparateur sont les fichiers JSON locaux d
 - [Documentation du secours 24 h et de ses limites](docs/SECOURS_24_HEURES.md).
 
 **Ce système est codé mais pas déployé** : les sources publiques et les conditions de réutilisation doivent encore être vérifiées avec des réponses réelles. Ni le comparateur ni son Worker ne sont fusionnés avec GPUbnb. Le coût d'infrastructure dépend des limites de l'offre gratuite de l'hébergeur.
+
+
+## Sources principales et sources de secours automatiques (2 h)
+
+**Lorsque l'API principale est indisponible**, le service planifié essaie une autre source indépendante. **Chaque cycle redémarre par la principale** : dès qu'elle est à nouveau valide, elle reprend la priorité. Tous les résultats sont contrôlés avant publication ; aucun fournisseur commercial ni API payante n'est ajouté.
+
+- **Monero (XMR)** : monero.rs (principale), Nodely (secours), HostingWire (candidat de second secours). Au moins **deux nœuds distincts concordants** nécessaires, sinon conservation de la dernière donnée valide.
+- **Ethereum Classic (ETC)** : Blockscout (principale), ETCMC (secours), ETC Desktop (second secours).
+- **Ravencoin (RVN)** : une seule API indépendante documentée et implémentée ; **pas de secours secondaire prétendu valide** avant une vérification réelle, mais le dernier bon relevé peut rester 24 h.
+- **Ergo / Flux** : calculs manuels, sources automatiques à fiabiliser.
+- **Si tous les secours échouent**, dernier relevé validé pendant 24 h maximum, puis « Service indisponible ».
+
+Le navigateur peut afficher **« Source de secours active »** avec le nom de l'opérateur et l'API de diagnostic donne \`fallback: true/false\` lorsque la mesure est disponible.
+
+Voir [les règles de basculement, de sécurité et les sources vérifiées](docs/BASCULEMENT_SOURCES.md).
+
+**Limite** : la liste est codée et testée contre des réponses simulées, **mais aucun service n'est encore déployé** et les autorisations de réutilisation commerciale doivent être confirmées. Nodely demande de prendre contact pour les charges commerciales importantes. Ne pas présenter le basculement comme une garantie de disponibilité.
