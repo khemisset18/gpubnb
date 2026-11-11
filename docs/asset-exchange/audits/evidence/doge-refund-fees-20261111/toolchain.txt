@@ -1,0 +1,13 @@
+g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+Copyright (C) 2021 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+libboost-chrono-dev:amd64	1.74.0.3ubuntu7
+libboost-filesystem-dev:amd64	1.74.0.3ubuntu7
+libboost-program-options-dev:amd64	1.74.0.3ubuntu7
+libboost-system-dev:amd64	1.74.0.3ubuntu7
+libboost-test-dev:amd64	1.74.0.3ubuntu7
+libboost-thread-dev:amd64	1.74.0.3ubuntu7
+libevent-dev	2.1.12-stable-1ubuntu0.2
+libssl-dev:amd64	3.0.2-0ubuntu1.30

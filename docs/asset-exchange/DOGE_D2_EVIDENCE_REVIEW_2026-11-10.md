@@ -88,3 +88,8 @@ All 32 native cases PASS. The downloaded artifact and internal hashes verify; th
 Artifact 13790614781 SHA256 f1db67f4f70cb1e409922bbabb6b58fb3749a3dfabbde9c5b66f1495cfe335e8. Bounded summary: audits/evidence/doge-refund-retry-20261110/summary.json. Detailed transaction/RPC evidence is not republished in git. Temporary trigger retired after capture.
 
 Reference: https://github.com/decred/dcrdex/blob/fc63460615e8dca83fc19520f32a1cb00be4acfa/client/asset/btc/btc.go
+
+
+## Complément du 11 novembre : remboursement après hausse des frais
+
+Le scénario compilé contre les implémentations natives de Dogecoin est maintenant PASS : ancien remboursement admis puis rejeté après hausse du minimum dynamique, reconstruction sous plafond avec la même sortie, destination, séquence et délai, admission et confirmation du nouveau remboursement. Run 43005573333, trois cas / 60 assertions PASS. Voir DOGE_REFERENCE_IMPLEMENTATIONS_2026-11-11.md pour les références DCRDEX, BasicSwap et decred/atomicswap, les digests et les limites précises. Cette preuve de diagnostic ne remplace pas les validations manquantes de relais, RBF, récupération indépendante et audit.

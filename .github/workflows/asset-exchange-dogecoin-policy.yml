@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   policy:
-    if: github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-policy-probes-20261109'
+    if: github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-refund-fees-20261111'
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -19,7 +19,7 @@ jobs:
       - name: Verify frozen harness and offline guards
         run: |
           set -euo pipefail
-          git diff --exit-code 6e36f21539301519e8900f8c4d8af0db6efed699 HEAD -- asset-exchange/qualification/dogecoin/
+          git diff --exit-code 578a23cda6cda31d664b096457f405d4cd666b9e HEAD -- asset-exchange/qualification/dogecoin/
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/policy -p 'test_*.py' -v
       - name: Fetch exact upstream source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

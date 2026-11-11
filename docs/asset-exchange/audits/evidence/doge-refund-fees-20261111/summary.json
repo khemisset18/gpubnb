@@ -1,0 +1,26 @@
+{
+  "runId": 43005573333,
+  "executionCommit": "9fb396839eefc8cdc47028d6f8e0aecf516752cf",
+  "frozenHarness": "578a23cda6cda31d664b096457f405d4cd666b9e",
+  "artifactId": 13847319900,
+  "archiveSha256": "3a556f5dc86084184234c6e2c3b315834d7a21f27b61995686137b4818a6c8ea",
+  "binarySha256": "21043a8f6cc74d9650d2ca39f2bb923144bfd1158e2a098ad0b532c0c0b62c7c",
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "buildKind": "SOURCE_DIAGNOSTIC_NOT_D0",
+  "probeStatus": "PASS",
+  "qualificationStatus": "BLOCKED",
+  "selectedTestCases": 3,
+  "passedAssertions": 60,
+  "newRefundAssertions": 34,
+  "unselectedUpstreamCases": 246,
+  "internalHashesVerified": true,
+  "implementationHashesUnchanged": true,
+  "metrics": {
+    "oldFeeKoinu": 1000000,
+    "requiredFeeKoinu": 32708662,
+    "selectedFeeKoinu": 100000000,
+    "capKoinu": 100000000,
+    "refundKoinu": 9900000000,
+    "finalHeight": 1354
+  }
+}
