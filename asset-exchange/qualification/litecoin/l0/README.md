@@ -115,3 +115,20 @@ and its public-key status is NOT verified. A key from that directory
 must be fingerprint-checked and independently authenticated before any
 trust decision. Do not bypass expiry checks. See
 `docs/asset-exchange/LTC_EVIDENCE_INDEX.md`.
+
+## Optional public release provenance CI (networked, no native execution)
+
+`.github/workflows/asset-exchange-litecoin-l0-provenance.yml` is a
+**separate** workflow from the isolated offline tests. It downloads only
+the public official 2026 release archive, signing key and signed checksums;
+it also obtains the annotated tag from the official GitHub repository.
+It verifies fixed SHA-256 pins, signer fingerprint and both GPG signatures
+and retains redacted public evidence. It **never extracts, installs,
+executes or connects** to Litecoin Core, starts a node, generates a wallet,
+mines, signs a Litecoin transaction or broadcasts.
+
+A passing networked provenance workflow cannot establish signer identity
+out of band, reproduce source builds or mark L0 PASS. A failed status is a
+genuine trust/provenance blocker, not a reason to relax GPG expiry checks.
+This workflow requires public outbound HTTPS solely for release observation;
+it is **not** a Regtest or runtime qualification workflow.
