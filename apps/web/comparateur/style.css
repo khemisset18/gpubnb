@@ -47,3 +47,35 @@
 .xmr-explanation{border:1px solid var(--border);background:var(--surface-raised);border-radius:8px;margin:24px 0 12px;padding:13px 15px;color:var(--text);font-size:12px;line-height:1.65}
 @media(max-width:920px){.xmr-layout{grid-template-columns:1fr}.xmr-settings{border-right:0;border-bottom:1px solid var(--border)}.xmr-stats strong{font-size:21px}}
 @media(max-width:620px){.xmr-section{padding-top:48px}.xmr-settings,.xmr-output{padding:21px}.xmr-stats{grid-template-columns:1fr;gap:7px}.xmr-stats>div{display:grid;grid-template-columns:minmax(70px,1fr) minmax(0,1.1fr) 90px;align-items:center;gap:8px;padding:12px}.xmr-stats strong{margin:0;font-size:19px;text-align:right}.xmr-stats>div>small{text-align:right}.xmr-network-head{flex-direction:column;gap:5px}.xmr-network-head>span{text-align:left}.xmr-stats span small{display:block}}
+
+
+/* Independent PoW comparison panel: scoped only to the calculator. */
+.pow-section{padding:76px 0 0}
+.pow-layout{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);overflow:hidden}
+.pow-entry{padding:29px 31px;border-right:1px solid var(--border)}
+.pow-output{padding:30px 31px;background:var(--surface-deep)}
+.pow-entry label{margin:18px 0 8px}
+.pow-pair{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:16px}
+.pow-entry input,.pow-entry select{width:100%}
+.pow-hardware{padding:16px 17px;margin:18px 0 13px;background:var(--surface-raised);border:1px solid var(--border);border-radius:8px}
+.pow-hardware>span,.pow-hardware strong,.pow-hardware small{display:block}
+.pow-hardware>span{font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.08em}
+.pow-hardware strong{font-size:17px;letter-spacing:-.03em;margin:4px 0}
+.pow-hardware small{font-size:11px;color:var(--muted)}
+.pow-network{border-top:1px solid var(--border);margin-top:21px;padding-top:19px}
+.pow-network-status{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.pow-network-status strong{font-size:12px}
+.pow-network-status span{font-size:11px;color:var(--muted);text-align:right}
+.pow-periods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:21px 0 28px}
+.pow-periods>div{padding:15px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.pow-periods span,.pow-periods strong,.pow-periods small{display:block}
+.pow-periods span{font-size:11px;color:var(--muted)}
+.pow-periods strong{font-size:clamp(13px,1.6vw,20px);letter-spacing:-.04em;font-variant-numeric:tabular-nums;margin:11px 0 3px;color:var(--green);overflow-wrap:anywhere}
+.pow-periods small{font-size:10px;color:var(--soft)}
+.pow-profit{border-top:1px solid var(--border);padding-top:15px}
+.pow-profit>div{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--hair);align-items:center}
+.pow-profit span{color:var(--muted);font-size:12px}
+.pow-profit strong{font-size:16px;font-variant-numeric:tabular-nums}
+.pow-explanation{background:var(--surface-raised);border:1px solid var(--border);border-radius:8px;font-size:12px;line-height:1.65;margin:24px 0 13px;padding:13px 15px}
+@media(max-width:920px){.pow-layout{grid-template-columns:1fr}.pow-entry{border-right:0;border-bottom:1px solid var(--border)}.pow-periods strong{font-size:21px}}
+@media(max-width:620px){.pow-section{padding-top:48px}.pow-entry,.pow-output{padding:21px}.pow-pair{gap:10px}.pow-pair label{font-size:11px;min-height:32px}.pow-periods{grid-template-columns:1fr;gap:7px}.pow-periods>div{display:grid;grid-template-columns:1fr 1.25fr 90px;gap:8px;align-items:center;padding:12px}.pow-periods strong{margin:0;font-size:19px;text-align:right}.pow-periods small{text-align:right}.pow-network-status{flex-direction:column;gap:6px}.pow-network-status span{text-align:left}}
