@@ -14,3 +14,36 @@
 @media(max-width:900px){.content-grid{grid-template-columns:1fr}.result-column{position:static}.hero{padding:47px 0}.compare-section{padding-top:55px}.result-card{max-width:none}.hero h1{font-size:clamp(42px,7vw,65px)}}
 @media(max-width:620px){.layout{width:calc(100% - 28px)}.site-header{height:70px}.brand{font-size:18px}.brand-extension{font-size:12px}.header-right .header-hint{display:none}.top-link{font-size:11px}.hero{padding:40px 0 36px}.hero h1{font-size:clamp(37px,10vw,54px);letter-spacing:-.055em}.hero p{font-size:14px}.form-card,.result-card{padding:21px}.section-heading h2,.result-top h2{font-size:20px}.segmented button{font-size:12px}.segmented button small{display:none}.field-row{gap:11px}.field-row label{font-size:11px;min-height:34px;display:flex;align-items:end}.suffix-field span{font-size:10px;padding:0 8px}.period-row{padding:16px}.period-row strong{font-size:22px}.period-row.main-period strong{font-size:30px}.compare-header{align-items:stretch;flex-direction:column}.table-search{width:100%}.table-container{overflow:auto}table{min-width:730px}.notes{grid-template-columns:1fr;gap:26px;padding-bottom:45px}.footer-inner{flex-direction:column;justify-content:center;text-align:center;min-height:102px;gap:5px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+/* Independent Monero mining estimator — only affects #monero-rendement. */
+.xmr-section{padding:72px 0 0}
+.xmr-section .compare-header{align-items:center}
+.xmr-layout{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);overflow:hidden}
+.xmr-settings{padding:29px 31px;border-right:1px solid var(--border)}
+.xmr-output{padding:30px 31px;background:var(--surface-deep)}
+.xmr-choice{padding:15px 17px 17px;border:1px solid var(--border);background:var(--surface-raised);border-radius:9px}
+.xmr-choice span,.xmr-choice strong,.xmr-choice small{display:block}
+.xmr-choice span{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--soft)}
+.xmr-choice strong{font-size:17px;letter-spacing:-.03em;margin:4px 0;color:var(--text)}
+.xmr-choice small{font-size:11px;color:var(--muted);line-height:1.6}
+.xmr-settings label{margin-top:21px}
+.xmr-network{margin-top:25px;border-top:1px solid var(--border);padding-top:17px}
+.xmr-network-head{display:flex;align-items:start;justify-content:space-between;gap:16px}
+.xmr-network-head strong{font-size:12px}
+.xmr-network-head>span{font-size:11px;color:var(--muted);text-align:right;max-width:255px}
+.xmr-toggle{display:flex;align-items:start;gap:9px;cursor:pointer;font-size:12px;color:var(--muted);margin:17px 0 0!important}
+.xmr-toggle input{width:16px;height:16px;min-height:16px;flex:0 0 16px;accent-color:var(--green);margin:2px 0 0}
+.xmr-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:20px 0 30px}
+.xmr-stats>div{padding:15px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.xmr-stats span,.xmr-stats strong,.xmr-stats small{display:block}
+.xmr-stats span{font-size:12px;color:var(--muted)}
+.xmr-stats span small{display:inline;font-size:10px}
+.xmr-stats strong{font-size:clamp(13px,1.6vw,20px);letter-spacing:-.04em;color:var(--green);margin:13px 0 3px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.xmr-stats>div>small{font-size:10px;color:var(--soft)}
+.xmr-eur{border-top:1px solid var(--border);padding-top:13px}
+.xmr-eur>div{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--hair)}
+.xmr-eur span{font-size:12px;color:var(--muted)}
+.xmr-eur strong{font-size:16px;font-variant-numeric:tabular-nums}
+.xmr-explanation{border:1px solid var(--border);background:var(--surface-raised);border-radius:8px;margin:24px 0 12px;padding:13px 15px;color:var(--text);font-size:12px;line-height:1.65}
+@media(max-width:920px){.xmr-layout{grid-template-columns:1fr}.xmr-settings{border-right:0;border-bottom:1px solid var(--border)}.xmr-stats strong{font-size:21px}}
+@media(max-width:620px){.xmr-section{padding-top:48px}.xmr-settings,.xmr-output{padding:21px}.xmr-stats{grid-template-columns:1fr;gap:7px}.xmr-stats>div{display:grid;grid-template-columns:minmax(70px,1fr) minmax(0,1.1fr) 90px;align-items:center;gap:8px;padding:12px}.xmr-stats strong{margin:0;font-size:19px;text-align:right}.xmr-stats>div>small{text-align:right}.xmr-network-head{flex-direction:column;gap:5px}.xmr-network-head>span{text-align:left}.xmr-stats span small{display:block}}
