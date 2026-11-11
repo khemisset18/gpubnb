@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -135,6 +136,46 @@ class LitecoinL0Tests(unittest.TestCase):
                 with patch.object(ltc, "archive_sha256"), patch.object(ltc.subprocess, "run", return_value=response):
                     with self.assertRaises(ValueError):
                         ltc.verify_release(self.archive, self.sums, self.keyring, FPR)
+
+
+    @unittest.skipUnless(shutil.which("gpg"), "GnuPG required for an actual local signature test")
+    def test_ephemeral_gpg_signature_accepts_only_unmodified_signed_checksums(self) -> None:
+        # Real local GPG cryptography, but an EPHEMERAL FIXTURE KEY, not the
+        # official Litecoin release key. Never a source-provenance claim.
+        with tempfile.TemporaryDirectory(prefix="ltc-l0-fixture-") as directory:
+            root = Path(directory)
+            home = root / "gnupg"
+            home.mkdir(mode=0o700)
+            uid = "LTC L0 local fixture <ltc-l0-fixture@example.invalid>"
+            command = ["gpg", "--batch", "--yes", "--homedir", str(home),
+                       "--pinentry-mode", "loopback", "--passphrase", ""]
+            def run(*args: str) -> subprocess.CompletedProcess:
+                return subprocess.run(command + list(args), capture_output=True,
+                                      check=True, timeout=20)
+            run("--quick-generate-key", uid, "ed25519", "sign", "0")
+            listing = run("--with-colons", "--fingerprint", "--list-keys", uid).stdout.decode("utf-8")
+            fprs = [line.split(":")[9] for line in listing.splitlines()
+                    if line.startswith("fpr:")]
+            self.assertEqual(len(fprs), 1)
+            trusted_fpr = fprs[0]
+            run("--output", str(self.keyring), "--export", trusted_fpr)
+            plaintext = root / "SHA256SUMS"
+            plaintext.write_bytes(VALID_SUMS)
+            run("--armor", "--local-user", trusted_fpr, "--output", str(self.sums),
+                "--clearsign", str(plaintext))
+            # Only the huge official archive hash check is substituted. The
+            # complete GPG command, keyring, signature and plaintext are real.
+            with patch.object(ltc, "archive_sha256"):
+                result = ltc.verify_release(self.archive, self.sums, self.keyring, trusted_fpr)
+            self.assertTrue(result["binaryChecksumAndSignatureVerified"])
+            self.assertFalse(result["l0Qualified"])
+            self.assertFalse(result["settlementEnabled"])
+            tampered = self.sums.read_bytes().replace(ltc.ARCHIVE_SHA256.encode(), b"0" * 64)
+            self.assertNotEqual(tampered, self.sums.read_bytes())
+            self.sums.write_bytes(tampered)
+            with patch.object(ltc, "archive_sha256"):
+                with self.assertRaisesRegex(ValueError, "gpg_signature_invalid"):
+                    ltc.verify_release(self.archive, self.sums, self.keyring, trusted_fpr)
 
 
 if __name__ == "__main__":
