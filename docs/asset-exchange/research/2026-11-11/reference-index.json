@@ -1,0 +1,60 @@
+[
+  {
+    "repository": "decred/dcrdex",
+    "commit": "fc63460615e8dca83fc19520f32a1cb00be4acfa",
+    "path": "client/asset/btc/btc.go",
+    "sha256": "8a51ad4efced7205c337902d7b6502afdc27386764c591c548b9ab054d464664"
+  },
+  {
+    "repository": "decred/dcrdex",
+    "commit": "fc63460615e8dca83fc19520f32a1cb00be4acfa",
+    "path": "client/asset/doge/doge.go",
+    "sha256": "bac033ef0c458442c20d2148e294a7835e49d77d9ebf542dff7930f022ee2f7d"
+  },
+  {
+    "repository": "basicswap/basicswap",
+    "commit": "d9313b20fc131251b50a4cf1cbcabeefbb006656",
+    "path": "basicswap/interface/doge/doge.py",
+    "sha256": "56a2a679202d9a1a4f4edc17182b322185cf86797b0ab99e41b433666d6e7c86"
+  },
+  {
+    "repository": "basicswap/basicswap",
+    "commit": "d9313b20fc131251b50a4cf1cbcabeefbb006656",
+    "path": "basicswap/interface/btc/btc.py",
+    "sha256": "25f074fde83281618e451c7132f962f66ee76ea5a91d7af637301f7979e52945"
+  },
+  {
+    "repository": "basicswap/basicswap",
+    "commit": "d9313b20fc131251b50a4cf1cbcabeefbb006656",
+    "path": "tests/basicswap/extended/test_doge.py",
+    "sha256": "fa0480d792e94a6bfeae33115e2d17d39f39a77100fda9bafe6f054dc733ec6c"
+  },
+  {
+    "repository": "dogecoin/dogecoin",
+    "commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "path": "doc/fee-recommendation.md",
+    "sha256": "2dc1a312f7198c3e8f6911666e1712a9dcf4c29a5f5294520af489e350175c67"
+  },
+  {
+    "repository": "dogecoin/dogecoin",
+    "commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "path": "src/validation.cpp",
+    "sha256": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00"
+  },
+  {
+    "repository": "dogecoin/dogecoin",
+    "commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "path": "src/policy/policy.cpp",
+    "sha256": "da7d8cca27e0e44181805237cd7f3b66be380998f4d2474c7872a25c388250b5"
+  },
+  {
+    "repository": "decred/atomicswap",
+    "commit": "fdc473d3510233396a43c89ce38ff41d1ec2b456",
+    "path": "README.md",
+    "gitBlobSha1": "6fb6452fbf906585c72c2e10ecba4540b82c6587",
+    "reviewedLines": [
+      185,
+      198
+    ]
+  }
+]

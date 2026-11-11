@@ -1,0 +1,54 @@
+{
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "binarySha256": "21043a8f6cc74d9650d2ca39f2bb923144bfd1158e2a098ad0b532c0c0b62c7c",
+  "buildKind": "SOURCE_DIAGNOSTIC_NOT_D0",
+  "qualificationStatus": "BLOCKED",
+  "probeStatus": "PASS",
+  "namespaceBefore": [
+    {
+      "ifindex": 1,
+      "ifname": "lo",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "mtu": 65536,
+      "qdisc": "noqueue",
+      "operstate": "UNKNOWN",
+      "linkmode": "DEFAULT",
+      "group": "default",
+      "txqlen": 1000,
+      "link_type": "loopback",
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00"
+    }
+  ],
+  "maxBlocks": 1594,
+  "maxFixtureBlocks": 1354,
+  "maxCpuSeconds": 180,
+  "networkLoadBenchmark": false,
+  "syntheticPressureEntries": 2,
+  "maxPressureEntriesPerFixture": 1,
+  "exitCode": 0,
+  "namespaceAfter": [
+    {
+      "ifindex": 1,
+      "ifname": "lo",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "mtu": 65536,
+      "qdisc": "noqueue",
+      "operstate": "UNKNOWN",
+      "linkmode": "DEFAULT",
+      "group": "default",
+      "txqlen": 1000,
+      "link_type": "loopback",
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00"
+    }
+  ]
+}

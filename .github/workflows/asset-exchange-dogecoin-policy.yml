@@ -1,9 +1,6 @@
 name: Asset Exchange DOGE Native Policy Diagnostics
 on:
   workflow_dispatch:
-  push:
-    branches: [asset-exchange/doge-refund-fees-20261111]
-    paths: [.github/workflows/asset-exchange-dogecoin-policy.yml]
 permissions:
   contents: read
 concurrency:
