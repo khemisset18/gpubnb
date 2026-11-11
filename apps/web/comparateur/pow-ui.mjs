@@ -81,8 +81,10 @@ function render(){
   const useNode=!manual&&Boolean(snapshot);
   const saved=useNode && snapshot.source==='public-chain-rpc' &&
     (lastFetchFailed || Date.now()-Date.parse(snapshot.collectedAt)>REFRESH_MS);
+  const backup=useNode&&snapshot.usedFallback===true;
   byId('powMode').textContent=manual?'Mesures manuelles':
     !useNode?'Service indisponible':saved?'Dernier relevé sauvegardé':
+    backup?'Source de secours active':
     snapshot.source==='public-chain-rpc'?'Réseau public · actualisé':'Nœud GPUbnb';
   byId('powObservedAt').textContent=manual?'Saisie manuelle · fraîcheur non vérifiée':
     !useNode?'Aucune mesure réseau valide de moins de 24 h':
