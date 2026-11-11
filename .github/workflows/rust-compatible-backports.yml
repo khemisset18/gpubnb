@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - prototypes/rust-compatible-backports/**
+      - vendor/security/**
+      - Cargo.toml
+      - Cargo.lock
       - .github/workflows/rust-compatible-backports.yml
   workflow_dispatch:
 
@@ -45,6 +48,7 @@ jobs:
           name: rust-compatible-backports-${{ github.sha }}
           path: |
             ${{ runner.temp }}/rust-backport-workspace/report.json
+            ${{ runner.temp }}/rust-backport-workspace/active-metadata.json
             ${{ runner.temp }}/rust-backport-workspace/metadata.json
             ${{ runner.temp }}/rust-backport-workspace/*.log
             ${{ runner.temp }}/rust-backport-workspace/candidate-Cargo.lock

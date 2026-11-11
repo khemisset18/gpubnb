@@ -5,14 +5,12 @@ This isolated candidate is based on PR354 at
 source/license evidence reviewed in PR319 at
 `35fb07cbc1487d05f5f38d0450e9dbdb0a63301e`, then exercises a new integration
 boundary: the full current workspace graph with its original package versions.
-The active application Cargo files and financial implementation stay unchanged.
+The active Cargo manifest now selects the two committed vendored backports through [patch.crates-io]. Cargo.lock changes only their source identities/checksums; all package names and versions and the financial implementation stay unchanged.
 No old vulnerable GLib or Rand probe is executed.
 
 `prepare.py FRESH_DIRECTORY` downloads two checksum-pinned published crate
 archives, validates their source commits, applies the exact bounded patches,
-and refuses unexpected file changes. It makes a disposable Git worktree,
-changes only the source of glib0.18.5 and rand0.7.3, and adds one regression
-package. Cargo must accept the resulting lock with `--locked`; all original
+and refuses unexpected file changes. It proves that all176 committed vendor files match independently reconstructed, checksum-verified backports. A disposable Git worktree uses those actual active sources and adds one regression package; it does not substitute an unreviewed source through a temporary override. Cargo must accept the resulting lock with `--locked`; all original
 package identities must remain. The test-only Rand log feature is deliberately
 enabled, including its already-locked log dependency.
 
@@ -38,7 +36,7 @@ as actually tested in PR319. RustSec still lists^0.10.4 as patched while the
 GitHub machine range flags it; that discrepancy remains blocking and is not
 converted into an exemption. No unnecessary repeat of its earlier probe occurs.
 
-All three package versions remain visible to the unchanged strict Trivy gate.
+All three package versions remain authentic. The unchanged strict Trivy gate must be observed on the exact integration head; no clean-scanner result is inferred from changing a source origin.
 An actual backport regression PASS must never be described as a clean scanner
 result. No ignored advisory, reduced severity, renamed package or version spoof
 is added. The technical status remains BLOCKED until the exact CI evidence,

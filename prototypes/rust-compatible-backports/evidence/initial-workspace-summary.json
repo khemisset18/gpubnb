@@ -1,0 +1,43 @@
+{
+  "GLibExactValueComparisons": 2080,
+  "artifactId": 13896834933,
+  "artifactSha256": "3d65dae71eaad0f5a43f01100c8db97aeaa5e0f3b86d56d7c48e95ad420ebcdc",
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "headCommit": "0cdedf95a2c1e37a4d67e1e99189354f69dcff03",
+  "newScannerPassClaimed": false,
+  "originalFilesSha256": {
+    "anchor-host.log": "c83f6a69a0ec071d26b909c018639df084f39023ab0e78bb2e1a277e6918957c",
+    "candidate-Cargo.lock": "c4a5d4acd1eb0878cba091adec522b30690f8d6e88f1dc67a9e1906eaf52604d",
+    "desktop-host.log": "fe017431c7d91455f4c4947f5c7ac08f03deee5ab14b88e2cc891dec99d3c1f0",
+    "metadata.json": "08bd4ffaccd1f3f24e8263a8e91e7119079f958832baa427a485b1d2fa307176",
+    "metadata.log": "46fb84fd174944d966b86b5c152827d2e8a2c0ddc1b09b788c26ac20dc36c9bb",
+    "report.json": "bd1bebe186104dd921f2d577949f2e07dac4d3a6703c8df0e3a9f0ffc69e2ea4",
+    "security-regressions.log": "6bfda1ce7d7bfcc5943dbe234da9dad87b5b53a3d0631b3e74c0923b8c30b87c",
+    "tauri-native-compile.log": "da93369da342a48d0433c487e3b66cf4a117f10e1e72e09b073e731344da809e"
+  },
+  "qualificationStatus": "BLOCKED",
+  "randBytes": 1048576,
+  "result": "PASS",
+  "run": "https://github.com/khemisset18/gpubnb/actions/runs/43114569524",
+  "schemaVersion": 1,
+  "scope": "initial temporary graph prototype; does not yet prove active vendor integration",
+  "tauriDesktopRuntimeCompile": "PASS",
+  "testCounts": {
+    "anchor-host": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 7
+    },
+    "desktop-host": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 506
+    },
+    "security-regressions": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 3
+    }
+  },
+  "testedSyntheticPrRevision": "d34924385cc04338299210f99caa795d87a93c07"
+}

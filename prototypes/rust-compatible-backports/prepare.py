@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Qualify exact backports against a disposable copy of the active workspace.
 
-The checked-out application's Cargo files are never modified. Native blockchain,
+The checked-out application's Cargo files are never modified by this runner. Native blockchain,
 wallet, SBF tooling, signing, deployment and vulnerability exemptions are absent.
 """
 import argparse
@@ -70,6 +70,15 @@ def run(command, cwd, output, *, timeout=900, env=None):
     assert result.returncode == 0, f'command failed ({result.returncode}); see {output.name}'
 
 
+def check_selected_sources(metadata, project, pins):
+    for pin in pins['patches']:
+        found=[p for p in metadata['packages'] if p['name']==pin['name'] and p['version']==pin['version']]
+        assert len(found)==1 and found[0]['source'] is None, 'patched dependency not selected'
+        source=Path(found[0]['manifest_path']).parent
+        assert source == project/pin['vendorPath'], 'unexpected patched dependency path'
+        assert digest(source/pin['file']) == pin['afterSha256'], 'selected source digest mismatch'
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('fresh_work_directory', type=Path)
@@ -79,7 +88,7 @@ def main():
     work.mkdir(mode=0o700, parents=False, exist_ok=False)
     pins=json.loads((HERE/'source-pins.json').read_text())
     assert [(p['name'],p['version']) for p in pins['patches']] == [('glib','0.18.5'),('rand','0.7.3')]
-    report={'schemaVersion':1,'result':'FAIL','scope':'temporary actual workspace; no active dependency change',
+    report={'schemaVersion':1,'result':'FAIL','scope':'actual active vendored sources; disposable regression workspace',
             'qualificationStatus':'BLOCKED','scannerExemptionAdded':False,'packageVersionsSpoofed':False,
             'nativeBlockchainEffects':False,'backports':[]}
     def save():
@@ -102,8 +111,20 @@ def main():
         report.update(result='PREPARATION_PASS',nativeTests='NOT_TESTED');save();print(json.dumps(report));return
     repository=Path(subprocess.check_output(['git','rev-parse','--show-toplevel'],cwd=HERE,text=True).strip())
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repository,text=True).strip()
-    subprocess.run(['git','diff','--exit-code',pins['baseCommit'],revision,'--','Cargo.toml','Cargo.lock',
+    subprocess.run(['git','diff','--exit-code',pins['baseCommit'],revision,'--',
                     'programs/gpu_escrow','apps/host-desktop/src-tauri'],cwd=repository,check=True)
+    original_manifest=subprocess.check_output(['git','show',pins['baseCommit']+':Cargo.toml'],cwd=repository,text=True)
+    expected_manifest=original_manifest+'\n[patch.crates-io]\n'+''.join(p['name']+' = { path = '+json.dumps(p['vendorPath'])+' }\n' for p in pins['patches'])
+    assert (repository/'Cargo.toml').read_text()==expected_manifest, 'unrelated active manifest change'
+    original_lock=subprocess.check_output(['git','show',pins['baseCommit']+':Cargo.lock'],cwd=repository,text=True)
+    expected_lock=original_lock
+    for pin in pins['patches']:
+        marker=f'name = "{pin["name"]}"\nversion = "{pin["version"]}"\n'
+        old=marker+'source = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "'+pin['archiveSha256']+'"\n'
+        assert expected_lock.count(old)==1
+        expected_lock=expected_lock.replace(old,marker)
+        assert file_hashes(repository/pin['vendorPath'])==file_hashes(vendor/(pin['name']+'-'+pin['version'])), 'vendored crate differs from independently verified backport'
+    assert (repository/'Cargo.lock').read_text()==expected_lock, 'unrelated active lock change'
     project=work/'project'
     subprocess.run(['git','worktree','add','--detach',str(project),revision],cwd=repository,check=True,capture_output=True)
     report['executionCommit']=revision
@@ -115,11 +136,14 @@ def main():
         lock=(project/'Cargo.lock').read_text()
         for pin in pins['patches']:
             match=[p for p in baseline['package'] if p['name']==pin['name'] and p['version']==pin['version']]
-            assert len(match)==1 and match[0]['checksum']==pin['archiveSha256']
-            marker=f'name = "{pin["name"]}"\nversion = "{pin["version"]}"\n'
-            old=marker+'source = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "'+pin['archiveSha256']+'"\n'
-            assert lock.count(old)==1
-            lock=lock.replace(old,marker)
+            assert len(match)==1 and 'source' not in match[0] and 'checksum' not in match[0]
+        private_tmp=work/'tmp';private_tmp.mkdir(mode=0o700)
+        env=os.environ.copy();env.update(CARGO_TARGET_DIR=str(work/'target'),CARGO_BUILD_JOBS='2',CARGO_PROFILE_DEV_DEBUG='0',TMPDIR=str(private_tmp))
+        with (work/'active-metadata.json').open('wb') as stdout, (work/'active-metadata.log').open('wb') as stderr:
+            subprocess.run(['cargo','metadata','--locked','--all-features','--format-version=1'],cwd=project,env=env,stdout=stdout,stderr=stderr,timeout=1200,check=True)
+        check_selected_sources(json.loads((work/'active-metadata.json').read_text()),project,pins)
+        report['activePatchedSourcesVerifiedBeforeExecution']=True;save()
+        report['toolchain']={name:subprocess.check_output([name,'--version'],env=env,text=True).strip() for name in ['rustc','cargo']}
         # The sole new test crate deliberately enables Rand's optional logging
         # feature; keep the exact already-locked log package and all versions.
         block=re.search(r'\[\[package\]\]\nname = "rand"\nversion = "0.7.3"\n.*?(?=\n\[\[package\]\]|\Z)',lock,re.S)
@@ -129,17 +153,15 @@ def main():
         lock+='\n[[package]]\nname = "gpubnb-security-backport-probe"\nversion = "0.0.0"\ndependencies = [\n "glib",\n "log",\n "rand 0.7.3",\n "rand_chacha 0.2.2",\n "rand_core 0.5.1",\n]\n'
         (project/'Cargo.lock').write_text(lock)
         manifest=(project/'Cargo.toml').read_text()
-        assert '[patch.crates-io]' not in manifest and manifest.count('members = [')==1
+        assert '[patch.crates-io]' in manifest and manifest.count('members = [')==1
         manifest=manifest.replace('members = [','members = [\n  "prototypes/rust-compatible-backports/probe",',1)
-        manifest+='\n[patch.crates-io]\n'+''.join(p['name']+' = { path = '+json.dumps(str(vendor/(p['name']+'-'+p['version'])))+' }\n' for p in pins['patches'])
         (project/'Cargo.toml').write_text(manifest)
         dist=repository/'apps/host-desktop/dist'
         assert dist.is_dir(), 'actual frontend build required before full Tauri check'
         shutil.copytree(dist,project/'apps/host-desktop/dist')
         report['frontendAssetSha256']=file_hashes(dist)
-        env=os.environ.copy();env.update(CARGO_TARGET_DIR=str(work/'target'),CARGO_BUILD_JOBS='2',CARGO_PROFILE_DEV_DEBUG='0')
         for label,command in [
-            ('metadata',['cargo','metadata','--locked','--format-version=1']),
+            ('metadata',['cargo','metadata','--locked','--all-features','--format-version=1']),
             ('security-regressions',['cargo','test','--locked','--release','-p','gpubnb-security-backport-probe','--','--nocapture']),
             ('anchor-host',['cargo','test','--locked','-p','gpu_escrow']),
             ('desktop-host',['cargo','test','--locked','-p','gpubnb-host-desktop','--all-targets']),
@@ -147,6 +169,7 @@ def main():
             if label=='metadata':
                 with (work/'metadata.json').open('wb') as stdout, (work/'metadata.log').open('wb') as stderr:
                     subprocess.run(command,cwd=project,env=env,stdout=stdout,stderr=stderr,timeout=1200,check=True)
+                check_selected_sources(json.loads((work/'metadata.json').read_text()),project,pins)
             else:
                 run(command,project,work/(label+'.log'),env=env,timeout=1200)
             report.setdefault('commands',[]).append({'name':label,'result':'PASS','command':command});save()
@@ -155,15 +178,12 @@ def main():
         candidate_ids={(p['name'],p['version']) for p in candidate['package']}
         assert candidate_ids-baseline_ids == {('gpubnb-security-backport-probe','0.0.0')}
         assert not baseline_ids-candidate_ids, 'active package identity unexpectedly removed'
-        for pin in pins['patches']:
-            found=[p for p in metadata['packages'] if p['name']==pin['name'] and p['version']==pin['version']]
-            assert len(found)==1 and found[0]['source'] is None
-            assert Path(found[0]['manifest_path']).parent == vendor/(pin['name']+'-'+pin['version'])
+        check_selected_sources(metadata,project,pins)
         for path,expected in report['unchangedProductionSourceSha256'].items():assert digest(project/path)==expected
         shutil.copyfile(project/'Cargo.lock',work/'candidate-Cargo.lock')
         report.update(result='PASS',allOriginalPackageVersionsRetained=True,
             patchedPackagesReallySelected=True,fullGuiAndIpc='NOT_TESTED',SbfRuntime='NOT_TESTED',
-            activeScannerDisposition='BLOCKED: three unchanged package-version findings; observe exact PR CI')
+            activeScannerDisposition='BLOCKED pending exact PR scanner result; package versions retained')
         save();print(json.dumps(report,indent=2))
     finally:
         subprocess.run(['git','worktree','remove','--force',str(project)],cwd=repository,check=True)

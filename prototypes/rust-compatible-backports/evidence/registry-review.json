@@ -1,0 +1,400 @@
+{
+  "schemaVersion": 1,
+  "source": "rust-lang/crates.io-index (official registry)",
+  "checkedOn": "2026-11-11",
+  "entries": {
+    "glib": {
+      "blobSha": "64fceee03d5cff2e55da92b0270bf353c3251bbd",
+      "versions": [
+        {
+          "version": "0.18.0",
+          "checksum": "70e7063a7ce573726a0101f449033056d74e0514b5aa9ef194b040c47a4f0209",
+          "yanked": false,
+          "rustVersion": "1.70",
+          "dependencies": [
+            {
+              "name": "glib-macros",
+              "requirement": "^0.18",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        },
+        {
+          "version": "0.18.1",
+          "checksum": "331156127e8166dd815cf8d2db3a5beb492610c716c03ee6db4f2d07092af0a7",
+          "yanked": false,
+          "rustVersion": "1.70",
+          "dependencies": [
+            {
+              "name": "glib-macros",
+              "requirement": "^0.18",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        },
+        {
+          "version": "0.18.2",
+          "checksum": "1c316afb01ce8067c5eaab1fc4f2cd47dc21ce7b6296358605e2ffab23ccbd19",
+          "yanked": false,
+          "rustVersion": "1.70",
+          "dependencies": [
+            {
+              "name": "glib-macros",
+              "requirement": "^0.18",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        },
+        {
+          "version": "0.18.3",
+          "checksum": "58cf801b6f7829fa76db37449ab67c9c98a2b1bf21076d9113225621e61a0fa6",
+          "yanked": false,
+          "rustVersion": "1.70",
+          "dependencies": [
+            {
+              "name": "glib-macros",
+              "requirement": "^0.18",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        },
+        {
+          "version": "0.18.4",
+          "checksum": "951bbd7fdc5c044ede9f05170f05a3ae9479239c3afdfe2d22d537a3add15c4e",
+          "yanked": false,
+          "rustVersion": "1.70",
+          "dependencies": [
+            {
+              "name": "glib-macros",
+              "requirement": "^0.18",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        },
+        {
+          "version": "0.18.5",
+          "checksum": "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5",
+          "yanked": false,
+          "rustVersion": "1.70",
+          "dependencies": [
+            {
+              "name": "glib-macros",
+              "requirement": "^0.18",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        }
+      ]
+    },
+    "rand": {
+      "blobSha": "9d077d902ff60dfec561194377af7651ee9e59e4",
+      "versions": [
+        {
+          "version": "0.7.0-pre.0",
+          "checksum": "3f8957987ae321379d922baeeba7bc1b928647f641fbc1cdfc6aad784eb6e0c9",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": []
+        },
+        {
+          "version": "0.7.0-pre.1",
+          "checksum": "866531c9bb6613da04a1e6ad99d27a7c8acd488020d7a8b177b058a10c900eec",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": []
+        },
+        {
+          "version": "0.7.0-pre.2",
+          "checksum": "1bd7d04eb3653c2e5d89e2f705b44491413c9d3ad0e1aadac607ae9aeecea51e",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": []
+        },
+        {
+          "version": "0.7.0",
+          "checksum": "d47eab0e83d9693d40f825f86948aa16eff6750ead4bdffc4ab95b8b3a7f052c",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": []
+        },
+        {
+          "version": "0.7.1",
+          "checksum": "59cea0d944b32347a1863e95942fd6ebdb486afb4f038119494f2860380c1d51",
+          "yanked": true,
+          "rustVersion": null,
+          "dependencies": []
+        },
+        {
+          "version": "0.7.2",
+          "checksum": "3ae1b169243eaf61759b8475a998f0a385e42042370f3a7dbaf35246eacc8412",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": []
+        },
+        {
+          "version": "0.7.3",
+          "checksum": "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": []
+        }
+      ]
+    },
+    "wry": {
+      "blobSha": "bfd9f42ed444b4fec2572d4c109f59f35af041e3",
+      "versions": [
+        {
+          "version": "0.57.2",
+          "checksum": "a490119196d02a51d0871df7b9119a1f3e46d75b7e90053a801454d5c6b3491c",
+          "yanked": false,
+          "rustVersion": "1.85",
+          "dependencies": [
+            {
+              "name": "gtk",
+              "requirement": "^0.18",
+              "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+              "optional": true,
+              "defaultFeatures": true
+            },
+            {
+              "name": "webkit2gtk",
+              "requirement": "=2.0.2",
+              "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+              "optional": true,
+              "defaultFeatures": true
+            },
+            {
+              "name": "webkit2gtk-sys",
+              "requirement": "=2.0.2",
+              "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+              "optional": true,
+              "defaultFeatures": true
+            }
+          ]
+        }
+      ]
+    },
+    "gtk": {
+      "blobSha": "31dada90633d3849b29776ff36507eb65eb5a20e",
+      "versions": [
+        {
+          "version": "0.19.0",
+          "checksum": "a86cafafc177054a1d555a0b302044d2b5f82e1c1e23d152a7ba252dc6bfced0",
+          "yanked": false,
+          "rustVersion": "1.92",
+          "dependencies": [
+            {
+              "name": "glib",
+              "requirement": "^0.22",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "gtk-sys",
+              "requirement": "^0.19.0",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "gtk3-macros",
+              "requirement": "^0.19.0",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        }
+      ]
+    },
+    "anchor": {
+      "blobSha": "432e9f565e75c753a4dd8a3ba838f74eddc809f2",
+      "versions": [
+        {
+          "version": "0.31.1",
+          "checksum": "e6bab117055905e930f762c196e08f861f8dfe7241b92cee46677a3b15561a0a",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": [
+            {
+              "name": "borsh",
+              "requirement": "^0.10.3",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program",
+              "requirement": "^2",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        },
+        {
+          "version": "1.2.2",
+          "checksum": "ce734f46dca7bc34c93f206871293d0bebaa89184d92231e1cd7a3c532993585",
+          "yanked": false,
+          "rustVersion": "1.89",
+          "dependencies": [
+            {
+              "name": "borsh",
+              "requirement": "^1.5.7",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program-entrypoint",
+              "requirement": "^3.1.1",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program-error",
+              "requirement": "^3.0.0",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program-memory",
+              "requirement": "^3.1.0",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program-option",
+              "requirement": "^3.0.1",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program-pack",
+              "requirement": "^3.1.0",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        },
+        {
+          "version": "0.31.3",
+          "checksum": "6c4c1191b5346b219b20b11fa4afae47cde33e6a0cad502678e70039f5288099",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": [
+            {
+              "name": "borsh",
+              "requirement": "^0.10.3",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program",
+              "requirement": "^2",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        }
+      ]
+    },
+    "secp-recover": {
+      "blobSha": "cf7a00ecc5bfe5334441f4912db5c4364efe1e6f",
+      "versions": [
+        {
+          "version": "2.2.1",
+          "checksum": "baa3120b6cdaa270f39444f5093a90a7b03d296d362878f7a6991d6de3bbe496",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": [
+            {
+              "name": "borsh",
+              "requirement": "^1.5.5",
+              "target": null,
+              "optional": true,
+              "defaultFeatures": true
+            },
+            {
+              "name": "borsh",
+              "requirement": "^1.5.5",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "libsecp256k1",
+              "requirement": "^0.6.0",
+              "target": "cfg(not(target_os = \"solana\"))",
+              "optional": false,
+              "defaultFeatures": false
+            },
+            {
+              "name": "libsecp256k1",
+              "requirement": "^0.6.0",
+              "target": "cfg(not(target_os = \"solana\"))",
+              "optional": false,
+              "defaultFeatures": false
+            }
+          ]
+        },
+        {
+          "version": "3.3.1",
+          "checksum": "99f00f973301968be9f05f4af951974a28848b6513fb16edf77c8af20e681914",
+          "yanked": false,
+          "rustVersion": null,
+          "dependencies": [
+            {
+              "name": "borsh",
+              "requirement": "^1.5.5",
+              "target": null,
+              "optional": true,
+              "defaultFeatures": false
+            },
+            {
+              "name": "borsh",
+              "requirement": "^1.5.5",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": false
+            },
+            {
+              "name": "rand",
+              "requirement": "^0.10",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            },
+            {
+              "name": "solana-program-error",
+              "requirement": "^3.0.0",
+              "target": null,
+              "optional": false,
+              "defaultFeatures": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

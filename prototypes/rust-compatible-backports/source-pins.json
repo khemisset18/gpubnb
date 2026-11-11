@@ -1,5 +1,5 @@
 {
-  "activeSourceChanges": false,
+  "activeSourceChanges": true,
   "baseCommit": "a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed",
   "borsh": {
     "advisory": "GHSA-fjx5-qpf4-xjf2",
@@ -25,6 +25,7 @@
       "patch": "patches/glib-variant-out-parameter.patch",
       "upstreamFix": "https://github.com/gtk-rs/gtk-rs-core/pull/1343",
       "upstreamFixCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+      "vendorPath": "vendor/security/glib-0.18.5",
       "version": "0.18.5"
     },
     {
@@ -40,6 +41,7 @@
       "upstreamFix": "https://github.com/rust-random/rand/pull/1763",
       "upstreamFixCommit": "605731b59aabb38338e65f2a6a7ba8a9e480d00d",
       "upstreamFixed08Commit": "5309f25bb5e7d21ac01c5b6f476badd06f9cdc3f",
+      "vendorPath": "vendor/security/rand-0.7.3",
       "version": "0.7.3"
     }
   ],
