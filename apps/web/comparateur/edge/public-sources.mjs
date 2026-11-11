@@ -7,12 +7,21 @@ import { makeMoneroSnapshot } from '../lib/monero-feed.mjs';
 import { buildEtcObservation, ETC_WINDOW } from '../lib/etc-observer.mjs';
 import { validateOwnPoWSnapshot } from '../lib/pow-yield.mjs';
 
-const MONERO_A = 'https://monero.rs:18081/json_rpc';
-const MONERO_B = 'https://xmr.nodely.dev:18081/json_rpc';
-const ETC_URL = 'https://etc.blockscout.com/api/eth-rpc';
+// Strict, version-controlled source priorities. Primary is retried FIRST on every run,
+ // so recovery is automatic; third-party availability and reuse rights are not guaranteed.
+export const MONERO_SOURCES = Object.freeze([
+ {name:'monero.rs',url:'https://monero.rs:18081/json_rpc'},
+ {name:'nodely.io',url:'https://xmr.nodely.dev:18089/json_rpc'},
+ {name:'hostingwire.net',url:'https://xmr.hostingwire.net/json_rpc'}
+]);
+export const ETC_SOURCES = Object.freeze([
+ {name:'ETC Blockscout',url:'https://etc.blockscout.com/api/eth-rpc'},
+ {name:'ETC ETCMC',url:'https://rpc.etcmc.xyz'},
+ {name:'ETC ETC Desktop',url:'https://etc.etcdesktop.com'}
+]);
 const RVN_ORIGIN = 'https://api.ravencoinexplorer.com';
-const ALLOWED = new Set([new URL(MONERO_A).origin,new URL(MONERO_B).origin,
-  new URL(ETC_URL).origin,new URL(RVN_ORIGIN).origin]);
+const ALLOWED = new Set([...MONERO_SOURCES,...ETC_SOURCES,{url:RVN_ORIGIN}]
+  .map(node=>new URL(node.url).origin));
 const MAX_JSON_BYTES=768*1024;
 
 async function json(fetchImpl,url,body=null){
@@ -46,32 +55,75 @@ function safeBlockInfo(info,last,now){
   typeof h.hash!=='string'||!/^([a-f0-9]{64})$/i.test(h.hash))
    throw Error('Public Monero RPC out of sync');
 }
-export async function collectMoneroPublic(fetchImpl=fetch,now=Date.now()){
- const [infoA,lastA,infoB,lastB]=await Promise.all([
-   moneroRpc(fetchImpl,MONERO_A,'get_info'),
-   moneroRpc(fetchImpl,MONERO_A,'get_last_block_header'),
-   moneroRpc(fetchImpl,MONERO_B,'get_info'),
-   moneroRpc(fetchImpl,MONERO_B,'get_last_block_header')
- ]);
- safeBlockInfo(infoA,lastA,now);safeBlockInfo(infoB,lastB,now);
- const a=lastA.result.block_header,b=lastB.result.block_header;
- if(Math.abs(a.height-b.height)>3 ||
-   (a.height===b.height&&a.hash!==b.hash))throw Error('Independent Monero nodes disagree');
- const range=await moneroRpc(fetchImpl,MONERO_A,'get_block_headers_range',
-   {start_height:a.height-29,end_height:a.height});
- const snapshot=makeMoneroSnapshot(infoA,lastA,range,now);
- return {...snapshot,source:'public-monero-rpc',
-    operators:['monero.rs','nodely.io'],crossCheckedAt:new Date(now).toISOString()};
+
+/** Monero failover is TWO-OF-THREE, never a single unverified public node.
+ * Candidates are tried in priority order. Pair consistency is verified at
+ * the same chain height (fetching the common block when tips differ).
+ */
+async function moneroNode(fetchImpl,node,now){
+  const infoRaw=await json(fetchImpl,node.url.replace(/\/json_rpc$/,'/get_info'));
+  if(infoRaw?.status!=='OK'||infoRaw.untrusted!==false)throw Error('Untrusted Monero info');
+  const info={result:infoRaw};
+  const last=await moneroRpc(fetchImpl,node.url,'get_last_block_header');
+  safeBlockInfo(info,last,now);
+  return {node,info,last};
 }
-async function etcRpc(fetchImpl,method,params=[]){
- const obj=await json(fetchImpl,ETC_URL,{jsonrpc:'2.0',id:1,method,params});
+async function matchingMoneroPair(fetchImpl,a,b){
+  const ah=a.last.result.block_header,bh=b.last.result.block_header;
+  if(Math.abs(ah.height-bh.height)>3)return false;
+  const commonHeight=Math.min(ah.height,bh.height);
+  const readAt=async item=>{
+    if(item.last.result.block_header.height===commonHeight)return item.last.result.block_header.hash;
+    const reply=await moneroRpc(fetchImpl,item.node.url,'get_block_header_by_height',{height:commonHeight});
+    return reply.result?.block_header?.hash;
+  };
+  const [hashA,hashB]=await Promise.all([readAt(a),readAt(b)]);
+  return typeof hashA==='string'&&/^[a-f0-9]{64}$/i.test(hashA)&&hashA===hashB;
+}
+export async function collectMoneroPublic(fetchImpl=fetch,now=Date.now()){
+ const healthy=[];
+ let selected=null;
+ for(let i=0;i<MONERO_SOURCES.length;i++){
+  try{
+   const next=await moneroNode(fetchImpl,MONERO_SOURCES[i],now);
+   for(const other of healthy){
+    try{
+     if(await matchingMoneroPair(fetchImpl,other,next)){
+      selected=[other,next];break;
+     }
+    }catch{} // A mismatching/unresponsive remote node is not trusted.
+   }
+   if(selected)break;
+   healthy.push(next);
+  }catch{} // Try the next *independent* allowlisted operator.
+ }
+ if(!selected)throw Error('No two independent Monero RPCs agree');
+ // Use the highest-priority member of the agreeing pair for block sampling;
+ // if that restricted endpoint denies the range method, try its agreeing peer.
+ for(const current of selected){
+  try{
+   const tip=current.last.result.block_header;
+   const range=await moneroRpc(fetchImpl,current.node.url,'get_block_headers_range',
+     {start_height:tip.height-29,end_height:tip.height});
+   const snapshot=makeMoneroSnapshot(current.info,current.last,range,now);
+   return {...snapshot,source:'public-monero-rpc',
+     operators:selected.map(v=>v.node.name),activeOperator:current.node.name,
+     usedFallback:current.node.name!==MONERO_SOURCES[0].name,
+     crossCheckedAt:new Date(now).toISOString()};
+  }catch{}
+ }
+ throw Error('No independently checked Monero RPC can serve the 30-block sample');
+}
+async function etcRpc(fetchImpl,url,method,params=[]){
+ const obj=await json(fetchImpl,url,{jsonrpc:'2.0',id:1,method,params});
  if(obj?.error||obj?.result===undefined)throw Error('ETC RPC unavailable: '+method);
  return obj.result;
 }
-export async function collectEtcPublic(fetchImpl=fetch,now=Date.now()){
+async function collectEtcFromSource(fetchImpl,now,source,sourceIndex){
+ const url=source.url;
  const [chainId,syncing,number]=await Promise.all([
-  etcRpc(fetchImpl,'eth_chainId'),etcRpc(fetchImpl,'eth_syncing'),
-  etcRpc(fetchImpl,'eth_blockNumber')]);
+  etcRpc(fetchImpl,url,'eth_chainId'),etcRpc(fetchImpl,url,'eth_syncing'),
+  etcRpc(fetchImpl,url,'eth_blockNumber')]);
  if(chainId!=='0x3d'||syncing!==false)throw Error('ETC public RPC chain mismatch');
  const height=Number(BigInt(number));
  if(!Number.isSafeInteger(height)||height<ETC_WINDOW+1)throw Error('ETC height unsupported');
@@ -79,7 +131,7 @@ export async function collectEtcPublic(fetchImpl=fetch,now=Date.now()){
    jsonrpc:'2.0',id:i+1,method:'eth_getBlockByNumber',
    params:['0x'+(height-ETC_WINDOW+i).toString(16),false]
  }));
- const responses=await json(fetchImpl,ETC_URL,batch);
+ const responses=await json(fetchImpl,url,batch);
  if(!Array.isArray(responses)||responses.length!==batch.length)throw Error('ETC batch unsupported');
  const indexed=new Map();
  for(const r of responses){
@@ -90,9 +142,22 @@ export async function collectEtcPublic(fetchImpl=fetch,now=Date.now()){
  const blocks=batch.map(r=>indexed.get(r.id));
  if(blocks.some(b=>!b))throw Error('Missing ETC block');
  const raw=buildEtcObservation({chainId,syncing,blocks},now);
- return {...raw,source:'public-chain-rpc',operator:'ETC Blockscout',
-   methodology:'ETC public Blockscout RPC; 32 consecutive blocks, base PoW subsidy only'};
+ return {...raw,source:'public-chain-rpc',operator:source.name,
+   usedFallback:sourceIndex>0,
+   methodology:'ETC public RPC 32 consecutive blocks, ECIP-1017 PoW base reward only'};
 }
+export async function collectEtcPublic(fetchImpl=fetch,now=Date.now()){
+ // Try the main RPC on EACH scheduled cycle; a recovered primary automatically
+ // replaces a backup only after the same mainnet/block validation succeeds.
+ for(let i=0;i<ETC_SOURCES.length;i++){
+  try{
+   const sample=await collectEtcFromSource(fetchImpl,now,ETC_SOURCES[i],i);
+   if(validateOwnPoWSnapshot(sample,now))return sample;
+  }catch{} // Any 403, 429, timeout, wrong chain or inconsistent blocks -> backup.
+ }
+ throw Error('All ETC public RPC sources unavailable or invalid');
+}
+
 export function rvnHalvingSubsidy(height){
  if(!Number.isSafeInteger(height)||height<1)throw Error('Invalid RVN height');
  return 5000/2**Math.floor(height/2100000);
