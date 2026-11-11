@@ -11,6 +11,7 @@ export const COINS=Object.freeze({
  FLUX:Object.freeze({symbol:'FLUX',name:'Flux',algorithm:'FluxHash / Equihash',hardware:'GPU',unit:'Sol/s',comment:'Utiliser la récompense PoW versée aux mineurs, PAS la récompense totale partagée avec les FluxNodes.'})
 });
 export const FRESH_MS=20*60*1000;
+export const PUBLIC_FRESH_MS=5*60*60*1000;
 const is=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
 const isId=coin=>Object.hasOwn(COINS,coin);
 const sameKind=(coin,unit)=>unit===COINS[coin]?.unit;
@@ -56,7 +57,10 @@ export function estimatePoW({
  */
 export function validateOwnPoWSnapshot(doc,now=Date.now()){
  if(!doc||doc.schemaVersion!==1||!isId(doc.coin)||doc.network!=='mainnet'||
- doc.source!=='own-node'||doc.algorithm!==COINS[doc.coin].algorithm||
+ (doc.source!=='own-node'&&doc.source!=='public-chain-rpc')||
+ (doc.source==='public-chain-rpc'&&!((doc.coin==='ETC'&&doc.operator==='ETC Blockscout')||
+   (doc.coin==='RVN'&&doc.operator==='RavencoinExplorer')))||
+ doc.algorithm!==COINS[doc.coin].algorithm||
  doc.unit!==COINS[doc.coin].unit||
  !is(doc.networkRate,0.000001,1e25)||!is(doc.blockSeconds,1,7200)||
  !is(doc.minerRewardCoins,0.000000000000000001,1e10)||
@@ -66,11 +70,11 @@ export function validateOwnPoWSnapshot(doc,now=Date.now()){
  const collected=Date.parse(doc.collectedAt||'');
  const chain=Date.parse(doc.blockTimestamp||'');
  if(!Number.isFinite(now)||!Number.isFinite(collected)||!Number.isFinite(chain)||
- collected>now+5*60000||collected<now-FRESH_MS||
+ collected>now+5*60000||collected<now-(doc.source==='public-chain-rpc'?PUBLIC_FRESH_MS:FRESH_MS)||
  chain>collected+5*60000||chain<collected-30*60000)return null;
  return Object.freeze({
  coin:doc.coin,networkRate:doc.networkRate,blockSeconds:doc.blockSeconds,
  minerRewardCoins:doc.minerRewardCoins,unit:doc.unit,blockHeight:doc.blockHeight,
- collectedAt:doc.collectedAt,source:doc.source,methodology:doc.methodology
+ collectedAt:doc.collectedAt,source:doc.source,operator:doc.operator||null,methodology:doc.methodology
  });
 }
