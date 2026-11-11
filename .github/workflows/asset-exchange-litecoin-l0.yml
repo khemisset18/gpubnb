@@ -25,6 +25,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Require exact Litecoin branch SHA, not temporary PR merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+          echo "LTC_L0_EXACT_HEAD_SHA=$expected"
       - name: Python syntax
         run: python3 -m compileall -q asset-exchange/qualification/litecoin/l0/
       - name: Offline adverse-case tests (no Litecoin execution)

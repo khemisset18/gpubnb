@@ -24,6 +24,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Get public official release inputs only (never execute binaries)
         shell: bash
@@ -34,7 +35,10 @@ jobs:
           evidence="$RUNNER_TEMP/ltc-l0-evidence"
           mkdir -p "$work" "$evidence"
           echo "LTC_L0_PROFILE=LTC_BASECHAIN_TRANSPARENT_V1" > "$evidence/metadata.txt"
-          echo "HEAD_SHA=$GITHUB_SHA" >> "$evidence/metadata.txt"
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "HEAD_SHA=$actual" >> "$evidence/metadata.txt"
           echo "OFFICIAL_BINARY_EXECUTED=false" >> "$evidence/metadata.txt"
           echo "LTC_MAINNET_USED=false" >> "$evidence/metadata.txt"
           echo "SETTLEMENT_ENABLED=false" >> "$evidence/metadata.txt"
