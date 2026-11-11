@@ -21,7 +21,7 @@ on:
         type: choice
         required: true
         default: multinode
-        options: [multinode, fee-pinning]
+        options: [multinode, fee-pinning, recovery-handoff]
   workflow_call:
     inputs:
       execution_commit:
@@ -45,9 +45,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   private-multinode:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.lab_suite == 'multinode' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111') || (inputs.lab_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111'))
-    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.lab_suite == 'multinode' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111') || (inputs.lab_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111') || (inputs.lab_suite == 'recovery-handoff' && github.ref == 'refs/heads/asset-exchange/doge-vm-recovery-20261111'))
+    runs-on: ${{ inputs.lab_suite == 'recovery-handoff' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     timeout-minutes: 20
+    outputs:
+      handoff_sha256: ${{ steps.handoff.outputs.sha256 }}
     steps:
       - name: Checkout dispatched commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -68,7 +70,7 @@ jobs:
           assert re.fullmatch('[0-9a-f]{40}',os.environ['HARNESS_COMMIT'])
           assert os.environ['EXECUTION_COMMIT']==os.environ['GITHUB_SHA']
           assert os.environ['LAB_AUTHORIZATION']=='AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST'
-          assert os.environ['LAB_SUITE'] in ('multinode','fee-pinning')
+          assert os.environ['LAB_SUITE'] in ('multinode','fee-pinning','recovery-handoff')
           PY
           git diff --exit-code "$HARNESS_COMMIT" HEAD -- asset-exchange/qualification/dogecoin/ asset-exchange/chain-watchers/ asset-exchange/recovery/ asset-exchange/wallet-agent/ asset-exchange/core/src/errors.mjs .github/workflows/asset-exchange-dogecoin-multinode.yml
           bash -n asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh
@@ -94,10 +96,33 @@ jobs:
           bash asset-exchange/qualification/dogecoin/d6/run-multinode.sh \
             "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-multinode" "$LAB_AUTHORIZATION" "$LAB_SUITE"
       - name: Check watcher behavior against native paired observations
+        if: inputs.lab_suite != 'recovery-handoff'
         run: |
           node asset-exchange/qualification/dogecoin/d6/check-watcher-evidence.mjs \
             "$RUNNER_TEMP/doge-multinode/lab/evidence/multinode-report.json" \
             "$RUNNER_TEMP/doge-multinode/lab/evidence/watcher-review.json"
+      - name: Retain exact public handoff digest
+        if: inputs.lab_suite == 'recovery-handoff'
+        id: handoff
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'doge-multinode/lab'
+          report=json.loads((root/'evidence/multinode-report.json').read_text())
+          raw=(root/'handoff/parcel.json').read_bytes()
+          digest=hashlib.sha256(raw).hexdigest()
+          assert report['experimentStatus']=='PASS' and report['handoff']['sha256']==digest
+          assert json.loads(raw)['executionCommit']==os.environ['GITHUB_SHA']
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('sha256='+digest+'\n')
+          PY
+      - name: Preserve only approved synthetic recovery handoff
+        if: inputs.lab_suite == 'recovery-handoff'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dogecoin-recovery-prepared-${{ github.sha }}
+          path: ${{ runner.temp }}/doge-multinode/lab/handoff/
+          if-no-files-found: error
+          retention-days: 30
       - name: Preserve non-secret evidence including failures
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -117,3 +142,149 @@ jobs:
           assert r['qualificationStatus']=='BLOCKED' and r['settlementAllowed'] is False
           print('Private two-node experiment PASS; full D6/financial qualification remains BLOCKED.')
           PY
+
+  independent-vm:
+    needs: private-multinode
+    if: github.event_name == 'workflow_dispatch' && inputs.lab_suite == 'recovery-handoff' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-vm-recovery-20261111'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      handoff_sha256: ${{ steps.confirmed.outputs.sha256 }}
+    steps:
+      # Deliberately no checkout or cache restore on either recovery VM.
+      - name: Download approved public handoff from completed producer VM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dogecoin-recovery-prepared-${{ github.sha }}
+          path: ${{ runner.temp }}/public-recovery
+      - name: Verify independently retained digest before executing any handoff code
+        env:
+          EXPECTED_HANDOFF_SHA256: ${{ needs.private-multinode.outputs.handoff_sha256 }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,stat
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'public-recovery'
+          raw=(root/'parcel.json').read_bytes();expected=os.environ['EXPECTED_HANDOFF_SHA256']
+          assert re.fullmatch('[0-9a-f]{64}',expected) and hashlib.sha256(raw).hexdigest()==expected
+          m=json.loads(raw);assert m['executionCommit']==os.environ['GITHUB_SHA'] and m['phase']=='prepared'
+          assert not (pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'apps').exists()
+          paths=m['files'];assert len(paths)<32
+          assert {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()}==set(paths)|{'parcel.json'}
+          total=0
+          for name,digest in paths.items():
+              path=pathlib.PurePosixPath(name)
+              assert not path.is_absolute() and '..' not in path.parts
+              assert name.startswith(('asset-exchange/qualification/dogecoin/','asset-exchange/recovery/dogecoin/','asset-exchange/wallet-agent/dogecoin/')) or name in ('public-chain.dat','fixtures.json','bundle-main.json','bundle-cap.json','bundle-parent.json','bundle-conflict.json')
+              target=root/name;info=target.lstat()
+              assert stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_size<=16*1024**2
+              data=target.read_bytes();total+=len(data);assert total<=32*1024**2
+              assert hashlib.sha256(data).hexdigest()==digest
+          assert not any(p.is_symlink() for p in root.rglob('*'))
+          PY
+      - name: Download preserved D0 binaries and original attestations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/doge-d0-verified
+      - name: Recover inside fresh VM using only the approved public runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HANDOFF_SHA256: ${{ needs.private-multinode.outputs.handoff_sha256 }}
+        run: |
+          bash "$RUNNER_TEMP/public-recovery/asset-exchange/qualification/dogecoin/d6/run-multinode.sh" \
+            "$RUNNER_TEMP/doge-d0-verified" "$RUNNER_TEMP/doge-independent" \
+            AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST recovery-independent \
+            "$RUNNER_TEMP/public-recovery" "$EXPECTED_HANDOFF_SHA256"
+      - name: Retain confirmed public handoff digest
+        id: confirmed
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'doge-independent/lab'
+          report=json.loads((root/'evidence/multinode-report.json').read_text())
+          raw=(root/'handoff/parcel.json').read_bytes();digest=hashlib.sha256(raw).hexdigest()
+          assert report['experimentStatus']=='PASS' and report['handoff']['sha256']==digest
+          assert json.loads(raw)['phase']=='confirmed'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('sha256='+digest+'\n')
+          PY
+      - name: Preserve confirmed public handoff for replacement VM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dogecoin-recovery-confirmed-${{ github.sha }}
+          path: ${{ runner.temp }}/doge-independent/lab/handoff/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve independent VM evidence including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dogecoin-independent-vm-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/doge-independent/verification/
+            ${{ runner.temp }}/doge-independent/lab/evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  replacement-vm:
+    needs: independent-vm
+    if: github.event_name == 'workflow_dispatch' && inputs.lab_suite == 'recovery-handoff' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-vm-recovery-20261111'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Download confirmed public handoff only
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dogecoin-recovery-confirmed-${{ github.sha }}
+          path: ${{ runner.temp }}/public-recovery
+      - name: Verify retained receipt before loading public runtime
+        env:
+          EXPECTED_HANDOFF_SHA256: ${{ needs.independent-vm.outputs.handoff_sha256 }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,stat
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'public-recovery'
+          raw=(root/'parcel.json').read_bytes();expected=os.environ['EXPECTED_HANDOFF_SHA256']
+          assert re.fullmatch('[0-9a-f]{64}',expected) and hashlib.sha256(raw).hexdigest()==expected
+          m=json.loads(raw);assert m['executionCommit']==os.environ['GITHUB_SHA'] and m['phase']=='confirmed'
+          assert not (pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'apps').exists()
+          paths=m['files'];assert len(paths)<32
+          assert {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()}==set(paths)|{'parcel.json'}
+          total=0
+          for name,digest in paths.items():
+              path=pathlib.PurePosixPath(name)
+              assert not path.is_absolute() and '..' not in path.parts
+              assert name.startswith(('asset-exchange/qualification/dogecoin/','asset-exchange/recovery/dogecoin/','asset-exchange/wallet-agent/dogecoin/')) or name in ('public-chain.dat','fixtures.json','bundle-main.json','bundle-cap.json','bundle-parent.json','bundle-conflict.json')
+              target=root/name;info=target.lstat()
+              assert stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_size<=16*1024**2
+              data=target.read_bytes();total+=len(data);assert total<=32*1024**2
+              assert hashlib.sha256(data).hexdigest()==digest
+          assert not any(p.is_symlink() for p in root.rglob('*'))
+          PY
+      - name: Download preserved D0 binaries and original attestations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/doge-d0-verified
+      - name: Resume on replacement VM without original workspace or keys
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HANDOFF_SHA256: ${{ needs.independent-vm.outputs.handoff_sha256 }}
+        run: |
+          bash "$RUNNER_TEMP/public-recovery/asset-exchange/qualification/dogecoin/d6/run-multinode.sh" \
+            "$RUNNER_TEMP/doge-d0-verified" "$RUNNER_TEMP/doge-replacement" \
+            AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST recovery-resume \
+            "$RUNNER_TEMP/public-recovery" "$EXPECTED_HANDOFF_SHA256"
+      - name: Preserve replacement VM evidence including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dogecoin-replacement-vm-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/doge-replacement/verification/
+            ${{ runner.temp }}/doge-replacement/lab/evidence/
+          if-no-files-found: error
+          retention-days: 30
