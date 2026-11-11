@@ -1,0 +1,11 @@
+# Only applies when apps/web/comparateur/ is deployed AS THE SITE ROOT
+# (e.g. a separate Netlify site). Does not change GPUbnb's existing hosting.
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+
+/data/*
+  Cache-Control: no-store
