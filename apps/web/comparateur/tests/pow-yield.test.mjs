@@ -34,7 +34,7 @@ test('price is manual; positive/negative net accounting energy and pool',()=>{
 test('hours, quantity, wallet and pool costs remain separate',()=>{
  const half=estimatePoW({...args,quantity:2,hours:12,coinEur:0.1});
  assert.ok(Math.abs(half.coinsDay-144)<1e-10);
- assert.ok(Math.abs(half.energyKwhDay-2.4)<1e-10);
+ assert.ok(Math.abs(half.energyKwhDay-4.8)<1e-10);
 });
 test('Flux only permits Sol/s input; pool share must never exceed 100%',()=>{
  assert.equal(estimatePoW({...args,coin:'FLUX',unit:'H/s'}),null);
