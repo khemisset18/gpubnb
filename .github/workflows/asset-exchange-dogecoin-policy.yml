@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist/policy-evidence
           git rev-parse HEAD > dist/policy-evidence/execution-commit.txt
-          git diff --exit-code f875ff245092a8c309a604d90d736a56404aeb51 HEAD -- asset-exchange/qualification/dogecoin/
+          git diff --exit-code 23e638d4ca2a3ccd42896ce4873c77626076c88d HEAD -- asset-exchange/qualification/dogecoin/
           bash -n asset-exchange/qualification/dogecoin/policy/build-dependencies.sh
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/policy -p 'test_*.py' -v
       - name: Fetch exact upstream source
