@@ -311,3 +311,68 @@ integration('post-commit revalidation outage preserves the accepted frame withou
     }finally{await redis.del(...keys);redis.disconnect();await fixture.cleanup();await db.$disconnect();}
   });
 });
+
+// An activated session can reach a delayed Redis install after the initial
+// 15-second validation window. Re-reading the DB is safe only if the original
+// receipt remains current and STOP has not published its generation tombstone.
+integration('already-activated frame retries expired validation with fresh receipt, never through STOP',async t=>{
+  const {acceptGatewayFrame,revokeGatewayAuthority}=await import('../src/workspace-gateway.js');
+  const {seedReadySession}=await import('./fixtures/native-gateway-session.js');
+  for(const scenario of ['active','stop'] as const)await t.test(scenario,async()=>{
+    const db=new PrismaClient(),redis=new Redis(process.env.REDIS_URL!,{maxRetriesPerRequest:1});
+    const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.STARTING,expectedSeconds:900});
+    const sessionId=fixture.session.id,machineId=fixture.machine.id,channelId=crypto.randomUUID();
+    const browserSessionKey='gpubnb:test:preactivated-browser:'+channelId;
+    const authorityKey='workspace-gateway:ws-session-activated:'+sessionId;
+    const channelKey='workspace-gateway:ws-channel:'+channelId;
+    const keys=[authorityKey,browserSessionKey,channelKey,'workspace-gateway:ws-input:'+channelId,'workspace-gateway:ws-input-bytes:'+channelId];
+    const bindingRaw=JSON.stringify({sessionId,machineId,browserSessionKey,runtimeBackend:'WINDOWS_NATIVE'});
+    const frame={dataBase64:'AA==',binary:true,close:false};
+    try{
+      await redis.set(browserSessionKey,'1','EX',60);
+      await redis.set(channelKey,bindingRaw,'EX',60);
+      const first=await acceptGatewayFrame({db,redis,sessionId,machineId,channelId,bindingRaw,frame});
+      assert.equal(first.enqueued,1);
+      assert.ok(first.authorityId,'first frame creates a durable receipt');
+      assert.equal(await db.workspaceGatewayAcceptance.count({where:{sessionId}}),1);
+      await redis.del(authorityKey); // Force the already-activated renewal path.
+      const before=await redis.llen('workspace-gateway:ws-input:'+channelId);
+      const actualTime=redis.time.bind(redis),actualEval=redis.eval.bind(redis);
+      let samples=0,expiredInstalls=0;
+      redis.time=(async()=>{
+        const time=await actualTime();
+        samples++;
+        return samples===1?[String(Number(time[0])-16),time[1]]:time;
+      }) as typeof redis.time;
+      redis.eval=(async(script:unknown,...args:unknown[])=>{
+        const result=await (actualEval as (...args:unknown[])=>Promise<unknown>)(script,...args);
+        if(String(script).includes("current ~= ARGV[1] and current ~= '1'")&&Number(result)===0){
+          expiredInstalls++;
+          if(scenario==='stop'&&expiredInstalls===1){
+            // STOP commits before its tombstone is published; the second
+            // validation must not resurrect a pre-STOP acceptance receipt.
+            await db.workspaceSession.update({where:{id:sessionId},data:{status:'STOPPING'}});
+            await revokeGatewayAuthority(redis,sessionId);
+          }
+        }
+        return result;
+      }) as typeof redis.eval;
+      const next=await acceptGatewayFrame({db,redis,sessionId,machineId,channelId,bindingRaw,frame});
+      assert.equal(expiredInstalls,1,'expired install is rejected atomically by Redis TIME');
+      if(scenario==='active'){
+        assert.equal(next.enqueued,1,'fresh validation restores legitimate admission');
+        assert.equal(next.authorityId,first.authorityId,'receipt generation must not change');
+        assert.equal(samples,2,'retry takes another Redis clock snapshot');
+        assert.equal(await redis.llen('workspace-gateway:ws-input:'+channelId),before+1);
+      }else{
+        assert.equal(next.enqueued,-2,'STOP makes the retry fail closed');
+        assert.equal(next.authorityId,undefined);
+        assert.equal(await redis.llen('workspace-gateway:ws-input:'+channelId),before);
+        assert.match((await redis.get(authorityKey))!,/^revoked:/);
+      }
+      assert.equal(await db.workspaceGatewayAcceptance.count({where:{sessionId}}),1,'never bill twice');
+    }finally{
+      await redis.del(...keys);redis.disconnect();await fixture.cleanup();await db.$disconnect();
+    }
+  });
+});
