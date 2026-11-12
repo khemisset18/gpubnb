@@ -5,7 +5,7 @@ Ce guide ne concerne que \`apps/web/comparateur/\`, pas GPUbnb Host, la marketpl
 
 ## Architecture prévue
 
-- Un **Cloudflare Worker** isolé réalise une tentative de collecte **toutes les heures**, à la minute **17 UTC** (\`17 * * * *\`).
+- Un **Cloudflare Worker** isolé réalise une tentative de collecte **toutes les heures**, à des minutes distinctes en UTC : XMR `17 * * * *`, ETC `27 * * * *` et RVN `37 * * * *`.
 - Pour XMR et ETC, les sources publiques sont interrogées par priorité, avec retour automatique au fournisseur principal quand il récupère. RVN a un seul fournisseur de blockchain préparé.
 - Une observation n'est stockée en KV qu'après validation des champs, de la chaîne, des blocs et des dates. Les données de prix fiat restent manuelles.
 - Chaque crypto possède sa propre clé KV et n'efface pas les relevés des autres monnaies.
@@ -40,7 +40,7 @@ node tools/prepare-cloudflare-config.mjs 0123456789abcdef0123456789abcdef
 npx wrangler deploy --config wrangler.deploy.jsonc --dry-run
 \`\`\`
 
-\`prepare-cloudflare-config.mjs\` **n'effectue aucun déploiement**. Il vérifie la forme du template, le Cron horaire et l'identifiant fourni, puis crée \`wrangler.deploy.jsonc\` localement en refusant d'écraser un fichier existant. Ce fichier est ignoré par Git et exclu des assets publics. **L'identifiant de namespace n'est pas un jeton secret mais est propre au compte Cloudflare ; jamais de token ou d'identifiants d'administration dans le dépôt.**
+\`prepare-cloudflare-config.mjs\` **n'effectue aucun déploiement**. Il vérifie le template, les trois Crons horaires et l'identifiant fourni, puis crée \`wrangler.deploy.jsonc\` localement en refusant d'écraser un fichier existant. Ce fichier est ignoré par Git et exclu des assets publics. **L'identifiant de namespace n'est pas un jeton secret mais est propre au compte Cloudflare ; jamais de token ou d'identifiants d'administration dans le dépôt.**
 
 La commande de déploiement réelle suivante est volontairement **non exécutée par cette PR** :
 
@@ -68,7 +68,7 @@ Après autorisation, consulter le JSON public de \`/api/status\` :
 - **Appels sortants bornés** : hôtes HTTPS autorisés en dur, redirections refusées, réponses JSON limitées à 768 Kio réellement lus, délai de 10 secondes par requête.
 - **Assets privés non publiés** : \`.assetsignore\` exclut \`edge/\`, \`tools/\`, \`tests/\`, les docs et \`wrangler.deploy.jsonc\`. Une politique CSP de la page empêche les scripts et connexions externes.
 - **Surveillance minimum** : regarder les logs en cas d'échecs systématiques, ou préparer ultérieurement une notification hebdomadaire à partir du statut, sans imposer de tâches quotidiennes à l'opérateur.
-- **Quotas** : même avec 24 collectes/jour, les lectures KV côté visiteurs peuvent devenir le coût dominant ; réexaminer les quotas si l'audience grandit.
+- **Quotas** : avec 24 tentatives par crypto et trois déclencheurs horaires, les lectures KV côté visiteurs peuvent devenir le coût dominant ; réexaminer les quotas si l'audience grandit.
 
 ### Références officielles
 - [Cloudflare Workers KV, création et liaison du namespace](https://developers.cloudflare.com/kv/get-started/)
