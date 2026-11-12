@@ -199,4 +199,7 @@ for(const id of ['tabGpu','tabCpu'])byId(id).addEventListener('click',updateDevi
 byId('deviceSearch').addEventListener('input',updateDevice);
 switchCoin(currentCoin);
 refresh();
-setInterval(refresh,5*60*1000);
+// Poll the hourly data feed at a low frequency to preserve free KV reads.
+setInterval(refresh,15*60*1000);
+// Always expire old estimates promptly even when the browser stays open.
+setInterval(render,60*1000);
