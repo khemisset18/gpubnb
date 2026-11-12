@@ -10,7 +10,7 @@
 | Catalogue | 14 cryptos ; unités H/s, Sol/s, Graph/s ; mode Pearl basé sur des mesures de gains, ASIC séparés | Pas de benchmark réel automatiquement garanti |
 | Calcul | Revenus crypto théoriques, électricité, frais pool, quantités et scénarios | Cours EUR manuel ; sources de mesures à confirmer |
 | Sources publiques | XMR quorum de 2 opérateurs, ETC principal + secours, RVN premier fournisseur | Les API et leurs droits de réutilisation commerciale doivent être testés en réel |
-| Cadence | Cloudflare Cron \`17 * * * *\`, toutes les heures UTC | Worker Cloudflare pas encore installé ni déployé |
+| Cadence | Cloudflare Crons répartis `17/27/37 * * * *` (syntaxe illustrative ; trois expressions exactes dans `wrangler.jsonc`), chaque crypto une fois par heure UTC | Worker Cloudflare pas encore installé ni déployé |
 | Reprise sur incident | 24 h maximum depuis dernier succès ; aucun réhorodatage après échec | Aucune disponibilité garantie si toutes les sources restent en panne |
 | Réduction du quota | Réponses JSON partagées en cache jusqu'à 120 s au maximum | Surveiller les quotas réels KV/Workers si l'audience augmente |
 | Expiration | Le TTL de cache est raccourci à la seconde près avant l'expiration de 24 h ; \`/api/status\` n'est pas mis en cache au-delà du seuil de fraîcheur de 75 min | Les caches réseau externes non contrôlés ne sont pas une garantie absolue |
@@ -62,3 +62,10 @@ Ces résultats **ne remplacent pas** l'exécution de \`npm test\` avec le dépô
 - [Workers Static Assets et .assetsignore](https://developers.cloudflare.com/workers/static-assets/binding/)
 
 **Ne pas fusionner ni déployer sans accord explicite.**
+
+
+### CPU gratuite : trois collectes isolées
+
+Cloudflare Workers Free limite le temps CPU à **10 ms par déclenchement planifié** (le temps d'attente réseau est exclu) et autorise **5 déclencheurs Cron par compte**. Le comparateur utilise désormais **3 déclencheurs horaires** : XMR à :17, ETC à :27 et RVN à :37 (UTC). Chaque invocation traite une seule cryptomonnaie. Cela réduit les risques de dépassement CPU et de sous-requêtes mais ne prouve pas qu'une collecte réelle complète respecte 10 ms ; la mesure sur Cloudflare reste obligatoire avant activation.
+
+Référence : https://developers.cloudflare.com/workers/platform/limits/
