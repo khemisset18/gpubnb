@@ -43,7 +43,7 @@ Pour activer des données réelles :
 }
 ```
 
-**Ce JSON est un exemple de structure, pas une promesse de gains.** Il ne doit pas être publié avec une valeur d'exemple présentée comme réelle. Si les données datent de plus de 2 heures, le site repasse en mode manuel. N'ajoutez jamais de clé API dans `app.js` ou le code public du site. Le fichier livré contient un tableau `devices` vide, pour éviter d'afficher de fausses valeurs.
+**Ce JSON est un exemple de structure, pas une promesse de gains.** Il ne doit pas être publié avec une valeur d'exemple présentée comme réelle. Si les données datent de plus de 75 minutes, elles sont signalées comme sauvegardées. Elles restent utilisables 24 heures maximum à compter de la dernière mesure validée, puis le site repasse en mode manuel. N'ajoutez jamais de clé API dans `app.js` ou le code public du site. Le fichier livré contient un tableau `devices` vide, pour éviter d'afficher de fausses valeurs.
 
 **Important** : les estimations de revenu brut sur 24 heures sont redimensionnées selon le temps d'utilisation : `brut = brut24h × nombre d'appareils × heures/24`. Électricité : `watts × heures × appareils / 1000 × €/kWh`. Frais de pool : `% du brut`. Le coût d'achat n'est utilisé que pour l'amortissement théorique.
 
@@ -59,7 +59,7 @@ Les calculs et la validation de la fraîcheur des données sont isolés dans `mo
 node --test apps/web/comparateur/tests/model.test.mjs
 ```
 
-Critères de contrôle : nombre d'appareils entier, montants et paramètres bornés, frais de pool et coût d'électricité déduits, données de rentabilité en EUR uniquement, rejet d'une source vide, d'une date future de plus de 5 minutes, d'un flux âgé de plus de 2 heures, et d'identifiants matériels inconnus. Les valeurs manquantes ne sont **jamais** remplacées par des profits inventés.
+Critères de contrôle : nombre d'appareils entier, montants et paramètres bornés, frais de pool et coût d'électricité déduits, données de rentabilité en EUR uniquement, rejet d'une source vide, d'une date future de plus de 5 minutes, d'un flux âgé de plus de 24 heures, et d'identifiants matériels inconnus. Les valeurs manquantes ne sont **jamais** remplacées par des profits inventés.
 
 ### Raccordement des données réelles (à effectuer avec une autorisation de fournisseur)
 
@@ -183,7 +183,7 @@ Les seuls accès réseau attendus du comparateur sont les fichiers JSON locaux d
 
 ## Sauvegarde automatique 24 heures en cas de panne
 
-**Nouvelle règle validée :** actualisation prévue toutes les **2 heures** ; si une source échoue ou renvoie des informations incohérentes, le dernier instantané validé reste disponible **24 heures maximum à partir de sa collecte**, sans réhorodatage. La page indique « Dernier relevé sauvegardé » avec son heure d'origine. Après 24 h, elle masque les valeurs automatiques et affiche « Service indisponible ». Le mode manuel reste disponible.
+**Nouvelle règle validée :** actualisation prévue **toutes les heures** (minute 17 UTC) ; si une source échoue ou renvoie des informations incohérentes, le dernier instantané validé reste disponible **24 heures maximum à partir de sa collecte**, sans réhorodatage. La page indique « Dernier relevé sauvegardé » avec son heure d'origine. Après 24 h, elle masque les valeurs automatiques et affiche « Service indisponible ». Le mode manuel reste disponible.
 
 - Worker Cloudflare isolé : \`edge/worker.mjs\`, \`wrangler.jsonc\` et KV (mise en cache 86 400 secondes).
 - Tests : \`tests/backup-24h.test.mjs\` et \`tests/model.test.mjs\`.
@@ -192,7 +192,7 @@ Les seuls accès réseau attendus du comparateur sont les fichiers JSON locaux d
 **Ce système est codé mais pas déployé** : les sources publiques et les conditions de réutilisation doivent encore être vérifiées avec des réponses réelles. Ni le comparateur ni son Worker ne sont fusionnés avec GPUbnb. Le coût d'infrastructure dépend des limites de l'offre gratuite de l'hébergeur.
 
 
-## Sources principales et sources de secours automatiques (2 h)
+## Sources principales et sources de secours automatiques (1 h)
 
 **Lorsque l'API principale est indisponible**, le service planifié essaie une autre source indépendante. **Chaque cycle redémarre par la principale** : dès qu'elle est à nouveau valide, elle reprend la priorité. Tous les résultats sont contrôlés avant publication ; aucun fournisseur commercial ni API payante n'est ajouté.
 
