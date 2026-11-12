@@ -15,3 +15,6 @@ _headers
 *.env
 .env*
 private/
+
+# Cloudflare namespace is public, but its per-account generated config is not a site asset.
+wrangler.deploy.jsonc
