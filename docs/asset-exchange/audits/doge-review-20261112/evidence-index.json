@@ -145,5 +145,14 @@
     "No Mainnet or production qualification",
     "No SBF financial runtime or complete GUI/IPC test",
     "Three strict Rust scanner findings remain blocking"
-  ]
+  ],
+  "sourceAudit": {
+    "indexPath": "docs/asset-exchange/audits/doge-review-20261112/source-audit-result.json",
+    "indexSha256": "890e2724a8f88c56feec1f34332b1ed4c48671774ccb5c256eda07f472e93521",
+    "sourceCommit": "0220aebdd411e018c47a55cfd5bbb974caf1fa25",
+    "runId": 43316922937,
+    "artifactId": 13989071469,
+    "packagingStatus": "PASS",
+    "externalHumanAudit": "NOT_PERFORMED"
+  }
 }

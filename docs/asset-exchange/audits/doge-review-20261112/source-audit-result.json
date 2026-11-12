@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "scope": "source packaging/provenance only; no node, key, signing or broadcast operation",
+  "runId": 43316922937,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43316922937",
+  "executionCommit": "0220aebdd411e018c47a55cfd5bbb974caf1fa25",
+  "sourceTree": "3b4da4fda0eff7f1ab6b047ac67e16f413b43fd1",
+  "pr": 361,
+  "sourceFilesIncludingGeneratedInfo": 602,
+  "sourceArtifact": {
+    "artifactId": 13989071469,
+    "zipBytes": 1809360,
+    "zipSha256": "3b769b1c8b03278f290be03f789fe88702b9b72965a78269025fa16e08c0763f",
+    "retentionExpiresAt": "2026-12-12T22:07:42Z",
+    "files": [
+      {
+        "path": "SHA256SUMS",
+        "bytes": 219,
+        "sha256": "bf6a76b489874dda79a092191671424299f7cf4dbea703d7027445e518f2f9d9"
+      },
+      {
+        "path": "gpu.k.p2p-asset-exchange-source-v1.spdx.json",
+        "bytes": 431491,
+        "sha256": "26483f18fd28ee403621b3ef995ef4738889f9d5ffa884929c3bf124f33fbf02"
+      },
+      {
+        "path": "gpu.k.p2p-asset-exchange-source-v1.tar.gz",
+        "bytes": 1672909,
+        "sha256": "2f50cac70bf38ddd0f24055d6541aec9bee154f412cbb1566812be510a21ce04"
+      },
+      {
+        "path": "provenance.sigstore.json",
+        "bytes": 12161,
+        "sha256": "c6a98a9535acaec7c3bf294cd0eeac3f3c11d6eb103ba1735850c9c4ca6408d1"
+      },
+      {
+        "path": "sbom-attestation.sigstore.json",
+        "bytes": 426024,
+        "sha256": "cbc43bd076fbcde41e5cd8e51a94d35d41bcdc191bcd7d74df6236117e3e66fb"
+      }
+    ]
+  },
+  "checks": {
+    "adversarialSourceTests": {
+      "pass": 11,
+      "fail": 0,
+      "skip": 0
+    },
+    "twoBuildsByteIdentical": "PASS",
+    "independentConsumerGitScopeAndBlobs": "PASS",
+    "independentConsumerSlsaCryptographicVerification": "PASS",
+    "independentConsumerSpdxCryptographicVerification": "PASS",
+    "localDownloadedZipAndInternalHashes": "PASS",
+    "localExpectedGitFileSetAndBlobs": "PASS",
+    "localRebuildFromExactRemoteCommitArchiveSpdxChecksums": "BYTE_IDENTICAL",
+    "localAttestationSubjectsAndSourceIdentity": "PASS",
+    "localFullSpdxPredicateEquality": "PASS"
+  },
+  "jobs": [
+    {
+      "id": 131527255577,
+      "name": "Workspace Agent soak (25 clean passes)",
+      "conclusion": "success"
+    },
+    {
+      "id": 131527256104,
+      "name": "Reproducible source audit bundle + provenance",
+      "conclusion": "success"
+    },
+    {
+      "id": 131527256959,
+      "name": "Workspace API contract soak (10 clean passes)",
+      "conclusion": "success"
+    },
+    {
+      "id": 131527416284,
+      "name": "Independent source audit verification",
+      "conclusion": "success"
+    },
+    {
+      "id": 131527257805,
+      "name": "doge-recovery-multinode-private-manual",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 131527258883,
+      "name": "doge-d3-private-manual",
+      "conclusion": "skipped"
+    }
+  ],
+  "packagingStatus": "PASS",
+  "externalHumanAudit": "NOT_PERFORMED",
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false,
+  "cryptographicVerificationBoundary": "gh attestation verify ran in the independent CI consumer with exact repository/source digest and SPDX predicate type; local JSON inspection alone is not signature verification",
+  "snapshotBoundary": "This receipt is committed after packaging and is not claimed to be inside the already-built 602-file snapshot.",
+  "excludedScope": [
+    "root Cargo files",
+    "Rust vendor sources",
+    "GPUbnb Core runtime",
+    "full signed native archives",
+    "private keys and node credentials"
+  ]
+}

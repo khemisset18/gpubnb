@@ -199,3 +199,32 @@ conditionnement. Aucun push/PR/schedule ne déclenche les effets blockchain.
 Les 20 directions restent désactivées, DOGE reste MARKETPLACE_ONLY et les
 contrôles de settlement restent fermés. Un audit et une décision d'activation
 seraient des opérations distinctes. Aucun merge main/dev ni déploiement.
+
+
+## Paquet source exécuté et vérifié
+
+Le lancement manuel [43316922937](https://github.com/khemisset18/gpubnb/actions/runs/43316922937)
+au commit `0220aebdd411e018c47a55cfd5bbb974caf1fa25`, arbre
+`3b4da4fda0eff7f1ab6b047ac67e16f413b43fd1`, est **SUCCESS**.
+Les deux constructions et le consommateur sur un runner distinct passent.
+Les 11 tests adversariaux passent sans échec ni skip. Les jobs D3 et multi-nœuds
+sont volontairement SKIP : aucune suite blockchain réussie n'a été répétée.
+
+Archive Actions `13989071469` : ZIP SHA256
+`3b769b1c8b03278f290be03f789fe88702b9b72965a78269025fa16e08c0763f`.
+Archive source de 602 fichiers : SHA256
+`2f50cac70bf38ddd0f24055d6541aec9bee154f412cbb1566812be510a21ce04`.
+Le ZIP téléchargé, les empreintes internes et chaque blob Git ont été vérifiés.
+Une reconstruction locale depuis le commit distant exact produit les mêmes
+archive, SPDX et SHA256SUMS, octet pour octet. Les deux attestations désignent
+le même sujet ; leur identité de source/caller et le prédicat SPDX complet
+concordent. La vérification cryptographique est celle réellement exécutée
+par `gh attestation verify` dans le consommateur indépendant, pas une simple
+lecture locale de JSON.
+
+[Le reçu borné](audits/doge-review-20261112/source-audit-result.json) conserve les
+empreintes et identités. Il est ajouté après construction, sans prétendre
+figurer dans l'archive déjà attestée. Les artefacts Actions expirent le
+12 décembre 2026 selon la rétention actuelle. Ce paquet de sources vérifiable
+est prêt à être remis à des évaluateurs ; l'audit humain externe reste à faire
+et D9 reste **BLOCKED**.
