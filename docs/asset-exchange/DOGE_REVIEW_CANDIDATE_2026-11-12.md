@@ -166,6 +166,12 @@ il exclut les fichiers racine Cargo, les sources vendues Rust et GPUbnb Core.
 La revue Rust séparée garde son commit et ses preuves propres. Le consommateur
 CI n'est pas un auditeur humain indépendant.
 
+Le lancement passe par l'entrée manuelle enregistrée `workspace-reliability`,
+choix `source-audit`, sur la seule branche `asset-exchange/doge-audit-candidate-20261112`.
+Les deux jobs natifs excluent explicitement ce choix. Le raccordement du caller
+et son empreinte dans le profil sont des changements de conditionnement ; ils
+ne déplacent pas les preuves natives vers un nouveau commit d'exécution.
+
 Pour une revue reproductible :
 
 1. Retenir séparément le commit, l'arbre et les SHA256 du paquet, puis utiliser

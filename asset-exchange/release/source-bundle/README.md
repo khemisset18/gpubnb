@@ -44,3 +44,9 @@ GPUbnb Core. The separately pinned Rust PR must be reviewed with its own source
 and test evidence; this archive does not certify that graph or the whole app.
 
 This is a source/audit SBOM. It does NOT replace future runtime/container/package dependency SBOMs.
+
+For the 12 November DOGE review, use the registered `workspace-reliability`
+manual entry on `asset-exchange/doge-audit-candidate-20261112`, choosing only
+`source-audit`. The reusable source workflow is the same builder/consumer,
+not a second executor. That choice is explicitly excluded from both native
+DOGE jobs; the source job additionally checks event, repository/ID and branch.

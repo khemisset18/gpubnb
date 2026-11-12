@@ -6,7 +6,6 @@
   "activationAuthorized": false,
   "automaticSettlement": false,
   "enabledExchangeDirections": 0,
-  "codeSnapshotCommit": "0576aadcfa217496e0ac4a49d19564e0c5ba424e",
   "purpose": "Frozen review inputs only; never consumed as an execution or activation manifest.",
   "network": {
     "chain": "regtest",
@@ -175,11 +174,13 @@
     },
     {
       "path": ".github/workflows/workspace-reliability.yml",
-      "sha256": "556b5f8560e8c80cff8754f399117c41fd32c72e9e1ea7f6cd0e5846a2e4b9f2"
+      "sha256": "674b3d5eddce49b4ed806794d170fbc2d13bf02925ed377d1332db237645762c"
     },
     {
       "path": ".github/workflows/asset-exchange-dogecoin-multinode.yml",
       "sha256": "40c92268530d3afe99f41ff468d2ef7cebac7d805a2d6b07f207f83f9c8c5586"
     }
-  ]
+  ],
+  "dogeImplementationSnapshotCommit": "0576aadcfa217496e0ac4a49d19564e0c5ba424e",
+  "sourceManifestOrigin": "enclosing exact audit Git commit; manual caller adds source-only packaging after the native proof commits"
 }
