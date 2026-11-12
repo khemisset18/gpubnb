@@ -1,0 +1,8 @@
+# Comparator-only local account config. Not a deployment and not part of GPUbnb main.
+wrangler.deploy.jsonc
+.env
+.env.*
+*.secret
+*.log
+private/
+node_modules/
