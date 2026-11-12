@@ -20,7 +20,7 @@ La valeur n'est **jamais** réhorodatée après un échec. Une suite de pannes n
 
 ## Implémentation
 
-- **Cloudflare Worker** \`edge/worker.mjs\`, cadence horaire (minute 17 UTC) définie dans \`wrangler.jsonc\`. Chaque monnaie XMR, RVN et ETC dispose d'une clé KV indépendante.
+- **Cloudflare Worker** \`edge/worker.mjs\`, cadence horaire répartie (XMR :17, ETC :27, RVN :37 UTC) définie dans \`wrangler.jsonc\`. Chaque monnaie XMR, RVN et ETC dispose d'une clé KV indépendante.
 - **Échec d'une source** : aucune écriture dans la clé du dernier bon relevé. Les autres cryptomonnaies continuent indépendamment.
 - **Nouvelle mesure validée** : écriture de l'instantané et durée de vie KV \`expirationTtl: 86400\` secondes. La validation **à chaque lecture** bloque les valeurs âgées de plus de 24 heures, y compris en présence d'un cache KV ou d'une suppression retardée.
 - **API de diagnostic** \`/api/status\` : \`fresh\`, \`saved\`, \`unavailable\` ; indique l'heure d'origine et l'âge. Ne contient aucun secret.
@@ -51,7 +51,7 @@ La présence de la dernière donnée valide pendant 24 h améliore la continuit�
 
 ## Cadence horaire et maîtrise du quota gratuit
 
-La version préparée pour Cloudflare utilise **un Cron par heure** (\`17 * * * *\`, minute 17 UTC) et un seuil d'affichage « actualisé » de **75 minutes** (60 minutes + 15 minutes de tolérance). La conservation maximale des données vérifiées reste **24 heures** à partir de l'horodatage initial ; toute rediffusion sans vérification est interdite.
+La version préparée pour Cloudflare utilise **trois Crons horaires séparés** (`17 * * * *`, `27 * * * *`, `37 * * * *`, UTC) et un seuil d'affichage « actualisé » de **75 minutes** (60 minutes + 15 minutes de tolérance). La conservation maximale des données vérifiées reste **24 heures** à partir de l'horodatage initial ; toute rediffusion sans vérification est interdite.
 
 Pour réduire les opérations de lecture du stockage gratuit, les modules XMR, PoW GPU et revenus généraux demandent les fichiers de réseau **toutes les 15 minutes**, et contrôlent **chaque minute**, localement dans le navigateur, si l'ancien résultat doit être retiré de l'affichage. Cela évite de nouvelles requêtes réseau pendant les vérifications de péremption.
 
