@@ -88,6 +88,26 @@ jobs:
           set -euo pipefail
           work="$RUNNER_TEMP/ltc-gitian-public-only"
           evidence="$RUNNER_TEMP/ltc-gitian-evidence"
+          # Diagnostic only. Record public GnuPG status NAMES for each
+          # builder without overriding the verifier's fail-closed policy.
+          mkdir -m 700 "$work/diagnostic-home"
+          for builder in david losh; do
+            set +e
+            gpg --batch --no-tty --no-options \
+              --homedir "$work/diagnostic-home" --no-auto-key-retrieve \
+              --no-default-keyring --keyring "$work/paired-builders.gpg" \
+              --status-fd 1 --verify \
+              "$work/$builder/litecoin-core-linux-0.21-build.assert.sig" \
+              "$work/$builder/litecoin-core-linux-0.21-build.assert" \
+              > "$work/$builder-status.raw" 2> /dev/null
+            code=$?
+            set -e
+            codes="$(awk '$1=="[GNUPG:]" {print $2}' "$work/$builder-status.raw" \
+              | sort -u | paste -sd, -)"
+            echo "GITIAN_${builder}_GPG_RC=$code" >> "$evidence/metadata.txt"
+            echo "GITIAN_${builder}_GPG_STATUS_CODES=$codes" >> "$evidence/metadata.txt"
+            echo "GITIAN_${builder}_GPG_STATUS_CODES=$codes"
+          done
           set +e
           python3 asset-exchange/qualification/litecoin/l0/verify_gitian.py \
             --david-assertion "$work/david/litecoin-core-linux-0.21-build.assert" \
