@@ -1,0 +1,62 @@
+name: Solana host recovery compatibility
+
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - programs/gpu_escrow/**
+      - prototypes/solana-recovery-migration/**
+      - vendor/security/solana-secp256k1-recover-2.2.1/**
+      - .github/workflows/solana-recovery-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-host-recovery:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_PROFILE_DEV_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preserve exact source bytes in this fresh CI checkout
+        shell: bash
+        run: |
+          git config --local core.autocrlf false
+          git restore --worktree -- .
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check the added public recovery test formatting
+        run: rustfmt --check --edition 2021 programs/gpu_escrow/tests/secp256k1_host_compatibility.rs
+      - name: Refuse altered source and oracle inputs
+        run: python -m unittest discover -s prototypes/solana-recovery-migration -p 'test_*.py' -v
+      - name: Reconstruct sources and compare actual baseline and candidate public recovery
+        shell: bash
+        run: python prototypes/solana-recovery-migration/qualify.py "$RUNNER_TEMP/solana-host-recovery"
+      - name: Retain public recovery evidence and explicit runtime limits
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: solana-host-recovery-${{ runner.os }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/solana-host-recovery/report.json
+            ${{ runner.temp }}/solana-host-recovery/*-metadata.json
+            ${{ runner.temp }}/solana-host-recovery/*.log
+            ${{ runner.temp }}/solana-host-recovery/public-recovery-fixtures.json
+          if-no-files-found: error
+          retention-days: 30

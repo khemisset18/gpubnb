@@ -1,0 +1,30 @@
+{
+  "checkedDate": "2026-11-12",
+  "selected": [
+    {
+      "archiveSha256": "93f50113171a713f4a4231ef82eb26703607139b35dcb56241f0ceab2ae1f7d8",
+      "indexSnapshotSha256": "5a9ff59260399bc20d73b5b390b05f44a756c5f64f0f3ffcea11f232826cfa8a",
+      "indexUrl": "https://index.crates.io/k2/56/k256",
+      "name": "k256",
+      "rustVersion": "1.85",
+      "version": "0.14.0"
+    },
+    {
+      "archiveSha256": "261af4dc7a06ea8a527a8717d8cbba3417530d6ea14e1edb3de6b67806be474f",
+      "indexSnapshotSha256": "7411ed7e18193046256f5b0a34a98e1050b2febf07d9f1a4ccc248439692c1cc",
+      "indexUrl": "https://index.crates.io/ct/ut/ctutils",
+      "name": "ctutils",
+      "rustVersion": "1.87",
+      "version": "0.4.8"
+    },
+    {
+      "archiveSha256": "914c195c4d7fbc5ed7f88d14cbf85914d5c664967658d43404b263913a477e82",
+      "indexSnapshotSha256": "d9414f469e8359c747ae72286396b901da2af71489b7fb78d907dc6cd4c62e61",
+      "indexUrl": "https://index.crates.io/cr/yp/crypto-bigint",
+      "name": "crypto-bigint",
+      "rustVersion": "1.87",
+      "version": "0.7.11"
+    }
+  ],
+  "source": "official crates.io sparse index"
+}

@@ -1,0 +1,48 @@
+{
+  "SbfRuntime": "NOT_TESTED",
+  "baseline": {
+    "failed": 0,
+    "ignored": 0,
+    "logSha256": "0e11f33caa887f6262a72e086d1092425f8bde302093f9495018f0c9eea8ad75",
+    "publicRecoveryCases": 1636,
+    "testsPassed": 2
+  },
+  "baselineCommit": "a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed",
+  "candidate": {
+    "failed": 0,
+    "ignored": 0,
+    "logSha256": "ae0a9c894ca4261f136193335107b246d2e68a319bb0999d84ce3031df3fd12b",
+    "publicRecoveryCases": 1636,
+    "testsPassed": 2
+  },
+  "candidateEmbeddedFixtures": {
+    "failed": 0,
+    "ignored": 0,
+    "logSha256": "6ccef2f241cf5fa65bf5b54883feea872adb5e3fd2c88fd43ce166f9f53ad6f6",
+    "publicRecoveryCases": 1636,
+    "reason": "Validate the new no-environment fixture loader used by ordinary contract CI.",
+    "testsPassed": 2
+  },
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "initialResolverFailure": "Pinned ctutils0.4.2 conflicted with new crypto-bigint requirement^0.4.5; normal cargo update -p ctutils --precise0.4.8 resolved the compatible patch and addresses RUSTSEC-2026-0385. No requirement was removed.",
+  "localCompilerFlags": "-Clinker=gcc -Clink-arg=-fuse-ld=bfd",
+  "oracleSummary": {
+    "canonicalDerCases": 242,
+    "excludedDerCases": 234,
+    "explicitHighSMatches": 96,
+    "independentPublicClassificationChecks": 242,
+    "sourceCases": 476,
+    "totalRecoveryCases": 1636
+  },
+  "pythonBoundaryTestsPassed": 7,
+  "qualificationStatus": "BLOCKED",
+  "realSignaturesOrKeysGenerated": false,
+  "scanner": "NOT_TESTED for new candidate; original strict gate unchanged",
+  "schemaVersion": 1,
+  "scope": "new actual host recovery comparisons; no repeated GLib or desktop suite",
+  "sourcePreparation": "PREPARATION_PASS",
+  "toolchain": {
+    "cargo": "1.97.1 (c980f4866 2026-06-30)",
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)"
+  }
+}
