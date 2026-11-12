@@ -236,3 +236,14 @@ Pour ne pas gaspiller les quotas gratuits : chaque navigateur recharge les flux 
 **Attention : configuration et tests uniquement**. Aucun Worker Cloudflare ou espace KV n'a été créé ou déployé dans cette PR. L'usage commercial des RPC publics, leur disponibilité réelle et les limites de l'offre gratuite doivent être vérifiés avant toute activation. Ne pas toucher aux autres modules GPUbnb, ne pas fusionner ni déployer sans autorisation explicite.
 
 Tests du changement : \`tests/hourly-refresh.test.mjs\` et \`tests/backup-24h.test.mjs\`.
+
+
+## Préparation du déploiement Cloudflare : sécurité et aucune maintenance de nœud
+
+Guide : **[DEPLOIEMENT_AUTONOME_GRATUIT.md](docs/DEPLOIEMENT_AUTONOME_GRATUIT.md)**.
+
+La configuration GitHub est volontairement un **template** : \`wrangler.jsonc\` ne possède pas d'ID KV Cloudflare. Cet \`id\` est obligatoire selon Cloudflare et ne peut pas être inventé dans une PR. Le nouvel outil \`tools/prepare-cloudflare-config.mjs\` prend l'identifiant réel d'un namespace KV créé une seule fois par le propriétaire et produit un fichier \`wrangler.deploy.jsonc\` local, **sans jamais déployer**. Ce fichier est exclu de Git et des fichiers publics.
+
+Une limite de taille de **768 Kio réels décompressés** protège désormais les lectures des RPC publics, même si un serveur malveillant omet ou falsifie l'en-tête \`Content-Length\`. Tests : \`tests/public-fetch-security.test.mjs\` et \`tests/cloudflare-config.test.mjs\`. Aucun fournisseur, benchmark ou profit fictif n'est activé.
+
+**Rappel : la PR reste brouillon, aucun Cloudflare Worker n'est lancé, aucun module GPUbnb extérieur au comparateur n'est modifié.**
