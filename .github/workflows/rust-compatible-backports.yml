@@ -1,0 +1,56 @@
+name: Rust compatible backport workspace qualification
+
+on:
+  pull_request:
+    paths:
+      - prototypes/rust-compatible-backports/**
+      - vendor/security/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/rust-compatible-backports.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-workspace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_PROFILE_DEV_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install official native GTK and WebKit development dependencies
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Build the actual locked frontend for the native Tauri compile
+        run: |
+          npm ci --prefix apps/host-desktop --no-audit --no-fund
+          npm run build --prefix apps/host-desktop
+      - name: Exercise preparation refusals without native execution
+        run: python3 -m unittest discover -s prototypes/rust-compatible-backports -p 'test_*.py' -v
+      - name: Qualify exact backports in the actual current workspace graph
+        run: python3 prototypes/rust-compatible-backports/prepare.py "$RUNNER_TEMP/rust-backport-workspace"
+      - name: Preserve hashes, logs and explicit qualification limits
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-compatible-backports-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/rust-backport-workspace/report.json
+            ${{ runner.temp }}/rust-backport-workspace/active-metadata.json
+            ${{ runner.temp }}/rust-backport-workspace/metadata.json
+            ${{ runner.temp }}/rust-backport-workspace/*.log
+            ${{ runner.temp }}/rust-backport-workspace/candidate-Cargo.lock
+          if-no-files-found: error
+          retention-days: 30

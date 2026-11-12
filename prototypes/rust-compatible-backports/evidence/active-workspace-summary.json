@@ -1,0 +1,117 @@
+{
+  "SbfRuntime": "NOT_TESTED",
+  "artifactId": 13898567208,
+  "artifactSha256": "0f0e522b9ed6f8a99f4b10d10ac215f91befbede1ac66898ef5d675ebc36c3b0",
+  "fullGuiAndIpc": "NOT_TESTED",
+  "headCommit": "e4fb65ccc08975f0079aa1e40128428dc97d7e4e",
+  "nativeTestsRepeatedForSupplierLockChange": false,
+  "originalFilesSha256": {
+    "active-metadata.json": "c8e8f7d58fe1979821bb56acfd2a528a47d34e37bb064a1ead10fe4f67b55d70",
+    "active-metadata.log": "48f81a71184a2e78daf5e394483a22cd44bb53f31297f888e0e0564ddcc3bd82",
+    "anchor-host.log": "372cf7a881de6124205b75a091df989020eecdf53c6119f0f0bd8f614494d351",
+    "candidate-Cargo.lock": "c4a5d4acd1eb0878cba091adec522b30690f8d6e88f1dc67a9e1906eaf52604d",
+    "desktop-host.log": "b9fb3cbbadc8d20557c83218c468673be49fa0154174429c560110cf7268547c",
+    "metadata.json": "c0b76817a1822a4cdc45ea4836225a34af0c6f56e543f0e97853d1e4cb3f467e",
+    "metadata.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "report.json": "032b5b4cbd46807d2519b23cf57edffe51f461692ab99c73aa361d3e6da355b9",
+    "security-regressions.log": "c422dee1c58e3c224910f7480808d7ad210a250490636dc756e99b3c34d1cdd5",
+    "tauri-native-compile.log": "c9feb5e0282addb96524954492d1e73e5159466ac1ebcda7ec084164486ec884"
+  },
+  "packageVersionsSpoofed": false,
+  "productionSourceSha256": {
+    "apps/host-desktop/src-tauri/Cargo.toml": "144847d15fc1203376c9c4be0d308c688f449222acdbf4998d661bae5ca7e94f",
+    "programs/gpu_escrow/src/lib.rs": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41"
+  },
+  "qualificationStatus": "BLOCKED",
+  "result": "PASS",
+  "run": "https://github.com/khemisset18/gpubnb/actions/runs/43115991870",
+  "scanner": {
+    "artifactId": 13897464908,
+    "artifactSha256": "5808a1af35bbe4d1f757c8b25433ada054e1b96f9972a20db05cb5cb85c9cce6",
+    "findings": [
+      {
+        "fixedVersion": "1.0.0-alpha.1",
+        "id": "GHSA-fjx5-qpf4-xjf2",
+        "package": "borsh",
+        "severity": "MEDIUM",
+        "target": "Cargo.lock",
+        "version": "0.10.4"
+      },
+      {
+        "fixedVersion": "0.20.0",
+        "id": "GHSA-wrw7-89jp-8q8g",
+        "package": "glib",
+        "severity": "MEDIUM",
+        "target": "Cargo.lock",
+        "version": "0.18.5"
+      },
+      {
+        "fixedVersion": "0.9.3, 0.10.1, 0.8.6",
+        "id": "GHSA-cq8v-f236-94qc",
+        "package": "rand",
+        "severity": "LOW",
+        "target": "Cargo.lock",
+        "version": "0.7.3"
+      },
+      {
+        "fixedVersion": "3.11.1",
+        "id": "GHSA-f85w-wvc7-crwc",
+        "package": "bumpalo",
+        "severity": "MEDIUM",
+        "target": "vendor/security/rand-0.7.3/Cargo.lock",
+        "version": "2.6.0"
+      },
+      {
+        "fixedVersion": "0.9.3, 0.10.1, 0.8.6",
+        "id": "GHSA-cq8v-f236-94qc",
+        "package": "rand",
+        "severity": "LOW",
+        "target": "vendor/security/rand-0.7.3/Cargo.lock",
+        "version": "0.7.3"
+      }
+    ],
+    "reportSha256": "d0901652cfcd0ab7d318554081961b15b758cfd71fcb186786fd3d891470b6d7",
+    "result": "FAIL",
+    "run": "https://github.com/khemisset18/gpubnb/actions/runs/43115991902"
+  },
+  "scannerExemptionAdded": false,
+  "schemaVersion": 1,
+  "scope": "Actual active Cargo graph before the unused supplier development lock import correction",
+  "selectedActiveSources": [
+    {
+      "manifestPath": "/home/runner/work/_temp/rust-backport-workspace/project/vendor/security/glib-0.18.5/Cargo.toml",
+      "name": "glib",
+      "source": null,
+      "version": "0.18.5"
+    },
+    {
+      "manifestPath": "/home/runner/work/_temp/rust-backport-workspace/project/vendor/security/rand-0.7.3/Cargo.toml",
+      "name": "rand",
+      "source": null,
+      "version": "0.7.3"
+    }
+  ],
+  "tauriDesktopRuntimeCompile": "PASS",
+  "testCounts": {
+    "anchor-host": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 7
+    },
+    "desktop-host": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 506
+    },
+    "security-regressions": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 3
+    }
+  },
+  "testedSyntheticPrRevision": "1a120bc2a776a225a56d3e85644f84e35219d682",
+  "toolchain": {
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+  }
+}

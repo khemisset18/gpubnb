@@ -11,3 +11,7 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+[patch.crates-io]
+glib = { path = "vendor/security/glib-0.18.5" }
+rand = { path = "vendor/security/rand-0.7.3" }
