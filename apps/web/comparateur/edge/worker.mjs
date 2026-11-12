@@ -97,8 +97,10 @@ export async function handleRequest(request,env,now=Date.now()){
   return sendJson({...emptyPow,networks:valid},200,safeCacheSeconds(valid,now));
  }
  if(url.pathname==='/api/status'){
-  const found=await Promise.all(Object.keys(KEYS).map(async coin=>{
-   const data=await loadValidated(env,coin,now);
+  const coins=Object.keys(KEYS);
+  const valid=await Promise.all(coins.map(coin=>loadValidated(env,coin,now)));
+  const found=coins.map((coin,i)=>{
+   const data=valid[i];
    const ageMs=data?Math.max(0,now-Date.parse(data.collectedAt)):null;
    const mode=data?(ageMs>EXPECTED_REFRESH_MS?'saved':'fresh'):'unavailable';
    return {coin,status:mode,collectedAt:data?.collectedAt||null,
@@ -106,8 +108,7 @@ export async function handleRequest(request,env,now=Date.now()){
     source:data?.source||null,
     operator:data?.activeOperator||data?.operator||null,
     fallback:data?.usedFallback===true};
-  }));
-  const valid=await Promise.all(Object.keys(KEYS).map(coin=>loadValidated(env,coin,now)));
+  });
   return sendJson({service:'gpubnb-comparateur',refresh:'hourly',expectedRefreshMinutes:60,graceMinutes:15,
     pricing:'manual-only',backupMaxHours:24,sources:found},200,safeCacheSeconds(valid,now,{health:true}));
  }
