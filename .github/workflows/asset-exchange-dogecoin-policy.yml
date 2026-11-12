@@ -7,12 +7,16 @@ on:
         type: choice
         required: true
         default: policy
-        options: [policy, d3]
+        options: [policy, d3, rbf]
   workflow_call:
     inputs:
       diagnostic_suite:
         type: string
         required: true
+      harness_commit:
+        type: string
+        required: false
+        default: a5548ecc8e610b3d5c3ccd4903bd245dacda7326
 permissions:
   contents: read
 concurrency:
@@ -20,7 +24,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   policy:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.diagnostic_suite == 'rbf' && github.ref == 'refs/heads/asset-exchange/doge-rbf-boundaries-20261112') || (inputs.diagnostic_suite != 'rbf' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'))
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -29,11 +33,20 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: Verify frozen harness and offline guards
+        env:
+          DIAGNOSTIC_SUITE: ${{ inputs.diagnostic_suite }}
+          HARNESS_COMMIT: ${{ inputs.harness_commit }}
         run: |
           set -euo pipefail
           mkdir -p dist/policy-evidence
           git rev-parse HEAD > dist/policy-evidence/execution-commit.txt
-          git diff --exit-code a5548ecc8e610b3d5c3ccd4903bd245dacda7326 HEAD -- asset-exchange/qualification/dogecoin/
+          if [[ "$DIAGNOSTIC_SUITE" == rbf ]]; then
+            [[ "$HARNESS_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+            git cat-file -e "${HARNESS_COMMIT}^{commit}"
+            git diff --exit-code "$HARNESS_COMMIT" HEAD -- asset-exchange/qualification/dogecoin/ .github/workflows/asset-exchange-dogecoin-policy.yml
+          else
+            git diff --exit-code a5548ecc8e610b3d5c3ccd4903bd245dacda7326 HEAD -- asset-exchange/qualification/dogecoin/
+          fi
           bash -n asset-exchange/qualification/dogecoin/policy/build-dependencies.sh
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/policy -p 'test_*.py' -v
       - name: Fetch exact upstream source
@@ -72,7 +85,7 @@ jobs:
           mkdir -p dist/policy-evidence
           python3 asset-exchange/qualification/dogecoin/policy/prepare.py dist/doge-policy-source
           git -C dist/doge-policy-source diff > dist/policy-evidence/test-registration.patch
-          sha256sum asset-exchange/qualification/dogecoin/policy/gpubnb_policy_tests.cpp asset-exchange/qualification/dogecoin/policy/gpubnb_d3_tests.cpp > dist/policy-evidence/test-source.sha256
+          sha256sum asset-exchange/qualification/dogecoin/policy/gpubnb_policy_tests.cpp asset-exchange/qualification/dogecoin/policy/gpubnb_d3_tests.cpp asset-exchange/qualification/dogecoin/policy/gpubnb_rbf_tests.cpp > dist/policy-evidence/test-source.sha256
           g++ --version > dist/policy-evidence/toolchain.txt
           dpkg-query -W libssl-dev autoconf automake libtool >> dist/policy-evidence/toolchain.txt
           dependency_prefix="$RUNNER_TEMP/doge-policy-prefix"

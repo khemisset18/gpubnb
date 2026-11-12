@@ -17,6 +17,13 @@ SUITES={
           'pressureEntries':0,'markers':('d3-activation before-height=','d3-finality lock=',
               'd3-sighash type=','d3-single-out-of-range constant-one=true',
               'd3-malleability script-consensus-valid=true')},
+    'rbf':{'suite':'gpubnb_rbf','cases':2,'maxBlocks':481,'maxFixtureBlocks':241,
+           'pressureEntries':0,'markers':('rbf-count rejected=101 accepted=100 native-code=64 reason=too many potential replacements',
+               'pool-after-reject=101 pool-after-accept=2',
+               'rbf-new-input unconfirmed=rejected confirmed=accepted identical-signed-bytes=true native-code=64 reason=replacement-adds-unconfirmed',
+               'pool-after-reject=2 pool-after-accept=1',
+               'blocks=240 signed-fixtures=103 signatures=302 admissions=103',
+               'blocks=241 signed-fixtures=3 signatures=4 admissions=4')},
 }
 
 def run(binary, expected_sha, parent, output, suite='policy'):
@@ -35,6 +42,11 @@ def run(binary, expected_sha, parent, output, suite='policy'):
             'maxFixtureBlocks':selection['maxFixtureBlocks'],'maxCpuSeconds':180,
             'networkLoadBenchmark':False,'syntheticPressureEntries':selection['pressureEntries'],
             'maxPressureEntriesPerFixture':int(selection['pressureEntries']>0)}
+    if suite=='rbf':
+        report.update({'nativeObservationKind':'SOURCE_DIAGNOSTIC_GLOBAL_MEMPOOL',
+            'maxNativeAdmissionsPerFixture':103,'maxSignedFixturesPerFixture':103,
+            'maxSignatureOperationsPerFixture':302,'maxInputs':101,'maxMempoolEntries':101,
+            'rpcCalls':0,'p2pTested':False,'previousNativeSuitesRepeated':False})
     resource.setrlimit(resource.RLIMIT_CPU,(180,180))
     resource.setrlimit(resource.RLIMIT_AS,(2*1024**3,2*1024**3))
     resource.setrlimit(resource.RLIMIT_FSIZE,(64*1024**2,64*1024**2))

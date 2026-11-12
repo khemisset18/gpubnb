@@ -31,7 +31,7 @@ def prepare(root):
     make=root/'src/Makefile.test.include'
     original=make.read_text();anchor='  test/mempool_tests.cpp \\\n'
     if original.count(anchor)!=1:raise ValueError('unique test registration required')
-    names=('gpubnb_policy_tests.cpp','gpubnb_d3_tests.cpp')
+    names=('gpubnb_policy_tests.cpp','gpubnb_d3_tests.cpp','gpubnb_rbf_tests.cpp')
     additions=[]
     for name in names:
         target=root/'src/test'/name

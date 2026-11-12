@@ -17,6 +17,7 @@ class Guards(unittest.TestCase):
                 prepare.prepare(root)
             self.assertIn('test/gpubnb_policy_tests.cpp',make.read_text())
             self.assertIn('test/gpubnb_d3_tests.cpp',make.read_text())
+            self.assertIn('test/gpubnb_rbf_tests.cpp',make.read_text())
             self.assertEqual((root/'src/test/gpubnb_d3_tests.cpp').read_bytes(),Path(prepare.__file__).with_name('gpubnb_d3_tests.cpp').read_bytes())
 
     def test_existing_second_suite_rejected_before_first_target_is_written(self):
@@ -29,6 +30,50 @@ class Guards(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'already exists'):prepare.prepare(root)
             self.assertFalse((root/'src/test/gpubnb_policy_tests.cpp').exists())
             self.assertEqual(make.read_text(),original)
+
+    def test_existing_third_suite_rejected_before_any_registration(self):
+        original='  test/mempool_tests.cpp \\\n'
+        with tempfile.TemporaryDirectory() as d,patch('subprocess.check_output',side_effect=[prepare.SOURCE,'']):
+            root=Path(d);(root/'src/test').mkdir(parents=True)
+            make=root/'src/Makefile.test.include';make.write_text(original)
+            (root/'src/test/gpubnb_rbf_tests.cpp').write_text('existing')
+            with patch.object(prepare,'PINNED',{'src/Makefile.test.include':hashlib.sha256(make.read_bytes()).hexdigest()}):
+                with self.assertRaisesRegex(ValueError,'already exists'):prepare.prepare(root)
+            self.assertFalse((root/'src/test/gpubnb_policy_tests.cpp').exists())
+            self.assertFalse((root/'src/test/gpubnb_d3_tests.cpp').exists())
+            self.assertEqual(make.read_text(),original)
+
+    def test_rbf_selection_requires_both_negative_reasons_and_valid_boundary_controls(self):
+        selection=run.SUITES['rbf']
+        full='2 test cases out of 2 passed\n'+'\n'.join(selection['markers'])
+        observations=[(full,True),(full.replace('2 test cases out of 2 passed','1 test case out of 2 passed'),False)]
+        observations.extend((full.replace(marker,'omitted'),False) for marker in selection['markers'])
+        for text,should_pass in observations:
+            with self.subTest(observation=text),tempfile.TemporaryDirectory() as d:
+                binary=Path(d)/'binary';binary.write_bytes(b'not an executable')
+                output=Path(d)/'out';calls=[]
+                def fake_process(args,**kwargs):
+                    calls.append(args);kwargs['stdout'].write(text)
+                    return SimpleNamespace(returncode=0,check_returncode=lambda:None)
+                with patch('subprocess.check_output',return_value='[{"ifname":"lo","flags":["UP"]}]'), \
+                     patch('os.readlink',return_value='net:[2]'),patch('resource.setrlimit'), \
+                     patch('subprocess.run',side_effect=fake_process):
+                    if should_pass:run.run(binary,hashlib.sha256(binary.read_bytes()).hexdigest(),'net:[1]',output,'rbf')
+                    else:
+                        with self.assertRaisesRegex(ValueError,'every selected'):
+                            run.run(binary,hashlib.sha256(binary.read_bytes()).hexdigest(),'net:[1]',output,'rbf')
+                import json
+                report=json.loads((output/'report.json').read_text())
+                self.assertEqual(report['qualificationStatus'],'BLOCKED')
+                self.assertEqual(report['probeStatus'],'PASS' if should_pass else 'FAIL')
+                self.assertEqual(report['maxBlocks'],481)
+                self.assertEqual(report['maxMempoolEntries'],101)
+                self.assertEqual(report['maxSignatureOperationsPerFixture'],302)
+                self.assertEqual(report['rpcCalls'],0)
+                self.assertFalse(report['p2pTested'])
+                self.assertFalse(report['previousNativeSuitesRepeated'])
+                self.assertEqual(len(calls),1)
+                self.assertIn('--run_test=gpubnb_rbf',calls[0])
 
     def test_unknown_suite_rejected_before_namespace_or_native_operation(self):
         with patch('subprocess.check_output',side_effect=AssertionError('no process')):
