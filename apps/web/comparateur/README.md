@@ -183,7 +183,7 @@ Les seuls accès réseau attendus du comparateur sont les fichiers JSON locaux d
 
 ## Sauvegarde automatique 24 heures en cas de panne
 
-**Nouvelle règle validée :** actualisation prévue **toutes les heures** (minute 17 UTC) ; si une source échoue ou renvoie des informations incohérentes, le dernier instantané validé reste disponible **24 heures maximum à partir de sa collecte**, sans réhorodatage. La page indique « Dernier relevé sauvegardé » avec son heure d'origine. Après 24 h, elle masque les valeurs automatiques et affiche « Service indisponible ». Le mode manuel reste disponible.
+**Nouvelle règle validée :** actualisation prévue **toutes les heures** (XMR :17, ETC :27, RVN :37 UTC) ; si une source échoue ou renvoie des informations incohérentes, le dernier instantané validé reste disponible **24 heures maximum à partir de sa collecte**, sans réhorodatage. La page indique « Dernier relevé sauvegardé » avec son heure d'origine. Après 24 h, elle masque les valeurs automatiques et affiche « Service indisponible ». Le mode manuel reste disponible.
 
 - Worker Cloudflare isolé : \`edge/worker.mjs\`, \`wrangler.jsonc\` et KV (mise en cache 86 400 secondes).
 - Tests : \`tests/backup-24h.test.mjs\` et \`tests/model.test.mjs\`.
@@ -229,7 +229,7 @@ Détails exacts : **[COUVERTURE_COMPLETE_CRYPTOS.md](docs/COUVERTURE_COMPLETE_CR
 
 ## Actualisation **toutes les heures** — sans nœud à entretenir
 
-Le calendrier Cloudflare est maintenant \`17 * * * *\` : essai de collecte **à la minute 17 de chaque heure UTC** (24 fois par jour). Un retard de 15 minutes est toléré avant de classer une mesure comme « Dernier relevé sauvegardé ». Les sources primaires sont toujours retentées en premier, puis les secondaires autorisées. En cas de panne généralisée, la dernière valeur valide reste **24 heures maximum**, sans réinitialisation du compteur.
+Le calendrier Cloudflare est réparti entre trois déclenchements horaires, **XMR à :17, ETC à :27, RVN à :37 (UTC)** : chaque crypto bénéficie de 24 tentatives par jour, sans faire travailler trois chaînes dans la même invocation CPU. Un retard de 15 minutes est toléré avant de classer une mesure comme « Dernier relevé sauvegardé ». Les sources primaires sont toujours retentées en premier, puis les secondaires autorisées. En cas de panne généralisée, la dernière valeur valide reste **24 heures maximum**, sans réinitialisation du compteur.
 
 Pour ne pas gaspiller les quotas gratuits : chaque navigateur recharge les flux automatiques toutes les **15 minutes** et contrôle **chaque minute localement** l'âge du relevé ; aucun appel réseau supplémentaire n'est nécessaire pour expirer l'affichage. Les trois monnaies en collecte automatique expérimentale sont **XMR, ETC et RVN**. Les onze autres conservent leur mode manuel / gains réellement observés.
 
