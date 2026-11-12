@@ -14,9 +14,13 @@ export function etcSubsidyAtHeight(height){
 /** Blocks are ordered oldest to latest, with ETC_WINDOW+1 records.
  * Protocol base subsidy only; fees, uncles and MEV excluded.
  */
-export function buildEtcObservation({chainId,syncing,blocks},now=Date.now()){
- if(chainId!=='0x3d'||syncing!==false||!Array.isArray(blocks)||
- blocks.length!==ETC_WINDOW+1)throw Error('Own ETC mainnet node required');
+export function buildEtcObservation({chainId,syncing,blocks,allowMissingSyncStatus=false},now=Date.now()){
+ // Some restricted *public* RPCs do not expose eth_syncing (method -32601).
+ // Accept that specific case only when the caller explicitly opts in.
+ // Validate chain ID, 33 linked blocks and a fresh tip regardless.
+ const syncingValid=syncing===false||(syncing===null&&allowMissingSyncStatus===true);
+ if(chainId!=='0x3d'||!syncingValid||!Array.isArray(blocks)||
+ blocks.length!==ETC_WINDOW+1)throw Error('Verified ETC mainnet blocks required');
  const parsed=blocks.map(b=>{
    if(!b||typeof b.hash!=='string'||!/^0x[0-9a-f]{64}$/i.test(b.hash)||
    typeof b.parentHash!=='string'||!/^0x[0-9a-f]{64}$/i.test(b.parentHash))throw Error('Invalid ETC block hash');
