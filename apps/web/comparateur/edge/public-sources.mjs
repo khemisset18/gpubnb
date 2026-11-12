@@ -151,13 +151,24 @@ export async function collectMoneroPublic(fetchImpl=fetch,now=Date.now()){
 }
 async function etcRpc(fetchImpl,url,method,params=[]){
  const obj=await json(fetchImpl,url,{jsonrpc:'2.0',id:1,method,params});
- if(obj?.error||obj?.result===undefined)throw Error('ETC RPC unavailable: '+method);
+ if(obj?.error){
+   const error=Error('ETC RPC refused: '+method);
+   error.rpcCode=obj.error.code;
+   throw error;
+ }
+ if(obj?.result===undefined)throw Error('ETC RPC unavailable: '+method);
  return obj.result;
 }
 async function collectEtcFromSource(fetchImpl,now,source,sourceIndex){
  const url=source.url;
  const [chainId,syncing,number]=await Promise.all([
-  etcRpc(fetchImpl,url,'eth_chainId'),etcRpc(fetchImpl,url,'eth_syncing'),
+  etcRpc(fetchImpl,url,'eth_chainId'),
+  etcRpc(fetchImpl,url,'eth_syncing').catch(e=>{
+    // Restricted Blockscout gateways sometimes lack eth_syncing (-32601).
+    // Do not swallow 429, 5xx, timeouts, or other RPC errors.
+    if(e.rpcCode===-32601)return null;
+    throw e;
+  }),
   etcRpc(fetchImpl,url,'eth_blockNumber')]);
  if(chainId!=='0x3d'||syncing!==false)throw Error('ETC public RPC chain mismatch');
  const height=Number(BigInt(number));
@@ -176,7 +187,9 @@ async function collectEtcFromSource(fetchImpl,now,source,sourceIndex){
  }
  const blocks=batch.map(r=>indexed.get(r.id));
  if(blocks.some(b=>!b))throw Error('Missing ETC block');
- const raw=buildEtcObservation({chainId,syncing,blocks},now);
+ const raw=buildEtcObservation({
+   chainId,syncing,blocks,allowMissingSyncStatus:syncing===null
+ },now);
  return {...raw,source:'public-chain-rpc',operator:source.name,
    usedFallback:sourceIndex>0,
    methodology:'ETC public RPC 32 consecutive blocks, ECIP-1017 PoW base reward only'};
