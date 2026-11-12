@@ -108,6 +108,22 @@ class GitianL0Tests(unittest.TestCase):
         self.assertEqual(digest, hashlib.sha256(original).hexdigest())
         self.assertNotEqual(digest, hashlib.sha256(self.a.read_bytes()).hexdigest())
 
+    def test_observation_workflow_pins_all_inputs_and_rejects_keyserver_drift(self) -> None:
+        repo = Path(__file__).resolve().parents[4]
+        workflow = (repo / ".github" / "workflows" /
+                    "asset-exchange-litecoin-l0-gitian.yml").read_text(encoding="utf-8")
+        for value in (
+            "027f0165865fcbcc53e3d09ee80251cca7da7a29b198fb31ea5b2c357bbbc3bf",
+            "assert_sha256 \"$refreshed\"",
+            "LTC_GITIAN_PINNED_INPUT_CHANGED=BLOCKED",
+            "GITIAN_PINNED_PUBLIC_INPUTS=PASS",
+            "LOSH_KEYSERVER_FINGERPRINT_REJECTED",
+            "LTC_L0_QUALIFIED=false",
+            "persist-credentials: false",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, workflow)
+
     def test_bad_fingerprint_rejected_without_gpg(self) -> None:
         with patch.object(gitian.subprocess, "run") as run:
             with self.assertRaisesRegex(ValueError, "fingerprint_required"):

@@ -61,6 +61,25 @@ jobs:
             "$work/david-key.pgp" 131072
           dl 'https://raw.githubusercontent.com/litecoin-project/litecoin/ec1b6489a900d09cf5991e220dce089c77a232a2/contrib/gitian-keys/losh11-key.pgp' \
             "$work/losh-key.pgp" 131072
+
+          # These six independently reviewed exact bytes must not drift.
+          # A changed upstream object/key is a BLOCKED review event.
+          assert_sha256() {
+            local digest
+            digest="$(sha256sum "$1" | awk '{print $1}')"
+            if [ "$digest" != "$2" ]; then
+              echo 'LTC_GITIAN_PINNED_INPUT_CHANGED=BLOCKED'
+              exit 1
+            fi
+          }
+          assert_sha256 "$work/david/litecoin-core-linux-0.21-build.assert" 'ea3845019223ba70a4159d2fdf71d2632722ef7c2f20dfe54a71676d90d9505c'
+          assert_sha256 "$work/david/litecoin-core-linux-0.21-build.assert.sig" 'c40b5481c4dd781adfce30fd0f0b783e4ab492e5b08f18000df284b3f6447e46'
+          assert_sha256 "$work/losh/litecoin-core-linux-0.21-build.assert" '55fcfb4eb8f979c61ed62755ea5f813926a48aacdc2f75984790066f30c496a8'
+          assert_sha256 "$work/losh/litecoin-core-linux-0.21-build.assert.sig" '54e01cd63aeeed7ce0790a8b24c0f63005fd6508f6e0c586db5ed6326004378c'
+          assert_sha256 "$work/david-key.pgp" '72151da0ab796aec3393ec8834d3ae2a12f6d37e07947357a5d59ad2caa1d7da'
+          assert_sha256 "$work/losh-key.pgp" '58b4e3e1ba2d3b6c5df991c34f2249fe112fad085eaeb0f9f0ddabbc7faf0300'
+          echo 'GITIAN_PINNED_PUBLIC_INPUTS=PASS' >> "$evidence/metadata.txt"
+
           d_fpr='D35621D53A1CC6A3456758D03620E9D387E55666'
           l_fpr='C0921846FED0BF4CF28BE1D73B2A6315CD51A673'
           public_fpr() {
@@ -89,6 +108,12 @@ jobs:
               echo 'LOSH_KEYSERVER_FINGERPRINT_REJECTED' >> "$evidence/metadata.txt"
               exit 1
             fi
+            # Independent key distribution is not an identity endorsement.
+            # Pin the exact observed renewal bytes. A legitimate future
+            # update must be reviewed before changing this reviewed pin.
+            assert_sha256 "$refreshed" '027f0165865fcbcc53e3d09ee80251cca7da7a29b198fb31ea5b2c357bbbc3bf'
+            echo 'LOSH_KEYSERVER_REVIEWED_CANDIDATE_SHA256=027f0165865fcbcc53e3d09ee80251cca7da7a29b198fb31ea5b2c357bbbc3bf' \
+              >> "$evidence/metadata.txt"
             (cd "$work" && sha256sum losh-refresh-candidate.asc) \
               >> "$evidence/metadata.txt"
             if gpg --batch --no-options --homedir "$work/gnupg" \

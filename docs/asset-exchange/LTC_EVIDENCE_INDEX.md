@@ -164,3 +164,40 @@ Missing evidence means BLOCKED, never PASS.
   certified renewal/revocation history (if one exists), or replacement
   independent reproducible build evidence. Reject bypassing GPG expiry.
 - `L0=BLOCKED`, `L1-L8=NOT_TESTED`, `L9=BLOCKED`, settlement disabled.
+
+## Current Loshan keyserver candidate — immutable observation (2026-11-12)
+- Earlier Gitian failure in run 43125743269 used the 3,106-byte
+  official source-archived Loshan PGP certificate SHA-256
+  `58b4e3e1ba2d3b6c5df991c34f2249fe112fad085eaeb0f9f0ddabbc7faf0300`.
+  This evidence showed `VALIDSIG` plus
+  `EXPKEYSIG` and `KEYEXPIRED`. It is not discarded.
+- A *separate public key delivery service*,
+  `https://keys.openpgp.org/vks/v1/by-fingerprint/C0921846FED0BF4CF28BE1D73B2A6315CD51A673`,
+  returned an ASCII-armored OpenPGP certificate with the same **complete
+  primary fingerprint**. Observed SHA-256:
+  `027f0165865fcbcc53e3d09ee80251cca7da7a29b198fb31ea5b2c357bbbc3bf`. GnuPG imported five additional signatures.
+- On SHA `965afdd3f8977d2570bbdd569f2c13374e9b6ed0`,
+  workflow https://github.com/khemisset18/gpubnb/actions/runs/43127645875
+  finished **SUCCESS**. Actual GnuPG statuses for both signed assertions:
+  `GOODSIG,VALIDSIG,TRUST_UNDEFINED`, no `KEYEXPIRED`,
+  `EXPKEYSIG` or other rejection statuses.
+- The exact source Gitian assertions are verified with detached
+  signatures. The machine output reports:
+  `bothDetachedSignaturesVerified=true`,
+  `matchingOutputFiles=9`,
+  `independentlyAuthenticatedBuilders=false`,
+  `independentSourceBuildReproduced=false`,
+  `l0Qualified=false`, `settlementEnabled=false`.
+- Artifact `13903636677`,
+  `sha256:c37d65254bcf46433cf6f097b8431d1e79cd42675c740633aa99f240a798c219`,
+  contains all six source input SHA256s, refreshed key digest,
+  exact HEAD, per-builder GPG status codes, and machine-readable
+  partial-only outcome. No node/binary was executed.
+- The new CI SHA pin refuses **silent keyserver content changes**;
+  it does not assume the same certificate bytes remain available forever.
+  A new key self-certification requires separately reviewed digest
+  updates. Fetching from an independent distribution host is useful
+  corroboration, but is **not out-of-band human identity authentication**
+  or proof of two genuine independent source builds.
+- Remaining `L0=BLOCKED`; trust ledger, reproduced builds, SBOM and
+  independent review still required.

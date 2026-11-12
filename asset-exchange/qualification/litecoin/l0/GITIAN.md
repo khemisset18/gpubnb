@@ -41,3 +41,25 @@ python3 asset-exchange/qualification/litecoin/l0/verify_gitian.py \
 
 This is candidate Gitian attestation evidence, not a substitute for a
 separately reproduced source build.
+
+## Observed current public key candidate (2026-11-12)
+
+Earlier Gitian run 43125743269 rejected the archived Loshan key
+(`KEYEXPIRED`, `EXPKEYSIG`). A second *public distribution service*,
+`keys.openpgp.org`, supplied an OpenPGP certificate with the **same
+full 40-hex fingerprint**, and GnuPG imported five additional key
+signatures into its isolated keyring. The final GPG statuses for
+both detached builder assertions became `GOODSIG` and `VALIDSIG`
+without expiration/revocation rejects.
+
+Exact observed downloaded candidate bytes SHA-256:
+`027f0165865fcbcc53e3d09ee80251cca7da7a29b198fb31ea5b2c357bbbc3bf`.
+Independent Gitian assertion verification passed in run 43127645875,
+artifact 13903636677. The CI now requires this exact key file digest
+and the six input digests; changes are BLOCKED pending human review.
+
+A keyserver is a **delivery channel, not an authority vouching for the
+builder's human identity**. No out-of-band authentication, independent
+source rebuild or audit happened. Result is
+`L0_PARTIAL_SIGNED_GITIAN_ASSERTIONS_ONLY` and
+`l0Qualified=false`; never permit financial activation.

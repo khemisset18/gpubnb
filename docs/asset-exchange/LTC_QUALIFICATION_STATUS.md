@@ -6,7 +6,7 @@ This document is an evidence ledger, not an activation signal.
 
 | Gate | Status | Evidence and remaining blockers |
 |---|---|---|
-| L0: source/binary provenance | BLOCKED | 26/26 offline tests successful on b485e5d; official release binary hash, manifest and tag cryptographically checked on exact-SHA CI. Two Gitian output manifests match but one builder's GPG key (losh11) is expired: KEYEXPIRED/EXPKEYSIG. No independent build reproduction or independently authenticated signer trust. |
+| L0: source/binary provenance | BLOCKED | Official archive/manifests/tag verified under publisher key; 26/26 prior offline tests. Historical Loshan key expired, but pinned public keyserver refresh matching the official fingerprint yields valid detached Gitian signatures for BOTH builders (run 43127645875). Keyserver delivery is not independent human identity authentication; no independent rebuild/toolchain audit or L0 approval. |
 | L1: Litecoin Regtest isolation | NOT_TESTED | No native node; no proved network/genesis identity or firewall evidence. |
 | L2: strict MWEB exclusion | NOT_TESTED | Only non-executable transparent-only specification; no executable validation path. |
 | L3: scripts and signature rules | NOT_TESTED | No Litecoin-native HTLC vectors or consensus/policy tests. |
@@ -47,3 +47,17 @@ EXPKEYSIG with the archived key. The strict verifier rejects the pair.
 Gitian run 43125463639 on SHA b485e5d = FAILURE (intentional trust
 blocker); the offline verifier suite run 43125463716 = SUCCESS (26/26).
 No settlement or native Litecoin code was executed. See evidence index.
+
+## Loshan keyserver refresh observation — 2026-11-12
+On code SHA `965afdd3f8977d2570bbdd569f2c13374e9b6ed0`,
+the Gitian workflow 43127645875 **succeeded** after a public keyserver
+refresh. The full fingerprint remains
+`C0921846FED0BF4CF28BE1D73B2A6315CD51A673`.
+Both detached signatures passed GPG, all nine claimed outputs match.
+The downloaded certificate SHA-256 is `027f0165865fcbcc53e3d09ee80251cca7da7a29b198fb31ea5b2c357bbbc3bf`.
+The historical archived-key expiry remains a valid reproducible
+negative result; its correction **does not** itself prove the identity
+of the signer. This result explicitly reports
+`independentlyAuthenticatedBuilders=false`,
+`independentSourceBuildReproduced=false`,
+`l0Qualified=false`, `settlementEnabled=false`.

@@ -9,12 +9,14 @@ Profile: `LTC_BASECHAIN_TRANSPARENT_V1`.
 1. Independently establish and record the publisher and each builder's
    full 40-hex signing fingerprint via at least one verified out-of-band
    channel. A key hosted next to the release is **not** such a channel.
-2. Resolve the 2026 Loshan Gitian detached signature
-   `KEYEXPIRED/EXPKEYSIG`: obtain a fresh self-certification
-   authenticated against his published fingerprint, including the full
-   key expiration/revocation history, or find an alternative independently
-   authenticated builder attestation. Never ignore expiry and never
-   replace the expected fingerprint silently.
+2. Confirm independently (out of band) that the Loshan key
+   matching fingerprint `C0921846FED0BF4CF28BE1D73B2A6315CD51A673`
+   belongs to the expected builder. The older official archive certificate
+   triggered `KEYEXPIRED/EXPKEYSIG`; a separately hosted current certificate
+   with SHA-256 `027f0165865fcbcc53e3d09ee80251cca7da7a29b198fb31ea5b2c357bbbc3bf` now validates both Gitian
+   detached signatures (run 43127645875). Review its certification,
+   revocation and expiration history. A keyserver does NOT authenticate
+   the person or prove a genuinely independent source build.
 3. Pin all toolchain dependencies, Gitian/Guix descriptors, source tree
    and container/VM image by immutable SHA/digest. Verify no secrets,
    production wallets, GPUbnb Core RPC/DB/Redis, DOGE paths, cloud
