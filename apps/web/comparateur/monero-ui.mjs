@@ -130,4 +130,7 @@ for (const id of ['deviceSelect','tabGpu','tabCpu','deviceSearch']) {
 }
 updateDevice();
 updateNetwork();
-setInterval(updateNetwork,5*60*1000);
+// Keep hourly sources inexpensive on the free tier: recheck data every 15 minutes.
+setInterval(updateNetwork,15*60*1000);
+// Purely local redraw every minute enforces the 24h cutoff without a network call.
+setInterval(render,60*1000);
