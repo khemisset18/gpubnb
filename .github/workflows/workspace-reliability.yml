@@ -23,7 +23,7 @@ on:
         type: choice
         required: true
         default: both
-        options: [both, d3, multinode, fee-pinning, vm-recovery]
+        options: [both, d3, multinode, fee-pinning, vm-recovery, auxpow-expanded]
 
 permissions:
   contents: read
@@ -119,7 +119,7 @@ jobs:
   # The registered workflow provides a manual entry on the development branch.
   # These jobs can never run from push, PR, schedule, main or another repository.
   doge-d3-private-manual:
-    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'multinode' && inputs.doge_suite != 'fee-pinning' && inputs.doge_suite != 'vm-recovery' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
+    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'multinode' && inputs.doge_suite != 'fee-pinning' && inputs.doge_suite != 'vm-recovery' && inputs.doge_suite != 'auxpow-expanded' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'
     permissions:
       contents: read
       actions: read
@@ -128,13 +128,13 @@ jobs:
       diagnostic_suite: d3
 
   doge-recovery-multinode-private-manual:
-    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'd3' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.doge_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111') || (inputs.doge_suite == 'vm-recovery' && github.ref == 'refs/heads/asset-exchange/doge-vm-recovery-20261111') || (inputs.doge_suite != 'fee-pinning' && inputs.doge_suite != 'vm-recovery' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'))
+    if: github.event_name == 'workflow_dispatch' && inputs.doge_suite != 'd3' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.doge_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111') || (inputs.doge_suite == 'vm-recovery' && github.ref == 'refs/heads/asset-exchange/doge-vm-recovery-20261111') || (inputs.doge_suite == 'auxpow-expanded' && github.ref == 'refs/heads/asset-exchange/doge-auxpow-boundaries-20261111') || (inputs.doge_suite != 'fee-pinning' && inputs.doge_suite != 'vm-recovery' && inputs.doge_suite != 'auxpow-expanded' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'))
     permissions:
       contents: read
       actions: read
     uses: ./.github/workflows/asset-exchange-dogecoin-multinode.yml
     with:
       execution_commit: ${{ github.sha }}
-      harness_commit: 1455e76342f54ab2e3a45f453f780b15c2bef5d3
+      harness_commit: eadb9c1e3265cf3858a0bebdc0917964b8f89ede
       authorization: AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST
-      lab_suite: ${{ inputs.doge_suite == 'vm-recovery' && 'recovery-handoff' || inputs.doge_suite == 'fee-pinning' && 'fee-pinning' || 'multinode' }}
+      lab_suite: ${{ inputs.doge_suite == 'auxpow-expanded' && 'auxpow-expanded' || inputs.doge_suite == 'vm-recovery' && 'recovery-handoff' || inputs.doge_suite == 'fee-pinning' && 'fee-pinning' || 'multinode' }}

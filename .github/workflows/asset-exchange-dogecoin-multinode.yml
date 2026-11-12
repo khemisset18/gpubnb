@@ -21,7 +21,7 @@ on:
         type: choice
         required: true
         default: multinode
-        options: [multinode, fee-pinning, recovery-handoff]
+        options: [multinode, fee-pinning, recovery-handoff, auxpow-expanded]
   workflow_call:
     inputs:
       execution_commit:
@@ -45,8 +45,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   private-multinode:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.lab_suite == 'multinode' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111') || (inputs.lab_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111') || (inputs.lab_suite == 'recovery-handoff' && github.ref == 'refs/heads/asset-exchange/doge-vm-recovery-20261111'))
-    runs-on: ${{ inputs.lab_suite == 'recovery-handoff' && 'ubuntu-24.04' || 'ubuntu-latest' }}
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.lab_suite == 'multinode' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111') || (inputs.lab_suite == 'fee-pinning' && github.ref == 'refs/heads/asset-exchange/doge-fee-pinning-20261111') || (inputs.lab_suite == 'recovery-handoff' && github.ref == 'refs/heads/asset-exchange/doge-vm-recovery-20261111') || (inputs.lab_suite == 'auxpow-expanded' && github.ref == 'refs/heads/asset-exchange/doge-auxpow-boundaries-20261111'))
+    runs-on: ${{ (inputs.lab_suite == 'recovery-handoff' || inputs.lab_suite == 'auxpow-expanded') && 'ubuntu-24.04' || 'ubuntu-latest' }}
     timeout-minutes: 20
     outputs:
       handoff_sha256: ${{ steps.handoff.outputs.sha256 }}
@@ -70,7 +70,7 @@ jobs:
           assert re.fullmatch('[0-9a-f]{40}',os.environ['HARNESS_COMMIT'])
           assert os.environ['EXECUTION_COMMIT']==os.environ['GITHUB_SHA']
           assert os.environ['LAB_AUTHORIZATION']=='AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST'
-          assert os.environ['LAB_SUITE'] in ('multinode','fee-pinning','recovery-handoff')
+          assert os.environ['LAB_SUITE'] in ('multinode','fee-pinning','recovery-handoff','auxpow-expanded')
           PY
           git diff --exit-code "$HARNESS_COMMIT" HEAD -- asset-exchange/qualification/dogecoin/ asset-exchange/chain-watchers/ asset-exchange/recovery/ asset-exchange/wallet-agent/ asset-exchange/core/src/errors.mjs .github/workflows/asset-exchange-dogecoin-multinode.yml
           bash -n asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh
@@ -87,14 +87,26 @@ jobs:
           run-id: 40866305437
           github-token: ${{ github.token }}
           path: dist/doge-d0-verified
+      - name: Reuse exact verified public chain without repeating bootstrap mining
+        if: inputs.lab_suite == 'auxpow-expanded'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dogecoin-recovery-prepared-6307538265aef8273447891f445a28531043d1b5
+          run-id: 43111959236
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/doge-public-seed
       - name: Execute bounded two-node lab in distinct loopback-only namespace
         env:
           GH_TOKEN: ${{ github.token }}
           LAB_AUTHORIZATION: ${{ inputs.authorization }}
           LAB_SUITE: ${{ inputs.lab_suite }}
         run: |
+          EXTRA_ARGUMENTS=()
+          if [[ "$LAB_SUITE" == auxpow-expanded ]]; then
+            EXTRA_ARGUMENTS+=("$RUNNER_TEMP/doge-public-seed" ace1f4d52cfac8c0cb68ad23c2ce603d2e0b0f1c4c92fe3f4591b0e24b1ac0b9)
+          fi
           bash asset-exchange/qualification/dogecoin/d6/run-multinode.sh \
-            "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-multinode" "$LAB_AUTHORIZATION" "$LAB_SUITE"
+            "$GITHUB_WORKSPACE/dist/doge-d0-verified" "$RUNNER_TEMP/doge-multinode" "$LAB_AUTHORIZATION" "$LAB_SUITE" "${EXTRA_ARGUMENTS[@]}"
       - name: Check watcher behavior against native paired observations
         if: inputs.lab_suite != 'recovery-handoff'
         run: |
