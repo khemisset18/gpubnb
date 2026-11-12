@@ -1,0 +1,119 @@
+name: Asset Exchange LTC L0 Gitian two-builder attestation (no native execution)
+
+on:
+  pull_request:
+    paths:
+      - 'asset-exchange/qualification/litecoin/l0/**'
+      - '.github/workflows/asset-exchange-litecoin-l0-gitian.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ltc-l0-gitian-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  signed-attestations:
+    name: LTC Gitian pinned two-builder signature and output comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact PR HEAD without retaining credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Retrieve only public pinned Gitian assertion materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/ltc-gitian-public-only"
+          evidence="$RUNNER_TEMP/ltc-gitian-evidence"
+          mkdir -p "$work/david" "$work/losh" "$work/gnupg" "$evidence"
+          chmod 700 "$work/gnupg"
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+          echo "HEAD_SHA=$expected" > "$evidence/metadata.txt"
+          echo "GITIAN_REPO_SHA=257e8c5e128c40091b9fcd0f7d2327587d04742d" >> "$evidence/metadata.txt"
+          echo 'LITECOIN_BINARY_EXECUTED=false' >> "$evidence/metadata.txt"
+          echo 'SETTLEMENT_ENABLED=false' >> "$evidence/metadata.txt"
+
+          dl() {
+            curl --fail --show-error --silent --location --retry 2 \
+              --connect-timeout 15 --max-time 120 --max-filesize "$3" \
+              --proto '=https' --proto-redir '=https' \
+              --output "$2" "$1"
+          }
+          base='https://raw.githubusercontent.com/litecoin-project/gitian.sigs.ltc/257e8c5e128c40091b9fcd0f7d2327587d04742d/0.21.5.8-linux'
+          for signer in davidburkett38 losh11; do
+            target='david'
+            if [ "$signer" = losh11 ]; then target='losh'; fi
+            dl "$base/$signer/litecoin-core-linux-0.21-build.assert" \
+              "$work/$target/litecoin-core-linux-0.21-build.assert" 262144
+            dl "$base/$signer/litecoin-core-linux-0.21-build.assert.sig" \
+              "$work/$target/litecoin-core-linux-0.21-build.assert.sig" 16384
+          done
+          dl 'https://download.litecoin.org/litecoin-0.21.5.8/davidburkett38-key.pgp' \
+            "$work/david-key.pgp" 131072
+          dl 'https://raw.githubusercontent.com/litecoin-project/litecoin/ec1b6489a900d09cf5991e220dce089c77a232a2/contrib/gitian-keys/losh11-key.pgp' \
+            "$work/losh-key.pgp" 131072
+          d_fpr='D35621D53A1CC6A3456758D03620E9D387E55666'
+          l_fpr='C0921846FED0BF4CF28BE1D73B2A6315CD51A673'
+          public_fpr() {
+            gpg --batch --no-options --homedir "$work/gnupg" \
+              --with-colons --with-fingerprint --show-keys "$1" \
+              | awk -F: '$1=="fpr" {print $10; exit}'
+          }
+          test "$(public_fpr "$work/david-key.pgp")" = "$d_fpr"
+          test "$(public_fpr "$work/losh-key.pgp")" = "$l_fpr"
+          gpg --batch --no-options --homedir "$work/gnupg" --import \
+            "$work/david-key.pgp" "$work/losh-key.pgp" >/dev/null
+          gpg --batch --no-options --homedir "$work/gnupg" --export \
+            "$d_fpr" "$l_fpr" > "$work/paired-builders.gpg"
+          test -s "$work/paired-builders.gpg"
+          echo "DAVID_FINGERPRINT=$d_fpr" >> "$evidence/metadata.txt"
+          echo "LOSH_FINGERPRINT=$l_fpr" >> "$evidence/metadata.txt"
+          (cd "$work" && sha256sum \
+            david/*.assert david/*.assert.sig losh/*.assert losh/*.assert.sig \
+            david-key.pgp losh-key.pgp) >> "$evidence/metadata.txt"
+          echo 'MATERIAL=PUBLIC_ONLY_NO_LTC_EXECUTION' >> "$evidence/metadata.txt"
+
+      - name: Fail closed on signatures, expiry and output divergence
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ltc-gitian-public-only"
+          evidence="$RUNNER_TEMP/ltc-gitian-evidence"
+          set +e
+          python3 asset-exchange/qualification/litecoin/l0/verify_gitian.py \
+            --david-assertion "$work/david/litecoin-core-linux-0.21-build.assert" \
+            --david-sig "$work/david/litecoin-core-linux-0.21-build.assert.sig" \
+            --losh-assertion "$work/losh/litecoin-core-linux-0.21-build.assert" \
+            --losh-sig "$work/losh/litecoin-core-linux-0.21-build.assert.sig" \
+            --trusted-keyring "$work/paired-builders.gpg" \
+            --david-fingerprint D35621D53A1CC6A3456758D03620E9D387E55666 \
+            --losh-fingerprint C0921846FED0BF4CF28BE1D73B2A6315CD51A673 \
+            > "$evidence/gitian-verification.json" 2> "$evidence/gitian-verification-error.json"
+          rc=$?
+          set -e
+          echo "GITIAN_VERIFICATION_EXIT=$rc" >> "$evidence/metadata.txt"
+          if [ "$rc" -ne 0 ]; then
+            echo 'LTC_GITIAN_ASSERTION_STATUS=BLOCKED'
+            cat "$evidence/gitian-verification-error.json"
+            exit 1
+          fi
+          echo 'LTC_GITIAN_ASSERTION_STATUS=PARTIAL_CRYPTOGRAPHIC_PROOF_NOT_BUILD_REPRODUCTION'
+          echo 'LTC_L0_QUALIFIED=false'
+
+      - name: Retain redacted public attestation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltc-l0-gitian-signed-assertion-observations
+          path: ${{ runner.temp }}/ltc-gitian-evidence/
+          if-no-files-found: warn
+          retention-days: 14
