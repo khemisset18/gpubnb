@@ -27,6 +27,16 @@ def file_hashes(root):
     return {str(p.relative_to(root)): digest(p) for p in sorted(root.rglob('*')) if p.is_file()}
 
 
+def expected_vendor_hashes(source, pin):
+    hashes = file_hashes(source)
+    omissions = pin.get('vendorFileOmissions', [])
+    assert len(omissions) <= 1, 'unexpected vendor omission count'
+    for omission in omissions:
+        assert (pin['name'], pin['version'], omission['path']) == ('rand', '0.7.3', 'Cargo.lock'), 'only the unused upstream Rand development lock may be omitted'
+        assert hashes.pop(omission['path']) == omission['sha256'], 'omitted supplier lock SHA256 mismatch'
+    return hashes
+
+
 def download(url, path, expected):
     assert url.startswith('https://static.crates.io/crates/')
     with urllib.request.urlopen(url, timeout=45) as response:
@@ -123,7 +133,7 @@ def main():
         old=marker+'source = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "'+pin['archiveSha256']+'"\n'
         assert expected_lock.count(old)==1
         expected_lock=expected_lock.replace(old,marker)
-        assert file_hashes(repository/pin['vendorPath'])==file_hashes(vendor/(pin['name']+'-'+pin['version'])), 'vendored crate differs from independently verified backport'
+        assert file_hashes(repository/pin['vendorPath']) == expected_vendor_hashes(vendor/(pin['name']+'-'+pin['version']), pin), 'vendored crate differs from independently verified backport'
     assert (repository/'Cargo.lock').read_text()==expected_lock, 'unrelated active lock change'
     project=work/'project'
     subprocess.run(['git','worktree','add','--detach',str(project),revision],cwd=repository,check=True,capture_output=True)

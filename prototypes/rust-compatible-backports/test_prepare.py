@@ -11,6 +11,27 @@ import prepare
 
 
 class PreparationBoundaryTests(unittest.TestCase):
+    def test_supplier_lock_omission_keeps_all_source_and_license_hashes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'src').mkdir()
+            (root/'src/lib.rs').write_text('pub fn unchanged() {}')
+            (root/'LICENSE').write_text('original license')
+            (root/'Cargo.lock').write_text('unused upstream development lock')
+            before=prepare.file_hashes(root)
+            pin={'name':'rand','version':'0.7.3','vendorFileOmissions':[{'path':'Cargo.lock','sha256':prepare.digest(root/'Cargo.lock')}]}
+            expected=prepare.expected_vendor_hashes(root,pin)
+            self.assertEqual(expected,{path:sha for path,sha in before.items() if path!='Cargo.lock'})
+            self.assertEqual(prepare.file_hashes(root),before)
+
+    def test_vendor_omission_refuses_sources_and_wrong_lock_digest(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'src').mkdir();(root/'src/lib.rs').write_text('retained source')
+            (root/'Cargo.lock').write_text('unrecognized development lock')
+            pin={'name':'rand','version':'0.7.3','vendorFileOmissions':[{'path':'src/lib.rs','sha256':prepare.digest(root/'src/lib.rs')}]}
+            with self.assertRaisesRegex(AssertionError,'only the unused'):prepare.expected_vendor_hashes(root,pin)
+            pin['vendorFileOmissions']=[{'path':'Cargo.lock','sha256':'0'*64}]
+            with self.assertRaisesRegex(AssertionError,'SHA256'):prepare.expected_vendor_hashes(root,pin)
+
     def test_existing_work_directory_fails_before_network_or_process(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(sys,'argv',['prepare.py',temp]), patch('urllib.request.urlopen',side_effect=AssertionError('network')), patch('subprocess.run',side_effect=AssertionError('process')):

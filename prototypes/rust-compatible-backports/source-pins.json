@@ -41,6 +41,13 @@
       "upstreamFix": "https://github.com/rust-random/rand/pull/1763",
       "upstreamFixCommit": "605731b59aabb38338e65f2a6a7ba8a9e480d00d",
       "upstreamFixed08Commit": "5309f25bb5e7d21ac01c5b6f476badd06f9cdc3f",
+      "vendorFileOmissions": [
+        {
+          "path": "Cargo.lock",
+          "reason": "Unused upstream Rand development/benchmark dependency snapshot; Cargo resolves this library through the retained product workspace Cargo.lock. No Rust source, manifest, license, product lock, package identity or scanner configuration is omitted. The checksum-pinned complete published archive remains independently verified.",
+          "sha256": "ee32a72318ee8c6986509e36ae276406b622897cb82324c3f0e39551f0edc2cb"
+        }
+      ],
       "vendorPath": "vendor/security/rand-0.7.3",
       "version": "0.7.3"
     }
