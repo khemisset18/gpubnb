@@ -12,6 +12,13 @@ import {validateMoneroSnapshot,MAX_PUBLIC_AGE_MS} from '../lib/monero-feed.mjs';
 import {validateOwnPoWSnapshot,PUBLIC_FRESH_MS} from '../lib/pow-yield.mjs';
 
 const KEYS=Object.freeze({XMR:'net:xmr',ETC:'net:etc',RVN:'net:rvn'});
+// Cloudflare Free caps Cron CPU time at 10 ms. Three hourly triggers partition
+// processing into isolated invocations (within its five-triggers-per-account limit).
+export const CRON_TO_COIN=Object.freeze({
+ '17 * * * *':'XMR',
+ '27 * * * *':'ETC',
+ '37 * * * *':'RVN'
+});
 // No stale-data reset after an outage: expiry is measured from the LAST successful collection.
 const BACKUP_MAX_MS=Math.min(MAX_PUBLIC_AGE_MS,PUBLIC_FRESH_MS);
 const BACKUP_TTL_SECONDS=BACKUP_MAX_MS/1000;
@@ -57,17 +64,20 @@ function sendJson(value,status=200,maxAgeSeconds=0){
    'public, max-age='+seconds:'no-store, max-age=0'};
  return new Response(JSON.stringify(value),{status,headers});
 }
-export async function collectAutomated(env,{clock=()=>Date.now(),fetchImpl=fetch}={}){
+export async function collectAutomated(env,{clock=()=>Date.now(),fetchImpl=fetch,coins=null}={}){
  if(!env?.SNAPSHOTS||typeof env.SNAPSHOTS.put!=='function')throw Error('KV binding not configured');
  const jobs=[
   ['XMR',()=>collectMoneroPublic(fetchImpl,clock())],
   ['ETC',()=>collectEtcPublic(fetchImpl,clock())],
   ['RVN',()=>collectRvnPublic(fetchImpl,clock())]
  ];
+ if(coins!==null&&(!Array.isArray(coins)||coins.length!==1||
+   !Object.hasOwn(KEYS,coins[0])))throw Error('Invalid scheduled crypto job');
+ const selected=coins===null?jobs:jobs.filter(([coin])=>coin===coins[0]);
  // Independent failures never erase another coin's last good sample.
  // On failure, the previous valid sample is NEVER overwritten or retimestamped.
  // KV deletes it after 24 hours and validation also enforces 24h at read time.
- const outcomes=await Promise.all(jobs.map(async ([coin,build])=>{
+ const outcomes=await Promise.all(selected.map(async ([coin,build])=>{
   try{
    const data=await build();
    const now=clock();
@@ -117,5 +127,9 @@ export async function handleRequest(request,env,now=Date.now()){
 }
 export default {
   fetch(request,env){return handleRequest(request,env);},
-  scheduled(_event,env,ctx){ctx.waitUntil(collectAutomated(env));}
+  scheduled(event,env,ctx){
+    const coin=CRON_TO_COIN[event.cron];
+    if(!coin){console.log('GPUbnb: unsupported Cron trigger');return;}
+    ctx.waitUntil(collectAutomated(env,{coins:[coin]}));
+  }
 };
