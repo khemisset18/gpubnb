@@ -22,7 +22,46 @@ export const ETC_SOURCES = Object.freeze([
 const RVN_ORIGIN = 'https://api.ravencoinexplorer.com';
 const ALLOWED = new Set([...MONERO_SOURCES,...ETC_SOURCES,{url:RVN_ORIGIN}]
   .map(node=>new URL(node.url).origin));
-const MAX_JSON_BYTES=768*1024;
+export const MAX_JSON_BYTES=768*1024;
+
+/**
+ * Limit actual decompressed bytes, not just the Content-Length header.
+ * Public providers can omit Content-Length or stream a much larger response.
+ * This function works in both Cloudflare Workers and Node.js 22.
+ */
+export async function readBoundedJson(response,maxBytes=MAX_JSON_BYTES){
+ if(!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>MAX_JSON_BYTES)
+   throw Error('Invalid response limit');
+ const header=response.headers?.get?.('content-length');
+ if(header!==null&&header!==undefined&&header!==''&&
+    Number.isFinite(Number(header))&&Number(header)>maxBytes)
+   throw Error('Remote response exceeds limit');
+ if(response.body&&typeof response.body.getReader==='function'){
+   const reader=response.body.getReader(),decoder=new TextDecoder();
+   let bytes=0,body='';
+   try{
+     for(;;){
+       const {done,value}=await reader.read();
+       if(done)break;
+       if(!(value instanceof Uint8Array))throw Error('Unexpected body type');
+       bytes+=value.byteLength;
+       if(bytes>maxBytes){
+         await reader.cancel();
+         throw Error('Remote response exceeds limit');
+       }
+       body+=decoder.decode(value,{stream:true});
+     }
+     body+=decoder.decode();
+   }finally{reader.releaseLock();}
+   return JSON.parse(body);
+ }
+ // Minimal fetch mocks without a ReadableStream are supported by unit tests;
+ // production Fetch Response always has a streaming body.
+ const text=await response.text();
+ if(new TextEncoder().encode(text).length>maxBytes)
+   throw Error('Remote response exceeds limit');
+ return JSON.parse(text);
+}
 
 async function json(fetchImpl,url,body=null){
  const target=new URL(url);
@@ -33,11 +72,7 @@ async function json(fetchImpl,url,body=null){
    redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)
  });
  if(!res.ok)throw Error('Remote endpoint status '+res.status);
- const size=Number(res.headers.get('content-length')||0);
- if(size>MAX_JSON_BYTES)throw Error('Remote response exceeds limit');
- const text=await res.text();
- if(text.length>MAX_JSON_BYTES)throw Error('Remote response exceeds limit');
- return JSON.parse(text);
+ return readBoundedJson(res);
 }
 async function moneroRpc(fetchImpl,url,method,params){
  const result=await json(fetchImpl,url,{jsonrpc:'2.0',id:'gpubnb-no-wallet',method,
