@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false,
+  "dogeSourceSnapshot": "0576aadcfa217496e0ac4a49d19564e0c5ba424e",
+  "basePr354": "a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed",
+  "newNativeEvidence": [
+    {
+      "id": "fee-pinning",
+      "indexPath": "docs/asset-exchange/research/2026-11-11/fee-pinning/native-result.json",
+      "indexSha256": "245670a2d5b8af8a22512a685ac30683e9e57b74897b7b171a67effc799c8a69",
+      "runId": 43108343770,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/43108343770",
+      "executionCommit": "06c96c6284d1c33a771c41d1f9b6ffe533c946bf",
+      "harnessCommit": "428b64fa35ae60375e5eac4f624225c768c3580b",
+      "experimentStatus": "PASS",
+      "qualificationStatus": "BLOCKED",
+      "artifacts": [
+        {
+          "artifactId": 13894708328,
+          "zipSha256": "086129108e4d4e6616357995557218a8a13fb9da0947455584c2233fe4c3a772"
+        }
+      ]
+    },
+    {
+      "id": "vm-recovery",
+      "indexPath": "docs/asset-exchange/research/2026-11-11/vm-recovery/native-result.json",
+      "indexSha256": "e03d2263376906fe525a31a6db62f08694fdad1e18b8ea5a5750a667561ada60",
+      "runId": 43111959236,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/43111959236",
+      "executionCommit": "6307538265aef8273447891f445a28531043d1b5",
+      "harnessCommit": "19f20a368c15b5cd762c9cb76fecc3549fc3dfe1",
+      "experimentStatus": "PASS",
+      "qualificationStatus": "BLOCKED",
+      "artifacts": [
+        {
+          "artifactId": 13897201321,
+          "zipSha256": "256572b208d626a8c8d68ebf7f731b886c08fa21268291228a4da1eeaba05d1c"
+        },
+        {
+          "artifactId": 13897096479,
+          "zipSha256": "e2ecb0a4dd2a7f8df490e3791e122ac19fd29f0e2d3798240f06349604360b9b"
+        },
+        {
+          "artifactId": 13896776975,
+          "zipSha256": "2842654e9d9002dd08dba96c00c2a5a0485b159d52f6dfc03a95f3c2a636def6"
+        },
+        {
+          "artifactId": 13895534375,
+          "zipSha256": "65561bc50bec4f8806b373944d321ff7b139f337eeb684335b5ac655cd6ece92"
+        },
+        {
+          "artifactId": 13895509636,
+          "zipSha256": "547a7a66f278e8adfd43e3a4a9faaf72040bd2a2adf1f3c2c57c89a62697be22"
+        }
+      ]
+    },
+    {
+      "id": "auxpow-boundaries",
+      "indexPath": "docs/asset-exchange/research/2026-11-11/auxpow-boundaries/native-result.json",
+      "indexSha256": "76890bdcc9eb5ae9ff78281e01c23ba981b6a1a22ed791dbf67b26369380fe20",
+      "runId": 43311713839,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/43311713839",
+      "executionCommit": "c7adde84149250c3a972e570b5df4911b20778ee",
+      "harnessCommit": "eadb9c1e3265cf3858a0bebdc0917964b8f89ede",
+      "experimentStatus": "PASS",
+      "qualificationStatus": "BLOCKED",
+      "artifacts": [
+        {
+          "artifactId": 13985234147,
+          "zipSha256": "5f6910e54b6160bf625393893ee96fd51b8441208f10eacfdcbf8fa64c2e05cb"
+        }
+      ]
+    }
+  ],
+  "retainedEvidence": {
+    "D0": 40866305437,
+    "D1": 40892872892,
+    "D2": 42875442068,
+    "D3": 43060202035,
+    "sourcePolicy": 43005573333,
+    "oldAuxpow8": 43074060943,
+    "S3": 43075700524
+  },
+  "rustSeparateReview": {
+    "pr": 358,
+    "commit": "d09996050e5aebc1be8db8698c38d7ea991929fa",
+    "tree": "45c5e869c084aca87324aae20a25a3334e121dd7",
+    "nativeRun": 43310845271,
+    "optimizedSecurityTests": 3,
+    "anchorHostTests": 7,
+    "desktopHostTests": 506,
+    "preparationGuards": 8,
+    "artifactId": 13985627765,
+    "artifactSha256": "dc12ce9a1f27b6fe48d89c3fc8c8310d05bee395fa9bd0d8c3a45ad73a8c173e",
+    "scanner": {
+      "artifactId": 13985288064,
+      "artifactSha256": "2a927c06ef2f488e2a3325c7cbe5d535d0ae8960085071a9c21f0e420a3962b2",
+      "findings": [
+        {
+          "fixedVersion": "1.0.0-alpha.1",
+          "id": "GHSA-fjx5-qpf4-xjf2",
+          "package": "borsh",
+          "severity": "MEDIUM",
+          "target": "Cargo.lock",
+          "version": "0.10.4"
+        },
+        {
+          "fixedVersion": "0.20.0",
+          "id": "GHSA-wrw7-89jp-8q8g",
+          "package": "glib",
+          "severity": "MEDIUM",
+          "target": "Cargo.lock",
+          "version": "0.18.5"
+        },
+        {
+          "fixedVersion": "0.9.3, 0.10.1, 0.8.6",
+          "id": "GHSA-cq8v-f236-94qc",
+          "package": "rand",
+          "severity": "LOW",
+          "target": "Cargo.lock",
+          "version": "0.7.3"
+        }
+      ],
+      "headCommit": "d09996050e5aebc1be8db8698c38d7ea991929fa",
+      "jobId": 131506229871,
+      "qualificationStatus": "BLOCKED",
+      "reportSha256": "4199053ab16c40b6b6723044ccad29548cb1940ddd39e18d6bbf62234a89811c",
+      "result": "FAIL",
+      "run": "https://github.com/khemisset18/gpubnb/actions/runs/43310845432",
+      "scannerExemptionsAdded": false,
+      "schemaVersion": 1,
+      "unusedSupplierLockOmissionIsActiveVulnerabilityFix": false
+    },
+    "notInDogeSourceBundle": true,
+    "financialRuntime": "NOT_TESTED",
+    "guiIpc": "NOT_TESTED"
+  },
+  "limitations": [
+    "No proof of physical host independence",
+    "No literal in-place recovery OS reboot",
+    "No hardware signer qualification",
+    "No external crypto/security audit",
+    "No guarantee under arbitrary fees",
+    "No Mainnet or production qualification",
+    "No SBF financial runtime or complete GUI/IPC test",
+    "Three strict Rust scanner findings remain blocking"
+  ]
+}

@@ -47,6 +47,9 @@ jobs:
           echo "epoch=$(git show -s --format=%ct "${GITHUB_SHA}")" >> "${GITHUB_OUTPUT}"
           echo "tree=$(git rev-parse "${GITHUB_SHA}^{tree}")" >> "${GITHUB_OUTPUT}"
 
+      - name: Reject substituted or incomplete source evidence
+        run: python3 -m unittest discover -s asset-exchange/release/source-bundle -p 'test_*.py' -v
+
       - name: Build source audit bundle twice
         shell: bash
         run: |

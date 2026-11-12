@@ -1,0 +1,43 @@
+{
+  "repository": "decred/atomicswap",
+  "commit": "fdc473d3510233396a43c89ce38ff41d1ec2b456",
+  "license": "ISC; no source copied into GPUbnb",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "f29dc51956174378e06a0d20494a3808974b1d841b9e9ad0cf1265edbe0717ec"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "2d4ef6ee198c9303d5755b8cf3c53fe1521bd6ff0ec7eb2a13f7ec5ef383b3dd"
+    },
+    {
+      "path": "cmd/btcatomicswap/main.go",
+      "sha256": "7aca35cfdedb10104a1efba02c0aee365a5c830a20930d27c6ef865e52588324"
+    },
+    {
+      "path": "cmd/btcatomicswap/sizeest.go",
+      "sha256": "85ab5ae1df0b10b733f29593334e6d03cfc95df45fbff4fd8aa02645cc7573bc"
+    },
+    {
+      "path": "cmd/btcatomicswap/go.mod",
+      "sha256": "888f800ff62114f8435d6afd1917e3bf1008ea1a98a6823acb38027016d93fb6"
+    }
+  ],
+  "findings": [
+    "buildContract builds refund before returning contract for publication",
+    "buildRefund needs wallet RPC and a new signature; no keyless reconstruction claimed",
+    "Sequence 0 differs from our immutable 0xfffffffe profile; do not import replacement behavior",
+    "Public-key-hash template differs from our direct-compressed-public-key template",
+    "auditcontract reports destination/value/lock; independent trusted terms still required",
+    "No Dogecoin executable or *_test.go files in this pinned repository"
+  ],
+  "gpuBnbEvidence": [
+    "source-policy run43005573333 with available fixture signer",
+    "keyless fee/pinning run43108343770",
+    "independent recovery run43111959236"
+  ],
+  "upstreamTestsExecuted": false,
+  "directPortOfBitcoinTool": false,
+  "qualificationStatus": "BLOCKED"
+}

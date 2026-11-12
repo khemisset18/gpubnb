@@ -35,7 +35,9 @@ fi
 
 # Read bytes only from the committed Git object, never from an uncommitted
 # working tree. This makes the source SHA the actual build input.
-git archive --format=tar "${source_sha}"   asset-exchange   docs/asset-exchange   "${workflow_paths[@]}"   | tar -xf - -C "${stage}"
+git archive --format=tar "${source_sha}" asset-exchange docs/asset-exchange \
+  .github/workflows/workspace-reliability.yml "${workflow_paths[@]}" \
+  | tar -xf - -C "${stage}"
 
 if find "${stage}" -type l -print -quit | grep -q .; then
   echo "ERROR: symlinks are forbidden in Asset Exchange source bundle" >&2
@@ -53,6 +55,7 @@ data={
     "sourceDateEpoch":int(os.environ["SOURCE_EPOCH"]),
     "scope":[
         ".github/workflows/asset-exchange-*.yml",
+        ".github/workflows/workspace-reliability.yml",
         "asset-exchange/**",
         "docs/asset-exchange/**",
     ],

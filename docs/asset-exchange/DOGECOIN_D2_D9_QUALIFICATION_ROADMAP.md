@@ -1,5 +1,11 @@
 # DOGE D2–D9 qualification roadmap
 
+> État courant au 12 novembre : voir [le dossier de revue](DOGE_REVIEW_CANDIDATE_2026-11-12.md).
+> Les trois nouveaux incréments frais, VM distinctes et AuxPoW sont exécutés.
+> D0/D1 conservent leur PASS limité ; D2–D9 restent BLOCKED.
+> Le texte ci-dessous est un instantané historique, y compris ses anciennes
+> mentions NON COMMENCÉ/NOT_TESTED et ses autorisations plus étroites.
+
 Status: **D2 DIAGNOSTICS EXECUTED PASS / FULL D2 BLOCKED / D3–D9 PREPARED, NOT EXECUTED**.
 The expanded owner authorization permitted only the D2 diagnostic scope documented
 in [PR #314](https://github.com/khemisset18/gpubnb/pull/314). Actual run40961370001

@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "profileId": "DOGE-1.14.9-LEGACY-P2SH-CLTV-REGTEST-CANDIDATE-1",
+  "status": "CANDIDATE_NOT_APPROVED",
+  "qualificationStatus": "BLOCKED",
+  "activationAuthorized": false,
+  "automaticSettlement": false,
+  "enabledExchangeDirections": 0,
+  "codeSnapshotCommit": "0576aadcfa217496e0ac4a49d19564e0c5ba424e",
+  "purpose": "Frozen review inputs only; never consumed as an execution or activation manifest.",
+  "network": {
+    "chain": "regtest",
+    "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "version": "1.14.9",
+    "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5"
+  },
+  "script": {
+    "output": "OP_HASH160 PUSH20 HASH160(redeemScript) OP_EQUAL",
+    "redeem": "OP_IF OP_SIZE PUSH(32) OP_EQUALVERIFY OP_SHA256 PUSH32(commitment) OP_EQUALVERIFY PUSH33(claimPublicKey) OP_CHECKSIG OP_ELSE MINIMAL_SCRIPTNUM(lock) OP_CHECKLOCKTIMEVERIFY OP_DROP PUSH33(refundPublicKey) OP_CHECKSIG OP_ENDIF",
+    "claimStack": [
+      "strictLowSDER+SIGHASH_ALL",
+      "preimage32",
+      "OP_1",
+      "redeemScript"
+    ],
+    "refundStack": [
+      "strictLowSDER+SIGHASH_ALL",
+      "OP_0",
+      "redeemScript"
+    ],
+    "publicKeys": "distinct compressed secp256k1 points",
+    "preimageBytes": 32,
+    "witness": false,
+    "csvEnabled": false,
+    "lock": "positive uint32, matching height/time domain; Regtest BIP65 activation height 1351",
+    "lockTimeThreshold": 500000000
+  },
+  "transaction": {
+    "version": 1,
+    "sequenceHex": "fffffffe",
+    "sighash": "SIGHASH_ALL (1)",
+    "refundInputs": 1,
+    "refundOutputs": 1,
+    "claimLockTime": 0,
+    "refundLockTime": "exact contract lock",
+    "optInRbf": false,
+    "fundingRequirement": "exact raw funding bytes, value/script/outpoint, active-chain confirmed anchor; no unconfirmed funding recovery",
+    "legacyAmountBinding": "UTXO value checked independently; legacy signatures do not commit to the spent input amount",
+    "legacyMalleability": "Changed funding TXID invalidates old signatures; never silently rebind."
+  },
+  "fees": {
+    "atomicUnitsPerDoge": "100000000",
+    "unit": "koinu",
+    "jsonAmounts": "canonical decimal integer strings",
+    "feeRate": "koinu per 1000 serialized bytes, ceiling division",
+    "minRefundKoinu": "1000000",
+    "signedRefundSteps": {
+      "min": 1,
+      "max": 8
+    },
+    "maxFeeKoinu": "independently authorized per-bundle integer cap; no universal production rate",
+    "pendingRule": "retain exact pending non-RBF variant; never replace automatically",
+    "absentRule": "select cheapest existing signature covering observed local relay/mempool floor only if confirmed funding is available",
+    "exhaustionRule": "refuse with zero broadcasts; finite signatures cannot cover arbitrary fees"
+  },
+  "recovery": {
+    "receipt": "independently retained digest before funding; exclusive write, file+directory fsync and semantic readback",
+    "keys": "no original signing key, seed, wallet database or server database in recovery parcel",
+    "confirmation": "recheck active block hash; CONFIRMED observation is not permanent finality",
+    "nodeTrust": "local pinned private RPC plus separate laboratory watcher checks; no proven adversarial public-node quorum",
+    "feeClock": "six-hour isolated clock decay test is not 24-hour expiry or a real power outage"
+  },
+  "signer": {
+    "kind": "external software request/response policy; OpenSSL public verification",
+    "requiredTrustedInputs": [
+      "termsDigest",
+      "requestDigest",
+      "network/genesis/source",
+      "funding/value/script",
+      "destination",
+      "fee cap/ladder",
+      "lock/sequence",
+      "request deadline"
+    ],
+    "deadline": "limits acceptance of a new signature response, not later use of a valid refund",
+    "hardware": "NOT_TESTED",
+    "firmware": "NOT_TESTED"
+  },
+  "reviews": {
+    "internalD2Evidence": "completed within declared observation types; not external certification",
+    "externalCryptographicReview": "PENDING",
+    "externalSecurityAudit": "PENDING",
+    "releaseApproval": "PENDING"
+  },
+  "sourceFiles": [
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/offline_candidate.py",
+      "sha256": "b4a814f8e15b30bc41ae3175d1d3ff16ab982a90e1678a182b23498aba1277d2"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/htlc_codec.py",
+      "sha256": "e418e1ee51cffc37090f99dd4e35b13f9578feaa7831a6a1356aaa098db0db5e"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/spend_preparation.py",
+      "sha256": "d2d27ddea6b5a1a122b41f66f3d8acc1e44f5d2df5bafb65e67153f64205be35"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/test_signer.py",
+      "sha256": "f7894d1a87fa9375df8398a601ab8dfe7d587bb8e371f71fb86bec30d8abc9b5"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/fixtures/htlc_codec_v1.json",
+      "sha256": "fb07d34447b89b7123654c52225763a42b2f347a8dad6393bb5111025dede9a4"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/fixtures/native_scenarios_v1.json",
+      "sha256": "b342a03deb7f4149221964bb984453eed7530365e3f7cf486fd261004af618b5"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d2/fixtures/source_policy_map_v1.json",
+      "sha256": "bba7acfe4a9634a7f82ccbaadca65856026b536e27a6c821c2614ebdf2c11ea2"
+    },
+    {
+      "path": "asset-exchange/recovery/dogecoin/transaction.py",
+      "sha256": "c791a4f92c63cb45b0fb5faad4c207a066e1be26fc010feebe8c01c3b79010fc"
+    },
+    {
+      "path": "asset-exchange/recovery/dogecoin/recovery_core.py",
+      "sha256": "ab7984c43e29f95ffb61b018cd50fa8e32a15e67163bcff3851938eba6ebaded"
+    },
+    {
+      "path": "asset-exchange/recovery/dogecoin/package.py",
+      "sha256": "f51af99dd5ebd64afc63861307bcd3d23bcfcbe2249f7af3c3e5dc2ac78e04f8"
+    },
+    {
+      "path": "asset-exchange/wallet-agent/dogecoin/refund_ladder.py",
+      "sha256": "3f285381488a19c1cd5c57b3e35d558a7279a9f8e57a7337a934c462bf5f5e56"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d6/multinode.py",
+      "sha256": "f8ae6324291d999ee8c30109592e21640502a5c50597db65ef450be7ea0591ae"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d6/fee_pinning.py",
+      "sha256": "a85aaa33cde69f001000245d375a0da129f60b40447205132b65a39572008174"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d6/vm_recovery.py",
+      "sha256": "a3fb8f6c1ceadb97a26ead5e09743718834f4ac66cc03d35806ad898ecffbb96"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d6/auxpow_fixtures.py",
+      "sha256": "df7e51c39a86bfb7db9332671ef2595553cd9980096c3c6ac9eab125de912618"
+    },
+    {
+      "path": "asset-exchange/qualification/dogecoin/d6/auxpow_boundaries.py",
+      "sha256": "5758c0a083511fb6121a2c52b9867099475606f69522f83d70209dfd47e1f00c"
+    },
+    {
+      "path": "asset-exchange/chain-watchers/src/dogecoin-observation.mjs",
+      "sha256": "988ade27c0116ec4635be769cf49f8f8309c1e343ab8d25fca71f5262cef762b"
+    },
+    {
+      "path": "asset-exchange/chain-watchers/src/evidence.mjs",
+      "sha256": "635526e6ae480703d16d055076904161c28a1325a942ffe617eddfe0511dd416"
+    },
+    {
+      "path": "asset-exchange/core/src/asset-registry.mjs",
+      "sha256": "1ba0f601292189be7d831fbd3130e8cf2173379e843227053cd2524f46ec4aef"
+    },
+    {
+      "path": "docs/asset-exchange/research/2026-10-29/PAIR_MATRIX_20_DIRECTIONS.json",
+      "sha256": "d33c1e5220352d0858646539d8a0c65c23322c271718556ab33153805b00c8ae"
+    },
+    {
+      "path": ".github/workflows/workspace-reliability.yml",
+      "sha256": "556b5f8560e8c80cff8754f399117c41fd32c72e9e1ea7f6cd0e5846a2e4b9f2"
+    },
+    {
+      "path": ".github/workflows/asset-exchange-dogecoin-multinode.yml",
+      "sha256": "40c92268530d3afe99f41ff468d2ef7cebac7d805a2d6b07f207f83f9c8c5586"
+    }
+  ]
+}

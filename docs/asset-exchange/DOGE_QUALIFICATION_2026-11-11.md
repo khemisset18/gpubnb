@@ -1,5 +1,11 @@
 # DOGE qualification: implemented components and execution state — 11 November 2026
 
+> État courant au 12 novembre : voir [le dossier de revue](DOGE_REVIEW_CANDIDATE_2026-11-12.md).
+> Les trois nouveaux incréments frais, VM distinctes et AuxPoW sont exécutés.
+> D0/D1 conservent leur PASS limité ; D2–D9 restent BLOCKED.
+> Le texte ci-dessous est un instantané historique, y compris ses anciennes
+> mentions NON COMMENCÉ/NOT_TESTED et ses autorisations plus étroites.
+
 Base: PR351 at268936e87d56cd4fa18b35ec85c1ee094bddc6c0, local equivalent724ca3d4303981097fba60b6427d932fbf918c88. PR344/349/350/351 and security PR337/338/345/347/348 were re-read before consolidation. Nothing is merged into main/dev or deployed. No existing security gate is suppressed.
 
 | Phase | Status | Actual native evidence | New deliverable / remaining blocker |
