@@ -19,6 +19,24 @@ sbom="${dist}/${root}.spdx.json"
 [[ -f "${sbom}" ]] || { echo "ERROR: source SBOM missing" >&2; exit 1; }
 [[ -f "${dist}/SHA256SUMS" ]] || { echo "ERROR: SHA256SUMS missing" >&2; exit 1; }
 
+# Do not let an untrusted checksum file select arbitrary paths on the consumer.
+python3 - "${dist}" "${root}" <<'PY'
+import re
+import stat
+import sys
+from pathlib import Path
+dist, root = Path(sys.argv[1]), sys.argv[2]
+names = [root + ".tar.gz", root + ".spdx.json"]
+for name, limit in [(names[0], 32 * 1024**2), (names[1], 8 * 1024**2), ("SHA256SUMS", 1024)]:
+    info = (dist / name).lstat()
+    if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= limit:
+        raise SystemExit("nonregular or unbounded source artifact file: " + name)
+lines = (dist / "SHA256SUMS").read_text().splitlines()
+if len(lines) != 2 or any(not re.fullmatch(r"[0-9a-f]{64}  " + re.escape(name), line)
+                          for line, name in zip(lines, names)):
+    raise SystemExit("exact closed checksum file list required")
+PY
+
 (
   cd "${dist}"
   sha256sum --check --strict SHA256SUMS
@@ -31,16 +49,28 @@ import hashlib
 import json
 import posixpath
 import re
+import subprocess
 import sys
 import tarfile
 from pathlib import PurePosixPath
 
 archive_path, sbom_path, expected_sha, expected_tree = sys.argv[1:5]
 root = "gpu.k.p2p-asset-exchange-source-v1"
+scope = [".github/workflows/asset-exchange-*.yml",
+         ".github/workflows/workspace-reliability.yml",
+         "asset-exchange/**", "docs/asset-exchange/**"]
+
+def git(*args):
+    return subprocess.check_output(["git", *args], timeout=30)
+
+if git("rev-parse", expected_sha + "^{tree}").decode().strip() != expected_tree:
+    raise SystemExit("expected tree does not match the source Git commit")
+source_epoch = int(git("show", "-s", "--format=%ct", expected_sha))
 
 def allowed(relative: str) -> bool:
     return (
         relative == "SOURCE_BUNDLE_INFO.json"
+        or relative == ".github/workflows/workspace-reliability.yml"
         or relative.startswith("asset-exchange/")
         or relative.startswith("docs/asset-exchange/")
         or (
@@ -52,6 +82,24 @@ def allowed(relative: str) -> bool:
             )
         )
     )
+
+# A self-consistent archive/SBOM can still omit or replace source files. Bind
+# the complete allowed file set and every byte to independently retained Git
+# objects, rather than trusting identity strings supplied by the archive.
+git_files = {}
+for record in git("ls-tree", "-r", "-z", expected_sha).split(b"\0"):
+    if not record:
+        continue
+    metadata, name = record.split(b"\t", 1)
+    relative = name.decode("utf-8")
+    if not allowed(relative):
+        continue
+    mode, kind, oid = metadata.decode().split()
+    if mode not in ("100644", "100755") or kind != "blob":
+        raise SystemExit("nonregular source Git entry forbidden: " + relative)
+    git_files[relative] = oid
+if ".github/workflows/workspace-reliability.yml" not in git_files:
+    raise SystemExit("source workflow caller missing")
 
 with open(sbom_path, "r", encoding="utf-8") as f:
     doc=json.load(f)
@@ -79,7 +127,15 @@ for entry in files:
 
 tar_bytes={}
 with tarfile.open(archive_path, "r:gz") as tf:
-    for member in tf.getmembers():
+    total = 0
+    members = 0
+    for member in tf:
+        members += 1
+        if members > 10000 or member.size > 4 * 1024**2:
+            raise SystemExit("source archive entry limit exceeded")
+        total += member.size
+        if total > 32 * 1024**2:
+            raise SystemExit("source archive total size limit exceeded")
         p=PurePosixPath(member.name)
         if p.is_absolute() or ".." in p.parts or "\\" in member.name:
             raise SystemExit(f"unsafe tar path: {member.name}")
@@ -105,6 +161,14 @@ if set(tar_bytes) != set(sbom_by_name):
     missing=sorted(set(sbom_by_name)-set(tar_bytes))
     extra=sorted(set(tar_bytes)-set(sbom_by_name))
     raise SystemExit(f"tar/SBOM file-set mismatch missing={missing} extra={extra}")
+
+if set(tar_bytes) != set(git_files) | {"SOURCE_BUNDLE_INFO.json"}:
+    raise SystemExit("source Git file-set mismatch")
+for relative, oid in git_files.items():
+    data = tar_bytes[relative]
+    actual = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+    if actual != oid:
+        raise SystemExit("source Git blob mismatch: " + relative)
 
 sha1_values=[]
 for relative in sorted(tar_bytes):
@@ -141,6 +205,8 @@ if info.get("sourceTree") != expected_tree:
     raise SystemExit("SOURCE_BUNDLE_INFO sourceTree mismatch")
 if info.get("artifact") != root or info.get("bundleVersion") != 1:
     raise SystemExit("SOURCE_BUNDLE_INFO identity mismatch")
+if info.get("scope") != scope or info.get("sourceDateEpoch") != source_epoch:
+    raise SystemExit("SOURCE_BUNDLE_INFO scope/epoch mismatch")
 
 if doc.get("documentNamespace") != f"https://github.com/khemisset18/gpubnb/spdx/asset-exchange-source/{expected_sha}":
     raise SystemExit("SPDX documentNamespace mismatch")

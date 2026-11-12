@@ -8,11 +8,12 @@ Included scope:
 - `asset-exchange/**`;
 - `docs/asset-exchange/**`;
 - dedicated `.github/workflows/asset-exchange-*.yml`;
+- the exact `.github/workflows/workspace-reliability.yml` manual caller;
 - generated `SOURCE_BUNDLE_INFO.json`.
 
 Excluded:
 - GPUbnb Core application/runtime files;
-- root/general CI workflows;
+- other root/general CI workflows;
 - node_modules;
 - secrets;
 - untracked working-tree files.
@@ -28,4 +29,24 @@ The SPDX 2.3 document includes:
 
 A separate consumer job revalidates the archive contents and verifies GitHub/Sigstore provenance and SPDX attestation.
 
+The verifier also requires a checkout retaining the expected source Git object.
+It independently verifies that the expected commit has the expected tree, then
+compares the complete scoped file set and every blob byte to that object. A
+self-consistent rewritten archive/SBOM or omitted source file is rejected.
+Archive entries are bounded (10000 entries, 4 MiB per file, 32 MiB total), links
+are forbidden, and no archive member is extracted by the verifier. The declared
+scope and source epoch must agree with the exact build inputs. The v1 archive
+format/name is retained; historical bundles use their original pinned verifier.
+
+This scope contains the DOGE laboratory, recovery, signer policy, watcher code
+and review documents. It excludes root Cargo files, Rust vendor sources and
+GPUbnb Core. The separately pinned Rust PR must be reviewed with its own source
+and test evidence; this archive does not certify that graph or the whole app.
+
 This is a source/audit SBOM. It does NOT replace future runtime/container/package dependency SBOMs.
+
+For the 12 November DOGE review, use the registered `workspace-reliability`
+manual entry on `asset-exchange/doge-audit-candidate-20261112`, choosing only
+`source-audit`. The reusable source workflow is the same builder/consumer,
+not a second executor. That choice is explicitly excluded from both native
+DOGE jobs; the source job additionally checks event, repository/ID and branch.
