@@ -1,0 +1,202 @@
+"""LTC L0 offline-only security tests: no downloaded binary, key or live node."""
+from __future__ import annotations
+
+import hashlib
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import verify_release as ltc
+
+FPR = "0123456789ABCDEF0123456789ABCDEF01234567"
+OTHER = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+GOOD_STATUS = (
+    f"[GNUPG:] GOODSIG {FPR[-16:]} Test Signer\n"
+    f"[GNUPG:] VALIDSIG {FPR} 2026-09-09 1788975885 0 4 0 22 10 01 {FPR}\n"
+).encode()
+VALID_SUMS = f"{ltc.ARCHIVE_SHA256}  {ltc.ARCHIVE_NAME}\n".encode()
+
+
+class LitecoinL0Tests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.archive = root / ltc.ARCHIVE_NAME
+        self.archive.write_bytes(b"offline-test-archive")
+        self.sums = root / "SHA256SUMS.asc"
+        self.sums.write_bytes(b"offline-test-signed-checksum")
+        self.keyring = root / "trusted-public.gpg"
+        self.keyring.write_bytes(b"public-fixture-only")
+
+    def test_official_release_metadata_matches_existing_litecoin_spec(self) -> None:
+        spec = (Path(__file__).resolve().parents[4] / "docs" / "asset-exchange" /
+                "LITECOIN_ADAPTER_SPEC_V1.md").read_text(encoding="utf-8")
+        for value in (ltc.RELEASE.lstrip("v"), ltc.SOURCE_COMMIT[:7], ltc.ARCHIVE_NAME, ltc.ARCHIVE_SHA256):
+            self.assertIn(value, spec)
+        self.assertEqual(len(ltc.SOURCE_COMMIT), 40)
+        self.assertEqual(len(ltc.ARCHIVE_SHA256), 64)
+
+    def test_signed_manifest_exact_name_and_digest(self) -> None:
+        self.assertEqual(ltc.signed_checksum_entry(VALID_SUMS, ltc.ARCHIVE_NAME), ltc.ARCHIVE_SHA256)
+        other = b"f" * 64 + b"  second-archive.tar.gz\n"
+        self.assertEqual(ltc.signed_checksum_entry(other + VALID_SUMS, ltc.ARCHIVE_NAME), ltc.ARCHIVE_SHA256)
+
+    def test_malformed_or_dangerous_manifest_rejected(self) -> None:
+        hostile = (
+            b"", VALID_SUMS + VALID_SUMS, VALID_SUMS + b"\n",
+            VALID_SUMS.replace(b"  ", b" *"), VALID_SUMS.replace(b".tar.gz", b"../escape.tar.gz"),
+            VALID_SUMS.replace(b"  ", b"\t"), VALID_SUMS.replace(b"\n", b"\r\n"),
+            VALID_SUMS.replace(b"  ", b"   "), b"\xff" + VALID_SUMS,
+            b"f" * (ltc.MAX_SUMS_BYTES + 1),
+        )
+        for item in hostile:
+            with self.subTest(value=item[:50]):
+                with self.assertRaises(ValueError):
+                    ltc.signed_checksum_entry(item, ltc.ARCHIVE_NAME)
+
+    def test_valid_signature_requires_single_full_pinned_fingerprint(self) -> None:
+        ltc.assert_signer(GOOD_STATUS, FPR.lower())
+        for status, fingerprint in (
+            (GOOD_STATUS, OTHER),
+            (GOOD_STATUS, "0123456789ABCDEF"),
+            (GOOD_STATUS.replace(b"VALIDSIG", b"BADSIG"), FPR),
+            (GOOD_STATUS.replace(b"GOODSIG", b"ERRSIG"), FPR),
+            (GOOD_STATUS + GOOD_STATUS, FPR),
+            (b"[GNUPG:] GOODSIG 0 Test\n", FPR),
+            (b"[GNUPG:] VALIDSIG " + FPR.encode(), FPR),
+            (GOOD_STATUS + b"[GNUPG:] REVKEYSIG 0 Test\n", FPR),
+            (GOOD_STATUS + b"[GNUPG:] EXPKEYSIG 0 Test\n", FPR),
+            (GOOD_STATUS + b"[GNUPG:] SIGEXPIRED\n", FPR),
+            (GOOD_STATUS + b"[GNUPG:] TRUST_NEVER\n", FPR),
+        ):
+            with self.subTest(status=status[-70:], fingerprint=fingerprint):
+                with self.assertRaises(ValueError):
+                    ltc.assert_signer(status, fingerprint)
+
+    def test_gpg_status_must_be_complete_and_signature_ids_consistent(self) -> None:
+        truncated = (f"[GNUPG:] GOODSIG {FPR[-16:]} Test\n"
+                     f"[GNUPG:] VALIDSIG {FPR}\n").encode()
+        mismatch = GOOD_STATUS.replace(FPR[-16:].encode(), b"0" * 16, 1)
+        malformed_primary = GOOD_STATUS.replace(
+            f" 01 {FPR}\n".encode(), b" 01 FFFFFFFF\n")
+        for bad_status in (
+            truncated, mismatch, malformed_primary,
+            GOOD_STATUS + b"[GNUPG:] EXPSIG 0 Expired\n",
+            GOOD_STATUS + b"[GNUPG:] KEYREVOKED\n",
+            GOOD_STATUS + b"[GNUPG:] GOODSIG 0000000000000000 Extra\n",
+        ):
+            with self.subTest(status=bad_status[-90:]):
+                with self.assertRaises(ValueError):
+                    ltc.assert_signer(bad_status, FPR)
+
+    def test_pinned_primary_fingerprint_may_approve_explicit_subkey(self) -> None:
+        subkey = OTHER
+        status = (f"[GNUPG:] GOODSIG {subkey[-16:]} Test\n[GNUPG:] VALIDSIG {subkey}"
+                  f" 2026-09-09 1788975885 0 4 0 1 10 00 {FPR}\n").encode()
+        ltc.assert_signer(status, FPR)
+
+    def test_archive_hash_size_and_exact_filename(self) -> None:
+        payload = self.archive.read_bytes()
+        ltc.archive_sha256(self.archive, hashlib.sha256(payload).hexdigest(), len(payload))
+        with self.assertRaisesRegex(ValueError, "size_mismatch"):
+            ltc.archive_sha256(self.archive, hashlib.sha256(payload).hexdigest(), len(payload) + 1)
+        with self.assertRaisesRegex(ValueError, "sha256_mismatch"):
+            ltc.archive_sha256(self.archive, "0" * 64, len(payload))
+        alternate = self.archive.with_name("litecoin-wrong-version.tar.gz")
+        alternate.write_bytes(payload)
+        with self.assertRaisesRegex(ValueError, "filename_mismatch"):
+            ltc.archive_sha256(alternate, hashlib.sha256(payload).hexdigest(), len(payload))
+
+    def test_symlink_input_rejected_before_any_gpg_use(self) -> None:
+        link = self.archive.with_name("linked-archive")
+        try:
+            link.symlink_to(self.archive)
+        except (OSError, NotImplementedError):
+            self.skipTest("OS does not support symlinks")
+        with self.assertRaisesRegex(ValueError, "symlink_forbidden"):
+            ltc.regular_file(link, "archive")
+
+    def test_real_verifier_must_fail_without_external_fingerprint(self) -> None:
+        with patch.object(ltc.subprocess, "run") as call:
+            with self.assertRaisesRegex(ValueError, "fingerprint_required"):
+                ltc.verify_release(self.archive, self.sums, self.keyring, "unverified")
+            call.assert_not_called()
+
+    def test_matching_mock_signature_remains_l0_blocked(self) -> None:
+        result = subprocess.CompletedProcess([], 0, stdout=VALID_SUMS, stderr=GOOD_STATUS)
+        with patch.object(ltc, "archive_sha256") as verify_hash, patch.object(ltc.subprocess, "run", return_value=result) as gpg:
+            proof = ltc.verify_release(self.archive, self.sums, self.keyring, FPR)
+        verify_hash.assert_called_once_with(self.archive, ltc.ARCHIVE_SHA256, ltc.ARCHIVE_SIZE_BYTES)
+        gpg.assert_called_once()
+        argv = gpg.call_args.args[0]
+        self.assertIn("--no-default-keyring", argv)
+        self.assertIn("--no-options", argv)
+        self.assertIn("--no-auto-key-retrieve", argv)
+        self.assertIn("--batch", argv)
+        self.assertNotIn("--recv-keys", argv)
+        self.assertFalse(proof["l0Qualified"])
+        self.assertFalse(proof["sourceTagSignatureIndependentlyVerified"])
+        self.assertFalse(proof["litecoinNodeExecuted"])
+        self.assertFalse(proof["settlementEnabled"])
+        self.assertEqual(proof["status"], "L0_PARTIAL_BINARY_PROVENANCE_ONLY")
+
+    def test_fake_or_failed_gpg_never_returns_a_proof(self) -> None:
+        cases = (
+            subprocess.CompletedProcess([], 1, stdout=VALID_SUMS, stderr=GOOD_STATUS),
+            subprocess.CompletedProcess([], 0, stdout=VALID_SUMS, stderr=b""),
+            subprocess.CompletedProcess([], 0, stdout=VALID_SUMS, stderr=GOOD_STATUS.replace(FPR.encode(), OTHER.encode())),
+            subprocess.CompletedProcess([], 0, stdout=VALID_SUMS.replace(ltc.ARCHIVE_SHA256.encode(), b"0" * 64), stderr=GOOD_STATUS),
+        )
+        for response in cases:
+            with self.subTest(returncode=response.returncode, stderr=response.stderr[-40:]):
+                with patch.object(ltc, "archive_sha256"), patch.object(ltc.subprocess, "run", return_value=response):
+                    with self.assertRaises(ValueError):
+                        ltc.verify_release(self.archive, self.sums, self.keyring, FPR)
+
+
+    @unittest.skipUnless(shutil.which("gpg"), "GnuPG required for an actual local signature test")
+    def test_ephemeral_gpg_signature_accepts_only_unmodified_signed_checksums(self) -> None:
+        # Real local GPG cryptography, but an EPHEMERAL FIXTURE KEY, not the
+        # official Litecoin release key. Never a source-provenance claim.
+        with tempfile.TemporaryDirectory(prefix="ltc-l0-fixture-") as directory:
+            root = Path(directory)
+            home = root / "gnupg"
+            home.mkdir(mode=0o700)
+            uid = "LTC L0 local fixture <ltc-l0-fixture@example.invalid>"
+            command = ["gpg", "--batch", "--yes", "--homedir", str(home),
+                       "--pinentry-mode", "loopback", "--passphrase", ""]
+            def run(*args: str) -> subprocess.CompletedProcess:
+                return subprocess.run(command + list(args), capture_output=True,
+                                      check=True, timeout=20)
+            run("--quick-generate-key", uid, "ed25519", "sign", "0")
+            listing = run("--with-colons", "--fingerprint", "--list-keys", uid).stdout.decode("utf-8")
+            fprs = [line.split(":")[9] for line in listing.splitlines()
+                    if line.startswith("fpr:")]
+            self.assertEqual(len(fprs), 1)
+            trusted_fpr = fprs[0]
+            run("--output", str(self.keyring), "--export", trusted_fpr)
+            plaintext = root / "SHA256SUMS"
+            plaintext.write_bytes(VALID_SUMS)
+            run("--armor", "--local-user", trusted_fpr, "--output", str(self.sums),
+                "--clearsign", str(plaintext))
+            # Only the huge official archive hash check is substituted. The
+            # complete GPG command, keyring, signature and plaintext are real.
+            with patch.object(ltc, "archive_sha256"):
+                result = ltc.verify_release(self.archive, self.sums, self.keyring, trusted_fpr)
+            self.assertTrue(result["binaryChecksumAndSignatureVerified"])
+            self.assertFalse(result["l0Qualified"])
+            self.assertFalse(result["settlementEnabled"])
+            tampered = self.sums.read_bytes().replace(ltc.ARCHIVE_SHA256.encode(), b"0" * 64)
+            self.assertNotEqual(tampered, self.sums.read_bytes())
+            self.sums.write_bytes(tampered)
+            with patch.object(ltc, "archive_sha256"):
+                with self.assertRaisesRegex(ValueError, "gpg_signature_invalid"):
+                    ltc.verify_release(self.archive, self.sums, self.keyring, trusted_fpr)
+
+
+if __name__ == "__main__":
+    unittest.main()

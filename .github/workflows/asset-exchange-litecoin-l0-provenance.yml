@@ -1,0 +1,135 @@
+name: Asset Exchange LTC L0 official provenance (no native execution)
+
+on:
+  pull_request:
+    paths:
+      - 'asset-exchange/qualification/litecoin/l0/**'
+      - '.github/workflows/asset-exchange-litecoin-l0-provenance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ltc-l0-official-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-release-observation:
+    name: LTC pinned public artifact/GPG provenance (NOT a qualified toolchain)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact code without retaining GitHub credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Get public official release inputs only (never execute binaries)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/ltc-l0-public-only"
+          evidence="$RUNNER_TEMP/ltc-l0-evidence"
+          mkdir -p "$work" "$evidence"
+          echo "LTC_L0_PROFILE=LTC_BASECHAIN_TRANSPARENT_V1" > "$evidence/metadata.txt"
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "HEAD_SHA=$actual" >> "$evidence/metadata.txt"
+          echo "OFFICIAL_BINARY_EXECUTED=false" >> "$evidence/metadata.txt"
+          echo "LTC_MAINNET_USED=false" >> "$evidence/metadata.txt"
+          echo "SETTLEMENT_ENABLED=false" >> "$evidence/metadata.txt"
+
+          root='https://download.litecoin.org/litecoin-0.21.5.8'
+          dl() {
+            local url="$1" output="$2" maxsize="$3"
+            curl --fail --show-error --silent --location --retry 2 \
+              --connect-timeout 15 --max-time 180 --max-filesize "$maxsize" \
+              --proto '=https' --proto-redir '=https' \
+              --output "$output" "$url"
+          }
+          dl "$root/SHA256SUMS.asc" "$work/SHA256SUMS.asc" 65536
+          dl "$root/davidburkett38-key.pgp" "$work/davidburkett38-key.pgp" 131072
+          dl "$root/linux/litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz" \
+             "$work/litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz" 50000000
+
+          echo '69f88cae8cb1016bcdcefc2a5b8689dd940c42a04e380afa309a34250522d022  SHA256SUMS.asc' \
+            | (cd "$work" && sha256sum --check --status)
+          echo '43200c9f9d65ebc126ea5833ca9429e144c4b3273da6bb9f4e89fd7450ab1be9  litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz' \
+            | (cd "$work" && sha256sum --check --status)
+          test "$(stat -c '%s' "$work/litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz")" -eq 36951482
+
+          (cd "$work" && sha256sum SHA256SUMS.asc davidburkett38-key.pgp litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz) \
+            >> "$evidence/metadata.txt"
+          echo 'DOWNLOAD_PIN_HASHES=PASS_BINARY_NOT_EXECUTED' >> "$evidence/metadata.txt"
+
+          expected='D35621D53A1CC6A3456758D03620E9D387E55666'
+          mkdir -m 700 "$work/gnupg"
+          actual="$(gpg --batch --no-options --homedir "$work/gnupg" \
+            --with-colons --show-keys --with-fingerprint \
+            "$work/davidburkett38-key.pgp" \
+            | awk -F: '$1=="fpr" {print $10; exit}')"
+          test "$actual" = "$expected"
+          echo "RELEASE_PUBLIC_KEY_FINGERPRINT=$actual" >> "$evidence/metadata.txt"
+          gpg --batch --no-options --homedir "$work/gnupg" --import \
+            "$work/davidburkett38-key.pgp" >/dev/null
+          gpg --batch --no-options --homedir "$work/gnupg" --export "$expected" \
+            > "$work/trusted-candidate.gpg"
+          test -s "$work/trusted-candidate.gpg"
+
+          # Git source tag fetch is read-only; never run or build Litecoin Core.
+          git init -q "$work/upstream"
+          git -C "$work/upstream" -c credential.helper= \
+            fetch --quiet --no-tags --depth 1 \
+            https://github.com/litecoin-project/litecoin.git \
+            refs/tags/v0.21.5.8:refs/tags/v0.21.5.8
+          test "$(git -C "$work/upstream" rev-parse refs/tags/v0.21.5.8)" \
+            = 'ee2aea3fc3fd95213d1a041d561b52e07ae6dc63'
+          git -C "$work/upstream" cat-file tag refs/tags/v0.21.5.8 \
+            > "$work/v0.21.5.8.tag"
+          (cd "$work" && sha256sum v0.21.5.8.tag) >> "$evidence/metadata.txt"
+
+      - name: Independently inspect signature statuses (expiry remains fatal)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ltc-l0-public-only"
+          evidence="$RUNNER_TEMP/ltc-l0-evidence"
+          expected='D35621D53A1CC6A3456758D03620E9D387E55666'
+          set +e
+          python3 asset-exchange/qualification/litecoin/l0/verify_release.py \
+            --archive "$work/litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz" \
+            --signed-sums "$work/SHA256SUMS.asc" \
+            --trusted-keyring "$work/trusted-candidate.gpg" \
+            --trusted-fingerprint "$expected" \
+            > "$evidence/binary-provenance.json" 2> "$evidence/binary-provenance-error.json"
+          binary_rc=$?
+          python3 asset-exchange/qualification/litecoin/l0/verify_tag.py \
+            --tag-object "$work/v0.21.5.8.tag" \
+            --trusted-keyring "$work/trusted-candidate.gpg" \
+            --trusted-fingerprint "$expected" \
+            > "$evidence/source-tag.json" 2> "$evidence/source-tag-error.json"
+          tag_rc=$?
+          set -e
+          printf 'BINARY_VERIFY_EXIT=%s\nTAG_VERIFY_EXIT=%s\n' "$binary_rc" "$tag_rc" \
+            >> "$evidence/metadata.txt"
+          if [ "$binary_rc" -ne 0 ] || [ "$tag_rc" -ne 0 ]; then
+            echo 'LTC_L0_OFFICIAL_PROVENANCE=BLOCKED'
+            cat "$evidence/binary-provenance-error.json"
+            cat "$evidence/source-tag-error.json"
+            exit 1
+          fi
+          # This is never a qualified release: human trust/independent builds missing.
+          echo 'LTC_L0_OFFICIAL_GPG_AND_HASHES=PASS_PARTIAL_NOT_FINANCIAL_QUALIFICATION'
+
+      - name: Preserve limited public evidence, even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltc-l0-public-provenance-observations
+          path: ${{ runner.temp }}/ltc-l0-evidence/
+          if-no-files-found: warn
+          retention-days: 14
