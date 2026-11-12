@@ -88,6 +88,26 @@ class GitianL0Tests(unittest.TestCase):
                 gitian.verify_pair(self.a, self.asig, self.b, self.bsig,
                                    self.keyring, DAVID, LOSH)
 
+    def test_evidence_hash_is_of_same_bytes_as_verified_copy(self) -> None:
+        original = self.a.read_bytes()
+        modified = assertion().replace(b"f" * 64, b"a" * 64)
+        self.assertNotEqual(modified, original)
+        def mutate_original(*args, **kwargs) -> subprocess.CompletedProcess:
+            # Model another process changing the original after snapshot.
+            self.a.write_bytes(modified)
+            argv = args[0]
+            self.assertNotEqual(argv[-1], str(self.a))
+            self.assertNotEqual(argv[-2], str(self.asig))
+            self.assertIn("--no-auto-key-retrieve", argv)
+            self.assertIn("--no-default-keyring", argv)
+            return subprocess.CompletedProcess([], 0, b"", gpg_status(DAVID))
+        with patch.object(gitian.subprocess, "run", side_effect=mutate_original):
+            outputs, digest = gitian.verify_attestation(
+                self.a, self.asig, self.keyring, DAVID)
+        self.assertEqual(outputs[ARCHIVE_NAME], ARCHIVE_SHA256)
+        self.assertEqual(digest, hashlib.sha256(original).hexdigest())
+        self.assertNotEqual(digest, hashlib.sha256(self.a.read_bytes()).hexdigest())
+
     def test_bad_fingerprint_rejected_without_gpg(self) -> None:
         with patch.object(gitian.subprocess, "run") as run:
             with self.assertRaisesRegex(ValueError, "fingerprint_required"):

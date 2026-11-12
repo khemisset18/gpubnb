@@ -94,13 +94,24 @@ def verify_attestation(assertion: Path, signature: Path, keyring: Path,
             raise ValueError(f"ltc_l0_{description}_oversized")
     if assertion.name != ASSERT_NAME or signature.name != SIG_NAME:
         raise ValueError("ltc_l0_gitian_filename_mismatch")
-    manifest = assertion_manifests(assertion.read_bytes())
+    # Freeze the same bounded bytes for parsing, GPG and evidence hashing.
+    # Never verify one on-disk revision and report the digest of another.
+    assertion_bytes = assertion.read_bytes()
+    signature_bytes = signature.read_bytes()
+    keyring_bytes = keyring.read_bytes()
+    manifest = assertion_manifests(assertion_bytes)
     with tempfile.TemporaryDirectory(prefix="ltc-l0-gitian-") as home:
+        safe_assertion = Path(home) / ASSERT_NAME
+        safe_signature = Path(home) / SIG_NAME
+        safe_keyring = Path(home) / "builders.gpg"
+        safe_assertion.write_bytes(assertion_bytes)
+        safe_signature.write_bytes(signature_bytes)
+        safe_keyring.write_bytes(keyring_bytes)
         argv = [
             "gpg", "--batch", "--no-tty", "--no-options", "--homedir", home,
             "--no-auto-key-retrieve", "--no-default-keyring",
-            "--keyring", str(keyring.resolve()), "--status-fd", "2",
-            "--verify", str(signature.resolve()), str(assertion.resolve()),
+            "--keyring", str(safe_keyring), "--status-fd", "2",
+            "--verify", str(safe_signature), str(safe_assertion),
         ]
         result = subprocess.run(
             argv, stdin=subprocess.DEVNULL,
@@ -109,7 +120,7 @@ def verify_attestation(assertion: Path, signature: Path, keyring: Path,
     if result.returncode != 0:
         raise ValueError("ltc_l0_gitian_detached_signature_invalid")
     assert_signer(result.stderr, fingerprint)
-    return manifest, hashlib.sha256(assertion.read_bytes()).hexdigest()
+    return manifest, hashlib.sha256(assertion_bytes).hexdigest()
 
 
 def verify_pair(david_assertion: Path, david_sig: Path,
