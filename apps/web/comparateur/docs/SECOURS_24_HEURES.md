@@ -47,3 +47,16 @@ Le fichier \`tests/backup-24h.test.mjs\` teste le dernier résultat à 23 h 59, 
 Pour utiliser automatiquement les observations, il faudra valider les endpoints publics avec des réponses réelles et leurs conditions de réutilisation, puis déployer le service et le KV dans un compte gratuit compatible. Il ne doit pas être fusionné ou installé dans le site principal sans l'accord explicite du propriétaire.
 
 La présence de la dernière donnée valide pendant 24 h améliore la continuité, **mais sa précision économique peut diminuer pendant la panne** : les chiffres doivent donc être clairement étiquetés « sauvegardés ». Un revenu en EUR dépend toujours d'une source de cours juridiquement utilisable ou d'un cours manuel.
+
+
+## Cadence horaire et maîtrise du quota gratuit
+
+La version préparée pour Cloudflare utilise **un Cron par heure** (\`17 * * * *\`, minute 17 UTC) et un seuil d'affichage « actualisé » de **75 minutes** (60 minutes + 15 minutes de tolérance). La conservation maximale des données vérifiées reste **24 heures** à partir de l'horodatage initial ; toute rediffusion sans vérification est interdite.
+
+Pour réduire les opérations de lecture du stockage gratuit, les modules XMR, PoW GPU et revenus généraux demandent les fichiers de réseau **toutes les 15 minutes**, et contrôlent **chaque minute**, localement dans le navigateur, si l'ancien résultat doit être retiré de l'affichage. Cela évite de nouvelles requêtes réseau pendant les vérifications de péremption.
+
+- Référence : [Cloudflare Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/) — expressions exécutées en UTC, délai de propagation possible.
+- [Quotas Workers](https://developers.cloudflare.com/workers/platform/limits/) et [Workers KV](https://developers.cloudflare.com/kv/platform/pricing/) — les quotas des offres gratuites sont limités et doivent être surveillés avant toute mise en ligne.
+- [Tests de cadence](../tests/hourly-refresh.test.mjs), [tests de conservation](../tests/backup-24h.test.mjs).
+
+Le service n'est **pas encore déployé** ; aucune performance avec de vraies réponses API publiques n'a été validée dans Cloudflare. Ne pas confondre un test simulé réussi avec une garantie d'exploitation.
