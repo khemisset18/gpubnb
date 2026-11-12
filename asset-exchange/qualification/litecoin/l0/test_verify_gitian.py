@@ -111,6 +111,8 @@ class GitianL0Tests(unittest.TestCase):
         self.a.write_bytes(b"y" * (gitian.MAX_ASSERT_BYTES + 1))
         with self.assertRaisesRegex(ValueError, "oversized"):
             gitian.verify_attestation(self.a, self.asig, self.keyring, DAVID)
+        # Reset the first adversarial input: isolate the next symlink guard.
+        self.a.write_bytes(assertion())
         link = self.a.parent / "link.sig"
         try:
             link.symlink_to(self.asig)
