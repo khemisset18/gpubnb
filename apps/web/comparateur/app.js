@@ -258,7 +258,7 @@ async function refreshFeed(){
     // getRates() hides it automatically once it is older than 24 hours.
     state.feedFetchFailed=true;
   }
-  syncRateInput();renderResults();
+  syncRateInput();renderResults();renderTable();
 }
 byId('tabGpu').addEventListener('click',()=>chooseDevice('nvidia-rtx-3060'));
 byId('tabCpu').addEventListener('click',()=>chooseDevice('amd-9950x'));
@@ -292,4 +292,15 @@ byId('tableSearch').addEventListener('input',renderTable);
 byId('refresh').addEventListener('click',refreshFeed);
 chooseDevice(state.device);
 refreshFeed();
-setInterval(refreshFeed,5*60*1000);
+// Hourly source: limit redundant requests and use local time checks for hard expiry.
+setInterval(refreshFeed,15*60*1000);
+let hadLiveFeed=liveFeedAvailable();
+setInterval(()=>{
+  const validNow=liveFeedAvailable();
+  if(validNow!==hadLiveFeed){
+    hadLiveFeed=validNow;
+    syncRateInput();
+    renderTable();
+  }
+  renderResults();
+},60*1000);
