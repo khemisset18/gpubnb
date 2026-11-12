@@ -10,9 +10,9 @@ Si un service public est temporairement en panne, donne une réponse invalide, d
 
 | Moment depuis la dernière collecte réussie | Affichage |
 |---|---|
-| Dernier relevé récent (moins de 2 h), service fonctionnel | Réseau public actualisé + heure de la mesure |
+| Dernier relevé récent (moins de 75 min), service fonctionnel | Réseau public actualisé + heure de la mesure |
 | Source en panne, dernière mesure de moins de 24 h | **Dernier relevé sauvegardé** + date/heure d'origine |
-| Dernier relevé entre 2 h et 24 h (même si la source ne signale pas la panne) | **Dernier relevé sauvegardé** + date/heure d'origine |
+| Dernier relevé entre 75 min et 24 h (même si la source ne signale pas la panne) | **Dernier relevé sauvegardé** + date/heure d'origine |
 | Plus de 24 h sans nouvelle collecte valide | **Service indisponible**, valeurs automatiques masquées |
 | Aucun relevé valide jamais enregistré | **Service indisponible** pour le réseau, ou **mode manuel** pour les revenus non connectés |
 
@@ -20,7 +20,7 @@ La valeur n'est **jamais** réhorodatée après un échec. Une suite de pannes n
 
 ## Implémentation
 
-- **Cloudflare Worker** \`edge/worker.mjs\`, cadence 2 heures définie dans \`wrangler.jsonc\`. Chaque monnaie XMR, RVN et ETC dispose d'une clé KV indépendante.
+- **Cloudflare Worker** \`edge/worker.mjs\`, cadence horaire (minute 17 UTC) définie dans \`wrangler.jsonc\`. Chaque monnaie XMR, RVN et ETC dispose d'une clé KV indépendante.
 - **Échec d'une source** : aucune écriture dans la clé du dernier bon relevé. Les autres cryptomonnaies continuent indépendamment.
 - **Nouvelle mesure validée** : écriture de l'instantané et durée de vie KV \`expirationTtl: 86400\` secondes. La validation **à chaque lecture** bloque les valeurs âgées de plus de 24 heures, y compris en présence d'un cache KV ou d'une suppression retardée.
 - **API de diagnostic** \`/api/status\` : \`fresh\`, \`saved\`, \`unavailable\` ; indique l'heure d'origine et l'âge. Ne contient aucun secret.
