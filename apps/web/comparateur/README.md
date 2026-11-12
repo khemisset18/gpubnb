@@ -247,3 +247,18 @@ La configuration GitHub est volontairement un **template** : \`wrangler.jsonc\` 
 Une limite de taille de **768 Kio réels décompressés** protège désormais les lectures des RPC publics, même si un serveur malveillant omet ou falsifie l'en-tête \`Content-Length\`. Tests : \`tests/public-fetch-security.test.mjs\` et \`tests/cloudflare-config.test.mjs\`. Aucun fournisseur, benchmark ou profit fictif n'est activé.
 
 **Rappel : la PR reste brouillon, aucun Cloudflare Worker n'est lancé, aucun module GPUbnb extérieur au comparateur n'est modifié.**
+
+
+## Audit professionnel — fiabilité réelle, cybersécurité et coûts
+
+Lire le **[rapport de qualité et les conditions avant production](docs/AUDIT_FINAL_FIABILITE.md)**.
+
+Améliorations de la présente étape :
+- **Cache HTTP public de 2 minutes maximum** sur les relevés (et sur \`/api/status\`), avec expiration toujours bornée par les 24 h de validité du relevé et par le changement de statut « actualisé/sauvegardé ». URLs fixes, sans paramètres \`?t=...\`, afin de réduire les lectures KV.
+- **Une seule lecture de chaque clé KV par requête de statut**, au lieu de deux.
+- **Taille des réponses publiques limitée à 768 Kio de données réellement reçues**, pas uniquement à la valeur déclarée de \`Content-Length\`.
+- **Compatibilité ETC** : une réponse JSON-RPC \`-32601\` pour la seule méthode facultative \`eth_syncing\` n'interdit pas une source dont les 33 blocs consécutifs, la chaîne 61 et le dernier horodatage sont vérifiés. Toute autre erreur reste bloquante.
+- **Démarrage Cloudflare sans faux identifiants** : \`tools/prepare-cloudflare-config.mjs\` et \`tests/cloudflare-config.test.mjs\` ; \`wrangler.deploy.jsonc\` local jamais publié.
+- Tests supplémentaires : \`tests/public-fetch-security.test.mjs\`, \`tests/edge-cache.test.mjs\`.
+
+Aucune de ces améliorations n'active de services externes, n'ajoute de forfait payant ou ne modifie un autre module GPUbnb. La vérification de compatibilité des endpoints et de leurs droits d'usage reste obligatoire avant un déploiement.
