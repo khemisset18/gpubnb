@@ -105,7 +105,7 @@ function render() {
 
 async function updateNetwork() {
   try {
-    const response = await fetch('data/monero-reseau.json?t='+Date.now(),{cache:'no-store'});
+    const response = await fetch('data/monero-reseau.json');
     if (!response.ok) throw Error('Snapshot missing');
     const parsed = validateMoneroSnapshot(await response.json());
     if (!parsed) throw Error('No valid network snapshot');
