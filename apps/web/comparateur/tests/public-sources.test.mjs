@@ -61,8 +61,13 @@ function mockFetch(options={}){
    const payload=JSON.parse(init.body);
    if(Array.isArray(payload))return reply(payload.map(x=>({id:x.id,jsonrpc:'2.0',
       result:e[Number(BigInt(x.params[0]))-heightEtc+32]})).reverse());
+   if(payload.method==='eth_syncing'&&options.etcNoSync?.includes(url.hostname))
+     return reply({jsonrpc:'2.0',id:1,error:{code:-32601,message:'Method not found'}});
+   if(payload.method==='eth_syncing'&&options.etcSyncError?.includes(url.hostname))
+     return reply({jsonrpc:'2.0',id:1,error:{code:-32001,message:'RPC backend failed'}});
    const values={eth_chainId:options.etcWrongChain?.includes(url.hostname)?'0x1':'0x3d',
-     eth_syncing:false,eth_blockNumber:'0x'+heightEtc.toString(16)};
+     eth_syncing:options.etcSyncing?.includes(url.hostname)?{startingBlock:'0x1'}:false,
+     eth_blockNumber:'0x'+heightEtc.toString(16)};
    return reply({jsonrpc:'2.0',id:1,result:values[payload.method]});
   }
   if(url.hostname==='api.ravencoinexplorer.com'){
@@ -158,4 +163,20 @@ test('Source registers are HTTPS allowlists and Monero quorum operators are dist
  }
  assert.equal(new Set(MONERO_SOURCES.map(x=>new URL(x.url).hostname)).size,3);
  assert.equal(new Set(ETC_SOURCES.map(x=>new URL(x.url).hostname)).size,3);
+});
+
+test('restricted ETC gateway lacking eth_syncing still works after chain/block verification',async()=>{
+ const {fetchImpl}=mockFetch({etcNoSync:['etc.blockscout.com']});
+ const result=await collectEtcPublic(fetchImpl,now);
+ assert.equal(result.operator,'ETC Blockscout');
+ assert.equal(result.usedFallback,false);
+ assert.ok(validateOwnPoWSnapshot(result,now));
+});
+test('ETC syncing=true or non-unsupported RPC errors trigger the next provider',async()=>{
+ const syncing=mockFetch({etcSyncing:['etc.blockscout.com']});
+ const backup=await collectEtcPublic(syncing.fetchImpl,now);
+ assert.equal(backup.operator,'ETC ETCMC');
+ const remoteError=mockFetch({etcSyncError:['etc.blockscout.com']});
+ const backup2=await collectEtcPublic(remoteError.fetchImpl,now);
+ assert.equal(backup2.operator,'ETC ETCMC');
 });
