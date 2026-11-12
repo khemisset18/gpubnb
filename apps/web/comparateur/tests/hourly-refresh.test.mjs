@@ -63,3 +63,19 @@ test('an unavailable coin never inherits another coin’s cached status',async()
  for(const coin of ['RVN','ETC'])assert.equal(
   observed.sources.find(x=>x.coin===coin).status,'unavailable');
 });
+
+
+test('browser reads hourly data every 15 minutes but checks expiry locally each minute',async()=>{
+  const dir=new URL('../',import.meta.url);
+  const monero=await readFile(new URL('monero-ui.mjs',dir),'utf8');
+  const pow=await readFile(new URL('pow-ui.mjs',dir),'utf8');
+  const general=await readFile(new URL('app.js',dir),'utf8');
+  assert.match(monero,/setInterval\(updateNetwork,15\*60\*1000\)/);
+  assert.match(pow,/setInterval\(refresh,15\*60\*1000\)/);
+  assert.match(general,/setInterval\(refreshFeed,15\*60\*1000\)/);
+  assert.match(monero,/setInterval\(render,60\*1000\)/);
+  assert.match(pow,/setInterval\(render,60\*1000\)/);
+  assert.match(general,/setInterval\(\(\)=>\{/);
+  for(const file of [monero,pow,general])
+    assert.doesNotMatch(file,/setInterval\([^,\n]+,5\*60\*1000\)/);
+});
