@@ -1,0 +1,42 @@
+{
+  "baseCommit": "dfc072becc46252c38b81dde25fcc302f40a52c0",
+  "basePr": 357,
+  "nativeParserErrors": {
+    "code": -1,
+    "derivation": "CRPCTable::execute wraps std::exception as RPC_MISC_ERROR; AuxMiningSubmitBlock deserializes CAuxPow directly",
+    "markers": [
+      "CDataStream::read(): end of data",
+      "non-canonical ReadCompactSize()"
+    ]
+  },
+  "nativeSource": {
+    "commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "license": "MIT",
+    "readFilesSha256": {
+      "COPYING": "ff692211a86e69de91712125c9d6015fa5b1d15125329f80c09a9b61ec464bf6",
+      "qa/rpc-tests/test_framework/scrypt_auxpow.py": "2468af157161d7b7ff5e2ffae83fa56004872d447fc085cfc85a3e73cd69e2af",
+      "src/auxpow.cpp": "b22c836336b15e4902af21631423e98120846948424f277c31ccd04fa0f0e414",
+      "src/auxpow.h": "7da15a3adff3e3e6a83020fb924c73a40709485ca23a7e3083d69d3a809bd2b3",
+      "src/rpc/blockchain.cpp": "219a002f86ba8f9e9d1a862cb9d76a255c5c6ae56f5ff94d592a31c4e5698455",
+      "src/rpc/mining.cpp": "90e11cddd7fa3918978b2fb362d3b111bf102c9f307395205baa8b15a930954d",
+      "src/rpc/protocol.h": "a34c6364421459560ea7d94a78ecf69ca27e8e21fa1d5f94a6d842de05a750c9",
+      "src/rpc/server.cpp": "ed005c2a18dc3d75d34e25c4004776f1b75efbf7576d73cbddfa4a5bc9f6a86c",
+      "src/serialize.h": "9043ee317b9d96e8b24f23e197d193263dc7db8c5acf718aa52c5949ef6c1c36",
+      "src/streams.h": "d21b0eb3f3ed6ca119448efcc189d4d17633a2b7585e034068ad4eea6fb11258",
+      "src/test/auxpow_tests.cpp": "b561e482848e8d5160d7b492d7da86b16939f3c14cdecc85103adef8db72ac00"
+    },
+    "release": "1.14.9",
+    "repository": "https://github.com/dogecoin/dogecoin"
+  },
+  "newProperties": 12,
+  "previousEightControlsRepeated": false,
+  "publicSeed": {
+    "artifactId": 13897096479,
+    "manifestSha256": "ace1f4d52cfac8c0cb68ad23c2ce603d2e0b0f1c4c92fe3f4591b0e24b1ac0b9",
+    "runId": 43111959236,
+    "runtimeFromSeedExecuted": false,
+    "streamSha256": "3416b8b69aea7cd1f690810e068954ac3132197bd2a1ed074a7b0c89c6e25309"
+  },
+  "schemaVersion": 1,
+  "scope": "Fixed private Regtest proofs; no signing key, transaction signing/broadcast, wallet or financial activation."
+}

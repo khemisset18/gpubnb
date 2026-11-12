@@ -36,11 +36,12 @@ RPC_PORTS = {'a':18332, 'b':18333}
 MAX_BLOCKS, MAX_RPC, MAX_FIXTURES = 1370, 480, 8
 FEE_MAX_FIXTURES, FEE_MAX_BYTES = 96, 60000
 VM_SUITES=('recovery-handoff','recovery-independent','recovery-resume')
-LAB_SUITES=('multinode','fee-pinning',*VM_SUITES)
+LAB_SUITES=('multinode','fee-pinning',*VM_SUITES,'auxpow-expanded')
 METHODS = frozenset({'getblockchaininfo','getblockhash','getnetworkinfo','getpeerinfo',
     'generatetoaddress','getblock','getrawtransaction','gettxout','sendrawtransaction',
     'getmempoolentry','getrawmempool','getblockheader','getmempoolinfo','addnode','setnetworkactive','invalidateblock','reconsiderblock','stop',
     'createauxblock','submitauxblock'})
+AUX_METHODS=METHODS-{'getrawtransaction','gettxout','sendrawtransaction','getmempoolentry','getrawmempool','getmempoolinfo'}
 
 
 def manifest(lab_suite='multinode'):
@@ -71,13 +72,19 @@ def manifest(lab_suite='multinode'):
                 importedPublicBlocksMaximum=1362,physicalMachineIndependence='NOT_TESTED',
                 signingAllowed=lab_suite=='recovery-handoff',maxObservedRollbackDepth=4,
                 maxMockTimeAdvanceSeconds=0,keys='producer: ephemeral keys removed before funding; consumer: no signing keys')
+    if lab_suite=='auxpow-expanded':
+        result.update(rpcAllowlist=sorted(AUX_METHODS),maxRpc=400,maxGeneratedBlocks=16,
+            maxBroadcastFixtures=0,maxAuxpowFixtures=32,importedPublicBlocksMaximum=1355,
+            keys='no signing keys created or provided',signingAllowed=False,
+            repeatsPreviouslyQualifiedSuite=False,
+            notCovered=['exhaustive AuxPoW byte fuzzing','independent external review','all D0-D9 requirements'])
     return result
 
 
 def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, aux_submitted=frozenset(),
                  lab_suite='multinode',mocktimes=frozenset()):
     require(lab_suite in LAB_SUITES,'fixed laboratory suite required')
-    methods=METHODS|({'setmocktime'} if lab_suite=='fee-pinning' else set())
+    methods=AUX_METHODS if lab_suite=='auxpow-expanded' else METHODS|({'setmocktime'} if lab_suite=='fee-pinning' else set())
     require(node in NODES and method in methods, 'fixed node/method required')
     require(type(params) in (tuple,list) and all(type(p) is str for p in params), 'string RPC parameters required')
     params=tuple(params)
@@ -85,7 +92,7 @@ def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, a
         require(len(params)==4 and params[0] in ('1352','1','2','4')
                 and params[1]==addresses[node] and params[2]=='1000000'
                 and params[3]==('0' if params[0]=='1352' else '1'), 'bounded mining parameters required')
-        require(lab_suite not in ('recovery-independent','recovery-resume') or params[0]!='1352',
+        require(lab_suite not in ('recovery-independent','recovery-resume','auxpow-expanded') or params[0]!='1352',
                 'consumer may replay public blocks but cannot remine initial chain')
     elif method=='addnode':
         other='b' if node=='a' else 'a'
@@ -104,9 +111,9 @@ def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, a
     elif method=='gettxout':require(len(params)==3 and params[0] in txids and params[1] in ('0','1','2','3')
                 and params[2] in ('true','false'),'registered funding output required')
     elif method=='sendrawtransaction':require(len(params)==1 and params[0] in submitted,'registered signed fixture required')
-    elif method=='createauxblock':require(node=='a' and params==(addresses[node],),'fixed private template destination required')
-    elif method=='submitauxblock':require(node=='a' and len(params)==2 and params[0] in blocks
-                and type(aux_submitted) in (set,frozenset) and len(aux_submitted)<=MAX_PROOFS
+    elif method=='createauxblock':require((node=='a' or lab_suite=='auxpow-expanded') and params==(addresses[node],),'fixed private template destination required')
+    elif method=='submitauxblock':require((node=='a' or lab_suite=='auxpow-expanded') and len(params)==2 and params[0] in blocks
+                and type(aux_submitted) in (set,frozenset) and len(aux_submitted)<=(32 if lab_suite=='auxpow-expanded' else MAX_PROOFS)
                 and params in aux_submitted and 0<len(params[1])<=8192
                 and len(params[1])%2==0 and re.fullmatch('[0-9a-f]+',params[1]),
                 'registered private AuxPoW fixture required')
@@ -193,14 +200,18 @@ def run(args, recovery_runner=None, bundle_validator=None):
         (out/'multinode-report.json').write_text(dump(report));(out/'rpc-requests.json').write_text(dump(trace))
     save();report['members']=extract_verified_members(evidence/ARCHIVE,sbom,bins)
     handoff_root=getattr(args,'handoff_directory',None);handoff_manifest=None
-    if lab_suite in VM_SUITES:
+    if lab_suite in (*VM_SUITES,'auxpow-expanded'):
         require(re.fullmatch('[0-9a-f]{40}',getattr(args,'execution_commit','') or '') is not None,
                 'exact VM experiment execution commit required')
-    if lab_suite in ('recovery-independent','recovery-resume'):
-        from vm_recovery import load_parcel
+    if lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded'):
         require(handoff_root is not None,'independently retained handoff required')
-        handoff_manifest=load_parcel(handoff_root,getattr(args,'handoff_sha256',None))
-        require(handoff_manifest['executionCommit']==args.execution_commit,'VM handoff source differs from dispatched execution')
+        if lab_suite=='auxpow-expanded':
+            from auxpow_boundaries import load_public_seed
+            handoff_manifest=load_public_seed(handoff_root,getattr(args,'handoff_sha256',None))
+        else:
+            from vm_recovery import load_parcel
+            handoff_manifest=load_parcel(handoff_root,getattr(args,'handoff_sha256',None))
+            require(handoff_manifest['executionCommit']==args.execution_commit,'VM handoff source differs from dispatched execution')
         require(set(handoff_manifest['addresses'])==set(NODES)
                 and all(re.fullmatch('[mn][1-9A-HJ-NP-Za-km-z]{25,34}',v) for v in handoff_manifest['addresses'].values()),
                 'fixed public Regtest mining destinations required')
@@ -209,27 +220,37 @@ def run(args, recovery_runner=None, bundle_validator=None):
     resource.setrlimit(resource.RLIMIT_FSIZE,(512*1024**2,512*1024**2))
     def alarm(*_):raise TimeoutError('private multi-node wall-time budget')
     signal.signal(signal.SIGALRM,alarm);signal.signal(signal.SIGTERM,alarm);signal.alarm(900)
-    def rpc(node,method,*params,reject=None,missing_ok=False):
+    def rpc(node,method,*params,reject=None,missing_ok=False,parser_reject=None):
         nonlocal generated
         validate_rpc(node,method,params,addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,
             aux_submitted=aux_submitted,lab_suite=lab_suite,mocktimes=mocktimes)
         require(len(trace)+len(external_calls)<rpc_limit,'RPC budget exceeded')
         if method=='generatetoaddress':generated+=int(params[0]);require(generated<=limits['maxGeneratedBlocks'],'block budget exceeded')
-        if method=='submitauxblock':require(generated<MAX_BLOCKS,'AuxPoW block budget exceeded')
+        if method=='submitauxblock':require(generated<limits['maxGeneratedBlocks'],'AuxPoW block budget exceeded')
+        if parser_reject is not None:
+            require(lab_suite=='auxpow-expanded' and method=='submitauxblock'
+                    and parser_reject in ('CDataStream::read(): end of data','non-canonical ReadCompactSize()'),
+                    'fixed private AuxPoW parser refusal required')
         row={'source':node,'method':method,'params':list(params)};trace.append(row);save()
         result=subprocess.run([str(bins/'dogecoin-cli'),*common[node],'-rpcconnect=127.0.0.1',method,*params],
             env=env,capture_output=True,text=True,timeout=180 if method=='generatetoaddress' else 15)
         require(len(result.stdout)<=2*1024**2 and len(result.stderr)<=8192,'RPC output bound')
         row.update(exitCode=result.returncode,stdout=result.stdout,stderr=result.stderr,
                    reachedServer=rpc_reached_server(result.returncode,result.stderr));save()
+        if parser_reject is not None:
+            require(result.returncode!=0 and re.search(r'^error code: -1$',result.stderr,re.MULTILINE)
+                    and parser_reject in result.stderr,'different native AuxPoW parser refusal')
+            return {'exitCode':result.returncode,'reason':result.stderr}
         if reject:require_rejection(result.returncode,result.stderr,reject);return {'exitCode':result.returncode,'reason':result.stderr}
         if missing_ok and result.returncode:
             require(re.search(r'^error code: -5$',result.stderr,re.MULTILINE) is not None,'only native unknown-tx error may be absent')
             return None
         result.check_returncode();value=result.stdout.strip()
         if not value:return None
-        try:return json.loads(value,parse_float=Decimal)
-        except json.JSONDecodeError:return value
+        try:parsed=json.loads(value,parse_float=Decimal)
+        except json.JSONDecodeError:parsed=value
+        if lab_suite=='auxpow-expanded' and method=='submitauxblock' and parsed is True:generated+=1
+        return parsed
     def start(node,import_file=None):
         data=work/('data-'+node)
         if node not in common:
@@ -245,7 +266,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
         if lab_suite in ('fee-pinning',*VM_SUITES):
             daemon+=['-mempoolreplacement='+('0' if node=='b' else '1'),'-debug=mempoolrej']
         if import_file is not None:
-            require(lab_suite in ('recovery-independent','recovery-resume') and handoff_root is not None
+            require(lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded') and handoff_root is not None
                     and Path(import_file).resolve()==Path(handoff_root).resolve()/'public-chain.dat',
                     'only verified public block handoff may be imported')
             daemon+=['-loadblock='+str(import_file)]
@@ -323,7 +344,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
             entry['retainedTestDumpSha256']=hashlib.sha256(backup.read_bytes()).hexdigest()
         report.setdefault('feeRestarts',[]).append(entry);save();return start(node)
     def import_chain(path,tip,height):
-        require(lab_suite in ('recovery-independent','recovery-resume') and handoff_manifest is not None
+        require(lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded') and handoff_manifest is not None
                 and tip==handoff_manifest['blocks'][-1] and height==len(handoff_manifest['blocks']),
                 'verified independent public chain required')
         for node in NODES:
@@ -377,6 +398,12 @@ def run(args, recovery_runner=None, bundle_validator=None):
             identity={'blockchain':chain,'genesis':rpc(n,'getblockhash','0'),'network':rpc(n,'getnetworkinfo'),'peers':peer_view(n)}
             validate_network(identity);report.setdefault('initialIdentities',{})[n]=identity
         verify=native_verifier(bins/'libdogecoinconsensus.so.0.0.0')
+        if lab_suite=='auxpow-expanded':
+            from auxpow_boundaries import run_expanded
+            run_expanded(dict(rpc=rpc,wait=wait_for,sync=synchronized,peers=peer_view,mine=mine,
+                import_chain=import_chain,addresses=addresses,blocks=blocks,aux_submitted=aux_submitted,
+                out=out,report=report,save=save),handoff_root,handoff_manifest)
+            finish();return
         if lab_suite in ('recovery-independent','recovery-resume'):
             from vm_recovery import consume
             consume(dict(rpc=rpc,submit=submit,mine=mine,tx=tx,wait=wait_for,sync=synchronized,

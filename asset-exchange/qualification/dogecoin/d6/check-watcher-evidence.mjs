@@ -1,11 +1,34 @@
 import fs from "node:fs";
 import assert from "node:assert/strict";
 import { assessDogeObservations } from "../../../chain-watchers/src/dogecoin-observation.mjs";
+import { tipEvidenceConsistency } from "../../../chain-watchers/src/evidence.mjs";
 const [input,output]=process.argv.slice(2);
 assert(input && output,"report and output paths required");
 assert(fs.statSync(input).size<=2*1024*1024,"bounded report required");
 const report=JSON.parse(fs.readFileSync(input,"utf8"));
 assert.equal(report.experimentStatus,"PASS");assert.equal(report.qualificationStatus,"BLOCKED");
+if(report.auxpowExpanded){
+  assert.equal(report.manifest.labSuite,"auxpow-expanded");
+  assert.equal(report.auxpowExpanded.previousEightControlsRepeated,false);
+  assert.equal(report.auxpowExpanded.cases.length,12);
+  assert(report.auxpowExpanded.cases.every(x=>x.status==="PASS"));
+  const expected={"before-probes":"CONSISTENT","after-negative-probes":"CONSISTENT",
+    "after-valid-boundaries":"CONSISTENT","partitioned-boundary-chain":"UNCERTAIN",
+    "converged-boundary-reorg":"CONSISTENT"};
+  const tipStages={};
+  for(const stage of report.auxpowExpanded.tipStages){
+    assert(Object.hasOwn(expected,stage.label)&&!Object.hasOwn(tipStages,stage.label));
+    assert.equal(stage.observations.length,2);
+    assert.deepEqual(stage.observations.map(x=>x.sourceId).sort(),["doge-a","doge-b"]);
+    assert(stage.observations.every(x=>x.chainId==="dogecoin"&&x.networkId==="regtest"));
+    const consistency=tipEvidenceConsistency(stage.observations);
+    assert.equal(consistency,expected[stage.label]);
+    tipStages[stage.label]={consistency,settlementAllowed:false,canAdvance:false};
+  }
+  assert.deepEqual(Object.keys(tipStages).sort(),Object.keys(expected).sort());
+  fs.writeFileSync(output,JSON.stringify({historicalEvidenceReview:true,scope:"auxpow-chain-tips-only",
+    qualificationStatus:"BLOCKED",settlementAllowed:false,tipStages},null,2)+"\n");
+}else{
 const stages={};let previousBySource={};
 for(const stage of report.stages){
   assert(!stages[stage.label],"duplicate stage");
@@ -22,3 +45,4 @@ assert.equal(stages.converged_refund.consistency,"CONSISTENT");assert.equal(stag
 assert.equal(stages.recovery_refund_confirmed.consistency,"CONSISTENT");
 assert.equal(stages.recovery_refund_confirmed.canAdvance,false);
 fs.writeFileSync(output,JSON.stringify({historicalEvidenceReview:true,qualificationStatus:"BLOCKED",settlementAllowed:false,stages},null,2)+"\n");
+}
