@@ -16,7 +16,7 @@ const KEYS=Object.freeze({XMR:'net:xmr',ETC:'net:etc',RVN:'net:rvn'});
 const BACKUP_MAX_MS=Math.min(MAX_PUBLIC_AGE_MS,PUBLIC_FRESH_MS);
 const BACKUP_TTL_SECONDS=BACKUP_MAX_MS/1000;
 // Hourly cron + 15-minute grace for propagation and upstream latency.
-const EXPECTED_REFRESH_MS=75*60*1000;
+export const EXPECTED_REFRESH_MS=75*60*1000;
 const jsonHeaders=Object.freeze({
  'Content-Type':'application/json; charset=utf-8',
  'Cache-Control':'no-store, max-age=0',
