@@ -1,0 +1,656 @@
+{
+  "artifactId": 13985234147,
+  "artifactSha256": "5f6910e54b6160bf625393893ee96fd51b8441208f10eacfdcbf8fa64c2e05cb",
+  "boundaryBlockReorg": {
+    "bothNativeNodesConverged": true,
+    "orphanedBoundaryBlocks": [
+      "264ad31f5a8156054b1e87ab1555111a3d924e4893775b5dc93933175d0be2ba",
+      "74aad14204c0b1be963e1e0827feadfb6d8282659512920f1b166f7eaeffbcea",
+      "310a1dec4488b246ad4d8541fecaeb69991e36607ae0ca04749019e6512fe6ba"
+    ],
+    "rollbackDepth": 3,
+    "temporaryLocalRollbackReconsideredBeforePeering": true,
+    "winningBranchLength": 4,
+    "winningTip": "2701d9d59dee2cdfebb8fe4cd6faad0ecf49baa6b4d78b349d838d78f7a7ddc2"
+  },
+  "cases": [
+    {
+      "case": "parent-noncoinbase-index",
+      "expectationScope": "consensus",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "AuxPow is not a generate",
+          "nativeResult": false,
+          "proofSha256": "2483fe2ed59d9fe51434f7b860052fee4bec9ce7564f9b6d274ca0df23187946",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "AuxPow is not a generate",
+          "nativeResult": false,
+          "proofSha256": "b409953e61fa8fe200c5c2c3a4248ba433c438fed793b09cfc9d4a94cd5101b4",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "parent-no-inputs",
+      "expectationScope": "consensus",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "Aux POW coinbase has no inputs",
+          "nativeResult": false,
+          "proofSha256": "ac2bfcc4f077d9e3ca11356ee154023e2d01ee3cc076db4742e603dc0f47027e",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "Aux POW coinbase has no inputs",
+          "nativeResult": false,
+          "proofSha256": "ac2bfcc4f077d9e3ca11356ee154023e2d01ee3cc076db4742e603dc0f47027e",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "duplicate-merged-headers",
+      "expectationScope": "consensus",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "Multiple merged mining headers in coinbase",
+          "nativeResult": false,
+          "proofSha256": "1965910d560da5829d6e22f3c7720341ee56dcd51e1b4ee1cf921e54761e274f",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "Multiple merged mining headers in coinbase",
+          "nativeResult": false,
+          "proofSha256": "3bdf405ca59d1ca22165b94c09f316cb262f6e60846f008fe750362ab9b4ae0c",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "displaced-merged-header",
+      "expectationScope": "consensus",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "Merged mining header is not just before chain merkle root",
+          "nativeResult": false,
+          "proofSha256": "7b1be3c1da0855979b45fd1e405bbb19e5129f7be814d21d752a46176868ab55",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "Merged mining header is not just before chain merkle root",
+          "nativeResult": false,
+          "proofSha256": "8ac78c3ca62c257afafeb041ca389e32db626b2bf1812d4e529271e856f7b16a",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "legacy-root-offset-21",
+      "expectationScope": "consensus",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "Aux POW chain merkle root must start in the first 20 bytes of the parent coinbase",
+          "nativeResult": false,
+          "proofSha256": "bc7cdf89653faf9f47c67e61a3626ad8eb66ab8141f642b2a58c7e5b1c8c1179",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "Aux POW chain merkle root must start in the first 20 bytes of the parent coinbase",
+          "nativeResult": false,
+          "proofSha256": "ccf17a03103dbec39fc8963bd8107e629fb76e44bfbe556b37e6a70151ad8d47",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "missing-commitment-nonce",
+      "expectationScope": "consensus",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "Aux POW missing chain merkle tree size and nonce in parent coinbase",
+          "nativeResult": false,
+          "proofSha256": "dc14fe1b7b5a096cbed17f94167a863b119d9f5d75575ac2e2e3c147effe9991",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "Aux POW missing chain merkle tree size and nonce in parent coinbase",
+          "nativeResult": false,
+          "proofSha256": "56f97a86bfee772dfa8b76ff995b4cf7b3e1450b54d5d0a66b15bb7115b44ca3",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "truncated-parent-header",
+      "expectationScope": "rpc-deserialization",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "CDataStream::read(): end of data",
+          "nativeResult": {
+            "exitCode": 1,
+            "reason": "error code: -1\nerror message:\nCDataStream::read(): end of data: iostream error\n"
+          },
+          "proofSha256": "acac6001d4ba991dc2c542b25fa0a3f283ccca7cb673b22e08e7cc950fd392b8",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "CDataStream::read(): end of data",
+          "nativeResult": {
+            "exitCode": 1,
+            "reason": "error code: -1\nerror message:\nCDataStream::read(): end of data: iostream error\n"
+          },
+          "proofSha256": "57faa7095f53cfb645277470d54401be7a819f1edf180f21c232ed725102b4ae",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "noncanonical-parent-branch-count",
+      "expectationScope": "rpc-deserialization",
+      "observations": [
+        {
+          "height": 1355,
+          "nativeReason": "non-canonical ReadCompactSize()",
+          "nativeResult": {
+            "exitCode": 1,
+            "reason": "error code: -1\nerror message:\nnon-canonical ReadCompactSize(): iostream error\n"
+          },
+          "proofSha256": "69a44085677c4536f3bf473895cc989fd7c638f6ec2c4a03d105eed991262fb5",
+          "source": "a",
+          "templateHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        },
+        {
+          "height": 1355,
+          "nativeReason": "non-canonical ReadCompactSize()",
+          "nativeResult": {
+            "exitCode": 1,
+            "reason": "error code: -1\nerror message:\nnon-canonical ReadCompactSize(): iostream error\n"
+          },
+          "proofSha256": "29e05880a03b7dffc7735380ce3a49da5b26451afcb6f5496f47fcd6d443070c",
+          "source": "b",
+          "templateHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+          "unchangedTip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "case": "legacy-root-offset-20",
+      "expectationScope": "consensus",
+      "nativeAcceptedBlocks": [
+        {
+          "chainBranchLength": 0,
+          "hash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "height": 1356,
+          "parentBranchLength": 0,
+          "source": "a"
+        },
+        {
+          "chainBranchLength": 0,
+          "hash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+          "height": 1356,
+          "parentBranchLength": 0,
+          "source": "b"
+        }
+      ],
+      "proofSha256": "62464cea0beab23a2243edaf06add471518d6719d7e9c0c015ea594dd2ac2cde",
+      "sameTemplateValidAfterNewRejections": true,
+      "status": "PASS",
+      "submittedTrailingBytes": 0
+    },
+    {
+      "case": "chain-branch-height-30",
+      "expectationScope": "consensus",
+      "nativeAcceptedBlocks": [
+        {
+          "chainBranchLength": 30,
+          "hash": "264ad31f5a8156054b1e87ab1555111a3d924e4893775b5dc93933175d0be2ba",
+          "height": 1357,
+          "parentBranchLength": 0,
+          "source": "a"
+        },
+        {
+          "chainBranchLength": 30,
+          "hash": "264ad31f5a8156054b1e87ab1555111a3d924e4893775b5dc93933175d0be2ba",
+          "height": 1357,
+          "parentBranchLength": 0,
+          "source": "b"
+        }
+      ],
+      "proofSha256": "4afe5e0aea26217ede8f01b0a834e2dca465ae2b2322c04da47ebf66f1ab0838",
+      "sameTemplateValidAfterNewRejections": false,
+      "status": "PASS",
+      "submittedTrailingBytes": 0
+    },
+    {
+      "case": "parent-branch-height-31",
+      "expectationScope": "consensus",
+      "nativeAcceptedBlocks": [
+        {
+          "chainBranchLength": 0,
+          "hash": "74aad14204c0b1be963e1e0827feadfb6d8282659512920f1b166f7eaeffbcea",
+          "height": 1358,
+          "parentBranchLength": 31,
+          "source": "a"
+        },
+        {
+          "chainBranchLength": 0,
+          "hash": "74aad14204c0b1be963e1e0827feadfb6d8282659512920f1b166f7eaeffbcea",
+          "height": 1358,
+          "parentBranchLength": 31,
+          "source": "b"
+        }
+      ],
+      "proofSha256": "0b3e8687b3735e6e90065a31e160076d31021f32f46c5c8c92969cecf7d14de6",
+      "sameTemplateValidAfterNewRejections": false,
+      "status": "PASS",
+      "submittedTrailingBytes": 0
+    },
+    {
+      "case": "trailing-rpc-data",
+      "expectationScope": "rpc-parser-normalization",
+      "nativeAcceptedBlocks": [
+        {
+          "chainBranchLength": 0,
+          "hash": "310a1dec4488b246ad4d8541fecaeb69991e36607ae0ca04749019e6512fe6ba",
+          "height": 1359,
+          "parentBranchLength": 0,
+          "source": "a"
+        },
+        {
+          "chainBranchLength": 0,
+          "hash": "310a1dec4488b246ad4d8541fecaeb69991e36607ae0ca04749019e6512fe6ba",
+          "height": 1359,
+          "parentBranchLength": 0,
+          "source": "b"
+        }
+      ],
+      "proofSha256": "d27e42e5c4fdf3f8293aa3749a4263ff307dfd472632c3e7cac8cdddda11208d",
+      "sameTemplateValidAfterNewRejections": false,
+      "status": "PASS",
+      "submittedTrailingBytes": 15
+    }
+  ],
+  "evidenceFileSha256": {
+    "auxpow-expanded-fixtures.json": "29344c0848722e5ce1e4ea574eeecaa77264194086ab6b3aec9b20290b463c49",
+    "daemon-a.log": "b5b8636be3337a1ac0d9742097e8338db40ca653cac4d257f185dcfc0b0cf2a7",
+    "daemon-b.log": "b7e6e32672467b574be709c9c9fd86646e1bb6d8e051e393b8ebc6949522a656",
+    "multinode-report.json": "d8ae4fdc31975d7b456b583e102bd78d95f95a8f0c15531ce893dc30e7f057f6",
+    "rpc-requests.json": "1a2c5827ba27755d352a87722db4596cd7850296b7a4a1bf9d9c784e11a9a3ea",
+    "watcher-review.json": "9a83938165e9b2899900ad0c56386a6be80f111a6d8bcc702fbfc8243e8863f0"
+  },
+  "executionCommit": "c7adde84149250c3a972e570b5df4911b20778ee",
+  "experimentStatus": "PASS",
+  "generatedBlocks": 8,
+  "harnessCommit": "eadb9c1e3265cf3858a0bebdc0917964b8f89ede",
+  "keysCreated": false,
+  "nativePairedRejections": 16,
+  "nativeServerAudit": {
+    "a": {
+      "count": 67,
+      "methods": {
+        "addnode": 2,
+        "createauxblock": 4,
+        "getblock": 4,
+        "getblockchaininfo": 33,
+        "getblockhash": 1,
+        "getblockheader": 3,
+        "getnetworkinfo": 1,
+        "getpeerinfo": 5,
+        "stop": 2,
+        "submitauxblock": 12
+      }
+    },
+    "b": {
+      "count": 63,
+      "methods": {
+        "createauxblock": 1,
+        "generatetoaddress": 1,
+        "getblock": 4,
+        "getblockchaininfo": 34,
+        "getblockhash": 1,
+        "getblockheader": 3,
+        "getnetworkinfo": 1,
+        "getpeerinfo": 4,
+        "invalidateblock": 1,
+        "reconsiderblock": 1,
+        "setnetworkactive": 2,
+        "stop": 2,
+        "submitauxblock": 8
+      }
+    }
+  },
+  "newProperties": 12,
+  "proofChecks": [
+    {
+      "case": "parent-noncoinbase-index",
+      "chainBranchLength": 0,
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "parentBranchLength": 1,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "06401a16a9d0083052a5db163b45f2064459dca66d9fd33a2d60b920adf6674e",
+      "parentWorkValid": true,
+      "sha256": "2483fe2ed59d9fe51434f7b860052fee4bec9ce7564f9b6d274ca0df23187946",
+      "source": "a",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "parent-noncoinbase-index",
+      "chainBranchLength": 0,
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "parentBranchLength": 1,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "d588ae162b889535af6d779cb5579b54cf8cf7535736b6c577e8493b7fbf5a0d",
+      "parentWorkValid": true,
+      "sha256": "b409953e61fa8fe200c5c2c3a4248ba433c438fed793b09cfc9d4a94cd5101b4",
+      "source": "b",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "parent-no-inputs",
+      "chainBranchLength": 0,
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "c28485b35eaeab335ee7ba47e29be60ea0fd8727612406624e3148988bd01470",
+      "parentWorkValid": true,
+      "sha256": "ac2bfcc4f077d9e3ca11356ee154023e2d01ee3cc076db4742e603dc0f47027e",
+      "source": "a",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "parent-no-inputs",
+      "chainBranchLength": 0,
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "c28485b35eaeab335ee7ba47e29be60ea0fd8727612406624e3148988bd01470",
+      "parentWorkValid": true,
+      "sha256": "ac2bfcc4f077d9e3ca11356ee154023e2d01ee3cc076db4742e603dc0f47027e",
+      "source": "b",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "duplicate-merged-headers",
+      "chainBranchLength": 0,
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "80548670ff1e9e6b9450739be9c6abdf966c7f4e2d8a359114044f4d5314081d",
+      "parentWorkValid": true,
+      "sha256": "1965910d560da5829d6e22f3c7720341ee56dcd51e1b4ee1cf921e54761e274f",
+      "source": "a",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "duplicate-merged-headers",
+      "chainBranchLength": 0,
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "bf63643484f9284bb06e33e15cb7ec612abb7290c1bfa5e027f9fa753974ee4d",
+      "parentWorkValid": true,
+      "sha256": "3bdf405ca59d1ca22165b94c09f316cb262f6e60846f008fe750362ab9b4ae0c",
+      "source": "b",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "displaced-merged-header",
+      "chainBranchLength": 0,
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "c68bdbfb5cb5cd0ef0a7e15341a803f60552e92bdfa1851020871b542504081b",
+      "parentWorkValid": true,
+      "sha256": "7b1be3c1da0855979b45fd1e405bbb19e5129f7be814d21d752a46176868ab55",
+      "source": "a",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "displaced-merged-header",
+      "chainBranchLength": 0,
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "a31ae1549c74bbd2210da1a15214f526ea54573b37d4786da5c9b36ce8dfc574",
+      "parentWorkValid": true,
+      "sha256": "8ac78c3ca62c257afafeb041ca389e32db626b2bf1812d4e529271e856f7b16a",
+      "source": "b",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "legacy-root-offset-21",
+      "chainBranchLength": 0,
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "459c0e4ad6c6a37e66374a718d687f1eea42e04954c9321d4927ab9d0dc48d68",
+      "parentWorkValid": true,
+      "sha256": "bc7cdf89653faf9f47c67e61a3626ad8eb66ab8141f642b2a58c7e5b1c8c1179",
+      "source": "a",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "legacy-root-offset-21",
+      "chainBranchLength": 0,
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "c55731f875dc287ecdc576ab0258af4abbd3d895c60e885a6dd0ab11696e9d5f",
+      "parentWorkValid": true,
+      "sha256": "ccf17a03103dbec39fc8963bd8107e629fb76e44bfbe556b37e6a70151ad8d47",
+      "source": "b",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "missing-commitment-nonce",
+      "chainBranchLength": 0,
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "6be4e151dc2d7ef52b3274dedadfd63ec26f3f32d4e3954a5370ed76389ff944",
+      "parentWorkValid": true,
+      "sha256": "dc14fe1b7b5a096cbed17f94167a863b119d9f5d75575ac2e2e3c147effe9991",
+      "source": "a",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "missing-commitment-nonce",
+      "chainBranchLength": 0,
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "7ad3d1d914348a77e8cedbef2d47a4cae6da93de6330d2da39441f7765ff3b3d",
+      "parentWorkValid": true,
+      "sha256": "56f97a86bfee772dfa8b76ff995b4cf7b3e1450b54d5d0a66b15bb7115b44ca3",
+      "source": "b",
+      "trailingRpcBytes": 0
+    },
+    {
+      "case": "truncated-parent-header",
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "sha256": "acac6001d4ba991dc2c542b25fa0a3f283ccca7cb673b22e08e7cc950fd392b8",
+      "source": "a",
+      "strictDecoderRejection": "truncated"
+    },
+    {
+      "case": "truncated-parent-header",
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "sha256": "57faa7095f53cfb645277470d54401be7a819f1edf180f21c232ed725102b4ae",
+      "source": "b",
+      "strictDecoderRejection": "truncated"
+    },
+    {
+      "case": "noncanonical-parent-branch-count",
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "sha256": "69a44085677c4536f3bf473895cc989fd7c638f6ec2c4a03d105eed991262fb5",
+      "source": "a",
+      "strictDecoderRejection": "noncanonical"
+    },
+    {
+      "case": "noncanonical-parent-branch-count",
+      "childHash": "43ec47423748e2c6bbb1eea886beea65d5391c6f2ed7c1edd2ef5df97bd3f7f7",
+      "sha256": "29e05880a03b7dffc7735380ce3a49da5b26451afcb6f5496f47fcd6d443070c",
+      "source": "b",
+      "strictDecoderRejection": "noncanonical"
+    },
+    {
+      "case": "legacy-root-offset-20",
+      "chainBranchLength": 0,
+      "childHash": "65ebee690a262a7b4ac42d1bda2ad6a311d92ed97278a33712e7e68f962b5e8a",
+      "nativeConsensusFieldsDecodedIdenticallyOnBothNodes": true,
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "77f7f84812093219d2f700a7b5f5ac5336f15fa234397f46bc3c24a507df5155",
+      "parentWorkValid": true,
+      "sha256": "62464cea0beab23a2243edaf06add471518d6719d7e9c0c015ea594dd2ac2cde",
+      "source": "a",
+      "trailingRpcBytes": 0,
+      "unusedMerkleTxHashField": "input bytes; not independently exposed by native JSON"
+    },
+    {
+      "case": "chain-branch-height-30",
+      "chainBranchLength": 30,
+      "childHash": "264ad31f5a8156054b1e87ab1555111a3d924e4893775b5dc93933175d0be2ba",
+      "nativeConsensusFieldsDecodedIdenticallyOnBothNodes": true,
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "474e17a694e27acb41c38c6a4911621c3c2ffa45cbd8131ce6ac1b08116e4377",
+      "parentWorkValid": true,
+      "sha256": "4afe5e0aea26217ede8f01b0a834e2dca465ae2b2322c04da47ebf66f1ab0838",
+      "source": "a",
+      "trailingRpcBytes": 0,
+      "unusedMerkleTxHashField": "input bytes; not independently exposed by native JSON"
+    },
+    {
+      "case": "parent-branch-height-31",
+      "chainBranchLength": 0,
+      "childHash": "74aad14204c0b1be963e1e0827feadfb6d8282659512920f1b166f7eaeffbcea",
+      "nativeConsensusFieldsDecodedIdenticallyOnBothNodes": true,
+      "parentBranchLength": 31,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "a26e6d6fdd22dece7aa4c3204cc52d191f40a2a4d0c6e4e990444c4253f56148",
+      "parentWorkValid": true,
+      "sha256": "0b3e8687b3735e6e90065a31e160076d31021f32f46c5c8c92969cecf7d14de6",
+      "source": "a",
+      "trailingRpcBytes": 0,
+      "unusedMerkleTxHashField": "input bytes; not independently exposed by native JSON"
+    },
+    {
+      "case": "trailing-rpc-data",
+      "chainBranchLength": 0,
+      "childHash": "310a1dec4488b246ad4d8541fecaeb69991e36607ae0ca04749019e6512fe6ba",
+      "nativeConsensusFieldsDecodedIdenticallyOnBothNodes": true,
+      "parentBranchLength": 0,
+      "parentMerkleCoherent": true,
+      "parentWorkHash": "e005e5165af8af3a1b3ee5bb74bbeafa8f3916dd556d8b2215cb9e8672c4265f",
+      "parentWorkValid": true,
+      "sha256": "d27e42e5c4fdf3f8293aa3749a4263ff307dfd472632c3e7cac8cdddda11208d",
+      "source": "a",
+      "trailingRpcBytes": 15,
+      "unusedMerkleTxHashField": "input bytes; not independently exposed by native JSON"
+    }
+  ],
+  "qualificationStatus": "BLOCKED",
+  "reusedPublicBlocks": 1355,
+  "rpcCalls": 133,
+  "runId": 43311713839,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43311713839",
+  "schemaVersion": 1,
+  "settlementAllowed": false,
+  "softwareChecks": {
+    "laboratory": 37,
+    "recovery": 22,
+    "signerFee": 12,
+    "watchers": 24
+  },
+  "transactionsBroadcast": 0,
+  "transactionsSigned": 0,
+  "validBoundaryBlocksAcceptedOnBothNodes": 4,
+  "verificationAfterDownload": "ZIP/internal digests, all20 transmitted proofs,16 complete parent-work/merkle/commitment proofs,4 strict deserialization refusals,8 decoded valid native proof objects,6 orphan confirmations and both entire RPC method counters independently rechecked.",
+  "watcherReview": {
+    "historicalEvidenceReview": true,
+    "qualificationStatus": "BLOCKED",
+    "scope": "auxpow-chain-tips-only",
+    "settlementAllowed": false,
+    "tipStages": {
+      "after-negative-probes": {
+        "canAdvance": false,
+        "consistency": "CONSISTENT",
+        "settlementAllowed": false
+      },
+      "after-valid-boundaries": {
+        "canAdvance": false,
+        "consistency": "CONSISTENT",
+        "settlementAllowed": false
+      },
+      "before-probes": {
+        "canAdvance": false,
+        "consistency": "CONSISTENT",
+        "settlementAllowed": false
+      },
+      "converged-boundary-reorg": {
+        "canAdvance": false,
+        "consistency": "CONSISTENT",
+        "settlementAllowed": false
+      },
+      "partitioned-boundary-chain": {
+        "canAdvance": false,
+        "consistency": "UNCERTAIN",
+        "settlementAllowed": false
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 Base: PR357 at `dfc072becc46252c38b81dde25fcc302f40a52c0`, preserving PR354's eight native controls, PR356's fifteen fee cases and PR357's independent VM recovery. The earlier eight AuxPoW controls are not selected again.
 
-Native status at preparation: **NOT_TESTED**. Software laboratory checks:37 PASS. Full D2–D9 and financial activation remain BLOCKED.
+Native status: **12 new properties PASS,0 FAIL,0 SKIP** in [manual run43311713839](https://github.com/khemisset18/gpubnb/actions/runs/43311713839). The additional boundary-block reorganisation also passed. Execution `c7adde84149250c3a972e570b5df4911b20778ee`, frozen source `eadb9c1e3265cf3858a0bebdc0917964b8f89ede`. Full D2–D9 and financial activation remain BLOCKED.
 
 All source assumptions come from unmodified Dogecoin1.14.9 commit `e0a1c157791544e818c901bd9341896965afbf9d`. The builder adapts its official C++ unit tests and QA wire layout, reuses the existing SHA256/Scrypt helpers and preserves MIT attribution. Only native observations decide acceptance.
 
@@ -31,4 +31,18 @@ The existing manual executor retains D0 provenance/SBOM, exact binaries, UP loop
 
 The existing historical watcher checker requires agreeing tips before/after proofs, uncertainty during partition and agreement after reorg. Block agreement alone enables no transaction progression or settlement. All qualification phases remain BLOCKED pending complete criteria and independent review.
 
-[source-index.json](research/2026-11-11/auxpow-boundaries/source-index.json) pins source hashes, error mappings and licensing. Complete synthetic proof bytes remain only in authorized native artifacts; bounded results will be committed after execution.
+[source-index.json](research/2026-11-11/auxpow-boundaries/source-index.json) pins source hashes, error mappings and licensing. Complete synthetic proof bytes remain only in authorized native artifacts; the [bounded result](research/2026-11-11/auxpow-boundaries/native-result.json) contains hashes and observations.
+
+## Verified execution
+
+The two native nodes made133/400 total RPC calls, imported1355 previously verified public blocks and generated only8 new blocks. No key was created; no transaction was signed or broadcast. Six consensus negatives returned native false on both nodes with their distinct new reasons. Two malformed encodings returned native RPC code-1 on both nodes, with the exact end-of-data/noncanonical-read markers. All16 rejected submissions preserved their tips. Four valid boundaries were decoded on both nodes. The longer branch orphaned three boundary blocks and converged at `2701d9d59dee2cdfebb8fe4cd6faad0ecf49baa6b4d78b349d838d78f7a7ddc2`; all six orphan-header observations reported confirmations-1. Historical watcher review was UNCERTAIN during partition and CONSISTENT after convergence; financial progression remained false throughout.
+
+Artifact13985234147 SHA256 `5f6910e54b6160bf625393893ee96fd51b8441208f10eacfdcbf8fa64c2e05cb` was downloaded and independently checked. The review parsed all20 transmitted inputs:16 complete proofs had adequate independently recomputed Scrypt work and coherent parent Merkle roots; four malformed serializations were independently rejected by the strict decoder. Both native decoded structures matched the complete accepted consensus fields. Native JSON's `tx.blockhash` is computed from the parent header; it does not expose the ignored MerkleTx wire hash, which is identified separately. Both full native method counters and all internal file checksums reconcile.
+
+The native job also passed37 laboratory,12 signer/fee,22 recovery and24 watcher software checks. D3 and both recovery-VM jobs deliberately skipped. Existing proof runs remain unchanged.
+
+The portable [offline verifier](research/2026-11-11/auxpow-boundaries/verify-native-artifact.py) checks this exact artifact's independent ZIP digest before extracting bounded safe paths, then verifies the proof fields, actual RPC results, log reasons, orphan headers and counters. It never starts Dogecoin or performs RPC:
+
+```sh
+python3 verify-native-artifact.py dogecoin-private-multinode-c7adde84149250c3a972e570b5df4911b20778ee.zip
+```
