@@ -159,7 +159,7 @@ function render(){
 }
 async function refresh(){
   try{
-    const response=await fetch('data/pow-reseaux.json?t='+Date.now(),{cache:'no-store'});
+    const response=await fetch('data/pow-reseaux.json');
     if(!response.ok)throw Error('Unavailable');
     const data=await response.json();
     if(!data||data.schemaVersion!==1||!Array.isArray(data.networks)||data.networks.length>50)throw Error('Invalid');
