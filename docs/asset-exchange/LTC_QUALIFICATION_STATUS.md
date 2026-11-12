@@ -6,7 +6,7 @@ This document is an evidence ledger, not an activation signal.
 
 | Gate | Status | Evidence and remaining blockers |
 |---|---|---|
-| L0: source/binary provenance | BLOCKED | 18/18 offline tests on 54be2a0 and d6e9edf; real official archive hash and signed SHA256SUMS.asc plus annotated source tag cryptographically verified using current release public key in networked CI 43123327322 on exact SHA d6e9edf. Independent out-of-band publisher identity attestation, independently reproduced build and reviewed dependency/toolchain proof still missing. |
+| L0: source/binary provenance | BLOCKED | 26/26 offline tests successful on b485e5d; official release binary hash, manifest and tag cryptographically checked on exact-SHA CI. Two Gitian output manifests match but one builder's GPG key (losh11) is expired: KEYEXPIRED/EXPKEYSIG. No independent build reproduction or independently authenticated signer trust. |
 | L1: Litecoin Regtest isolation | NOT_TESTED | No native node; no proved network/genesis identity or firewall evidence. |
 | L2: strict MWEB exclusion | NOT_TESTED | Only non-executable transparent-only specification; no executable validation path. |
 | L3: scripts and signature rules | NOT_TESTED | No Litecoin-native HTLC vectors or consensus/policy tests. |
@@ -37,3 +37,13 @@ d6e9edf6824697674573a88b69da917bfaa82e78 and artifact 13900479732.
 That is a *public publisher key* observation, not out-of-band
 human authentication of the signing key or independent build reproduction.
 L0 is BLOCKED; L1–L8 remain NOT_TESTED.
+
+## Dual Gitian investigation — 2026-11-12
+Two public Gitian Linux signed-assertion files have matching full output
+manifests and pinned source SHA. They are NOT equivalent to independent
+source builds. The `davidburkett38` signature has GOODSIG/VALIDSIG with
+current release key, but `losh11` gives VALIDSIG **plus** KEYEXPIRED /
+EXPKEYSIG with the archived key. The strict verifier rejects the pair.
+Gitian run 43125463639 on SHA b485e5d = FAILURE (intentional trust
+blocker); the offline verifier suite run 43125463716 = SUCCESS (26/26).
+No settlement or native Litecoin code was executed. See evidence index.

@@ -124,3 +124,43 @@ Missing evidence means BLOCKED, never PASS.
   dependency graph or verified multiple-builder release attestations.
   Accordingly `L0=BLOCKED`. All historical checks are attributed to
   their exact code SHA. Never treat passing GPG as proof of financial safety.
+
+## Two-builder Gitian attestation audit (2026-11-12)
+- Gitian repository pinned commit: `257e8c5e128c40091b9fcd0f7d2327587d04742d`,
+  directory `0.21.5.8-linux` with subdirectories `davidburkett38`
+  and `losh11`. Both 9-entry published `out_manifest` sections are
+  **byte-identical** and contain archive hash
+  `43200c9f9d65ebc126ea5833ca9429e144c4b3273da6bb9f4e89fd7450ab1be9`.
+  The `in_manifest` sections both pin the exact source commit
+  `ec1b6489a900d09cf5991e220dce089c77a232a2`.
+  Intermediate `base_manifests` are not identical; neither output is a
+  freshly reproduced build done by this project.
+- Code commit `b485e5de899e0b1db164be112f7c0e409c53a32a`:
+  https://github.com/khemisset18/gpubnb/actions/runs/43125463716
+  = **SUCCESS** (26/26 offline/adversarial tests, including GPG with
+  ephemeral test keys and identical-byte snapshot checks).
+- Actual Gitian detached-signature run:
+  https://github.com/khemisset18/gpubnb/actions/runs/43125463639
+  = **FAILURE**, with fail-closed reason `ltc_l0_gpg_rejected_signature`.
+  Distinct public GPG results:
+  - David Burkett: `GOODSIG, VALIDSIG, TRUST_UNDEFINED`, no expiry
+    rejection detected. Primary key fingerprint:
+    `D35621D53A1CC6A3456758D03620E9D387E55666`.
+  - Loshan T: `VALIDSIG, KEYEXPIRED, EXPKEYSIG`; hard reject.
+    Primary fingerprint `C0921846FED0BF4CF28BE1D73B2A6315CD51A673`
+    from official SECURITY.md and archived `contrib/gitian-keys`.
+  The mathematically valid signature under an expired key is NOT accepted.
+- Public signed attestation input digests measured in run 43125164411,
+  exact HEAD `bc84a3c5e6ede331e9cbffa6b9979d076d04b1cf`:
+  - David assertion: `ea3845019223ba70a4159d2fdf71d2632722ef7c2f20dfe54a71676d90d9505c`.
+  - David detached .sig: `c40b5481c4dd781adfce30fd0f0b783e4ab492e5b08f18000df284b3f6447e46`.
+  - Losh assertion: `55fcfb4eb8f979c61ed62755ea5f813926a48aacdc2f75984790066f30c496a8`.
+  - Losh detached .sig: `54e01cd63aeeed7ce0790a8b24c0f63005fd6508f6e0c586db5ed6326004378c`.
+  - Losh archived key: `58b4e3e1ba2d3b6c5df991c34f2249fe112fad085eaeb0f9f0ddabbc7faf0300`.
+  - Artifact ZIP `13902331928` SHA256
+    `52507d7233abda44cd84a840f360711872ef73a1597c7140aa40cb47852ca664`.
+- No key freshness is inferred from the fingerprint alone. Require a
+  current, independently authenticated Loshan public key with its self-
+  certified renewal/revocation history (if one exists), or replacement
+  independent reproducible build evidence. Reject bypassing GPG expiry.
+- `L0=BLOCKED`, `L1-L8=NOT_TESTED`, `L9=BLOCKED`, settlement disabled.

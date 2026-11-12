@@ -42,3 +42,11 @@ Supply-chain findings in foundation CI remain open. Hardware wallet support,
 formal state invariants and external independent audit are absent.
 
 All actual financial activation remains forbidden until separately authorized.
+
+## Evidence update: public Gitian signatures, 2026-11-12
+The two claimed Gitian output manifests agree, but only the David Burkett
+signature passes the current strict GPG policy. The Loshan assertion is
+rejected due to KEYEXPIRED/EXPKEYSIG. Do not treat a matching hash as
+proof of independent builder identity or actual reproduced compilation.
+A refreshed key needs a valid and independently authenticated chain.
+The strict failed CI gate must stay enabled; no exception authorized.
