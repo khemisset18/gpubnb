@@ -49,7 +49,7 @@ L'API RavencoinExplorer documente publiquement les blocks et l'estimation de has
 ### Limites commerciales et d'exploitation
 
 - Toutes ces sources sont opérées par des **tiers**, parfois avec des quotas et des conditions de « fair use ». Une API publique gratuite n'accorde **pas nécessairement le droit** de republier ses données sur GPUbnb. La documentation Nodely indique de contacter l'opérateur pour les charges commerciales importantes.
-- Le planning prévu est une collecte **toutes les heures**, soit **12 cycles par jour**. Les secours sont contactés seulement si nécessaire, à l'exception des confirmations indépendantes nécessaires au quorum Monero.
+- Le planning prévu est une collecte **toutes les heures**, soit **24 cycles par jour**. Les secours sont contactés seulement si nécessaire, à l'exception des confirmations indépendantes nécessaires au quorum Monero.
 - Aucune clé payante ni licence commerciale n'est achetée. Ne pas dépasser les limites publiées ; en cas de 429, ne pas contourner le quota en ouvrant des centaines de nouveaux endpoints.
 - L'URL de chaque source est fixe et autorisée en liste blanche, HTTPS obligatoire et redirections refusées ; temps d'attente et taille des réponses bornés.
 - Les tests actuels simulent des données et des pannes. **Aucun essai complet sur les endpoints en conditions de production n'a encore validé la compatibilité, les conditions commerciales ou le bon déroulement sur Cloudflare.** L'activation ne doit pas être annoncée comme opérationnelle avant ces tests.
