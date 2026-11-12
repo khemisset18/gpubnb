@@ -11,7 +11,8 @@ let ownNetwork = null;
 let ownTimestamp = null;
 let feedStatus = 'Aucune mesure réseau disponible';
 let lastFetchFailed = false;
-const REFRESH_MS = 2 * 60 * 60 * 1000;
+// Hourly collection + 15 min scheduling tolerance; 24h hard expiry unchanged.
+const REFRESH_MS = 75 * 60 * 1000;
 
 function number(id, min, max, optional = false) {
   const value = el(id).value.trim();
