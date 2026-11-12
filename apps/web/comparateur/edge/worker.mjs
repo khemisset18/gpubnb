@@ -19,10 +19,25 @@ const BACKUP_TTL_SECONDS=BACKUP_MAX_MS/1000;
 export const EXPECTED_REFRESH_MS=75*60*1000;
 const jsonHeaders=Object.freeze({
  'Content-Type':'application/json; charset=utf-8',
- 'Cache-Control':'no-store, max-age=0',
  'X-Content-Type-Options':'nosniff',
  'Referrer-Policy':'no-referrer'
 });
+// Small shared HTTP cache minimizes KV reads under the free plan. Cache age is
+// capped by the exact 24h cutoff (and freshness status boundary on /api/status).
+export const PUBLIC_CACHE_SECONDS=120;
+export function safeCacheSeconds(samples,now,{health=false}={}){
+ const fresh=(samples||[]).filter(Boolean);
+ if(!fresh.length)return 60; // Retry unavailable responses quickly.
+ let until=now+PUBLIC_CACHE_SECONDS*1000;
+ for(const sample of fresh){
+   const collected=Date.parse(sample.collectedAt);
+   if(!Number.isFinite(collected))return 0;
+   until=Math.min(until,collected+BACKUP_MAX_MS);
+   if(health&&now<collected+EXPECTED_REFRESH_MS)
+     until=Math.min(until,collected+EXPECTED_REFRESH_MS);
+ }
+ return Math.max(0,Math.min(PUBLIC_CACHE_SECONDS,Math.floor((until-now)/1000)));
+}
 const NO_MONERO={status:'unavailable',reason:'Service indisponible : dernier relevé valide absent ou âgé de plus de 24 h'};
 const emptyPow={schemaVersion:1,networks:[]};
 
@@ -35,8 +50,12 @@ async function loadValidated(env,coin,now=Date.now()){
  return coin==='XMR'?validateMoneroSnapshot(value,now)?value:null:
   validateOwnPoWSnapshot(value,now)?value:null;
 }
-function sendJson(value,status=200){
- return new Response(JSON.stringify(value),{status,headers:jsonHeaders});
+function sendJson(value,status=200,maxAgeSeconds=0){
+ const seconds=Number.isSafeInteger(maxAgeSeconds)&&maxAgeSeconds>0?
+    Math.min(PUBLIC_CACHE_SECONDS,maxAgeSeconds):0;
+ const headers={...jsonHeaders,'Cache-Control':seconds?
+   'public, max-age='+seconds:'no-store, max-age=0'};
+ return new Response(JSON.stringify(value),{status,headers});
 }
 export async function collectAutomated(env,{clock=()=>Date.now(),fetchImpl=fetch}={}){
  if(!env?.SNAPSHOTS||typeof env.SNAPSHOTS.put!=='function')throw Error('KV binding not configured');
@@ -69,11 +88,13 @@ export async function handleRequest(request,env,now=Date.now()){
  const url=new URL(request.url),method=request.method;
  if(method!=='GET'&&method!=='HEAD')return sendJson({status:'method_not_allowed'},405);
  if(url.pathname==='/data/monero-reseau.json'){
-  return sendJson(await loadValidated(env,'XMR',now)||NO_MONERO);
+  const sample=await loadValidated(env,'XMR',now);
+  return sendJson(sample||NO_MONERO,200,safeCacheSeconds(sample?[sample]:[],now));
  }
  if(url.pathname==='/data/pow-reseaux.json'){
   const found=await Promise.all(['RVN','ETC'].map(coin=>loadValidated(env,coin,now)));
-  return sendJson({...emptyPow,networks:found.filter(Boolean)});
+  const valid=found.filter(Boolean);
+  return sendJson({...emptyPow,networks:valid},200,safeCacheSeconds(valid,now));
  }
  if(url.pathname==='/api/status'){
   const found=await Promise.all(Object.keys(KEYS).map(async coin=>{
@@ -86,8 +107,9 @@ export async function handleRequest(request,env,now=Date.now()){
     operator:data?.activeOperator||data?.operator||null,
     fallback:data?.usedFallback===true};
   }));
+  const valid=await Promise.all(Object.keys(KEYS).map(coin=>loadValidated(env,coin,now)));
   return sendJson({service:'gpubnb-comparateur',refresh:'hourly',expectedRefreshMinutes:60,graceMinutes:15,
-    pricing:'manual-only',backupMaxHours:24,sources:found});
+    pricing:'manual-only',backupMaxHours:24,sources:found},200,safeCacheSeconds(valid,now,{health:true}));
  }
  if(!env?.ASSETS?.fetch)return sendJson({status:'not_found'},404);
  return env.ASSETS.fetch(request);
