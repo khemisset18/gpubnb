@@ -4,11 +4,11 @@ Date de l'étude : novembre 2026. **Uniquement dans la PR #353**, sous \`apps/we
 
 ## Règle approuvée
 
-À chaque actualisation planifiée **toutes les deux heures**, interroger **d'abord la source principale**.
+À chaque actualisation planifiée **toutes les heures**, interroger **d'abord la source principale**.
 Si elle répond correctement avec des données complètes, vérifiées et récentes, elle est retenue.
 Sinon, essayer automatiquement les sources de secours en ordre de priorité. Une source de secours ne devient active **que si ses données passent les mêmes validations** (réseau correct, cohérence des blocs, horodatage et récompenses).
 
-**Retour vers la principale :** dès qu'elle répond à nouveau **et réussit la validation** au prochain cycle (maximum le prochain cycle prévu, pas immédiatement à la seconde près), elle redevient prioritaire. Un exploitant n'a pas à sélectionner manuellement un fournisseur.
+**Retour vers la principale :** dès qu'elle répond à nouveau **et réussit la validation** au prochain cycle (au prochain cycle horaire prévu, pas immédiatement à la seconde près), elle redevient prioritaire. Un exploitant n'a pas à sélectionner manuellement un fournisseur.
 
 **Lorsque toutes les sources utilisables d'une crypto échouent :** conserver son **dernier instantané réellement validé** dans KV pendant **24 heures maximum à compter de sa dernière collecte réussie**, afficher « Dernier relevé sauvegardé » + horodatage, puis « Service indisponible » et retirer les chiffres après ce délai. Ne jamais réhorodater des données anciennes.
 
@@ -49,7 +49,7 @@ L'API RavencoinExplorer documente publiquement les blocks et l'estimation de has
 ### Limites commerciales et d'exploitation
 
 - Toutes ces sources sont opérées par des **tiers**, parfois avec des quotas et des conditions de « fair use ». Une API publique gratuite n'accorde **pas nécessairement le droit** de republier ses données sur GPUbnb. La documentation Nodely indique de contacter l'opérateur pour les charges commerciales importantes.
-- Le planning prévu est une collecte **toutes les deux heures**, soit **12 cycles par jour**. Les secours sont contactés seulement si nécessaire, à l'exception des confirmations indépendantes nécessaires au quorum Monero.
+- Le planning prévu est une collecte **toutes les heures**, soit **12 cycles par jour**. Les secours sont contactés seulement si nécessaire, à l'exception des confirmations indépendantes nécessaires au quorum Monero.
 - Aucune clé payante ni licence commerciale n'est achetée. Ne pas dépasser les limites publiées ; en cas de 429, ne pas contourner le quota en ouvrant des centaines de nouveaux endpoints.
 - L'URL de chaque source est fixe et autorisée en liste blanche, HTTPS obligatoire et redirections refusées ; temps d'attente et taille des réponses bornés.
 - Les tests actuels simulent des données et des pannes. **Aucun essai complet sur les endpoints en conditions de production n'a encore validé la compatibilité, les conditions commerciales ou le bon déroulement sur Cloudflare.** L'activation ne doit pas être annoncée comme opérationnelle avant ces tests.
