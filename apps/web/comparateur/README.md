@@ -225,3 +225,14 @@ Détails exacts : **[COUVERTURE_COMPLETE_CRYPTOS.md](docs/COUVERTURE_COMPLETE_CR
 **BTC, ZEC, Kaspa et Alephium** ont un profil d'équipement **ASIC dominant** ; ils demandent un hashrate et une puissance spécifiques de l'ASIC, sans emprunter le wattage d'un GPU. **Neoxa** requiert la *part mineur réelle* (20 % de la subvention de bloc). **Beam / Flux / Zcash / Cortex** affichent leurs unités Sol/s ou Graph/s sans les confondre avec les H/s.
 
 **Important :** seule une partie des réseaux (XMR, RVN, ETC) dispose de collecteurs automatiques expérimentaux. Les autres monnaies restent en **calcul à partir de mesures manuelles**, sans tarif de données, sans rendements ni cours inventés. Leur ajout **ne change pas** les profils exécutables de GPUbnb Host ni le site principal. Aucun service n'est déployé et **aucune fusion n'a été effectuée**.
+
+
+## Actualisation **toutes les heures** — sans nœud à entretenir
+
+Le calendrier Cloudflare est maintenant \`17 * * * *\` : essai de collecte **à la minute 17 de chaque heure UTC** (24 fois par jour). Un retard de 15 minutes est toléré avant de classer une mesure comme « Dernier relevé sauvegardé ». Les sources primaires sont toujours retentées en premier, puis les secondaires autorisées. En cas de panne généralisée, la dernière valeur valide reste **24 heures maximum**, sans réinitialisation du compteur.
+
+Pour ne pas gaspiller les quotas gratuits : chaque navigateur recharge les flux automatiques toutes les **15 minutes** et contrôle **chaque minute localement** l'âge du relevé ; aucun appel réseau supplémentaire n'est nécessaire pour expirer l'affichage. Les trois monnaies en collecte automatique expérimentale sont **XMR, ETC et RVN**. Les onze autres conservent leur mode manuel / gains réellement observés.
+
+**Attention : configuration et tests uniquement**. Aucun Worker Cloudflare ou espace KV n'a été créé ou déployé dans cette PR. L'usage commercial des RPC publics, leur disponibilité réelle et les limites de l'offre gratuite doivent être vérifiés avant toute activation. Ne pas toucher aux autres modules GPUbnb, ne pas fusionner ni déployer sans autorisation explicite.
+
+Tests du changement : \`tests/hourly-refresh.test.mjs\` et \`tests/backup-24h.test.mjs\`.
