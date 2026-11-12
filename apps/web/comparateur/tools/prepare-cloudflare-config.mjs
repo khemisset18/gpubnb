@@ -25,7 +25,7 @@ export function buildDeployConfig(template,namespaceId){
   if(!config||typeof config!=='object'||config.main!=='edge/worker.mjs'||
       config.name!=='gpubnb-rentabilite-autonome'||
       config.assets?.directory!=='.'||config.assets?.binding!=='ASSETS'||
-      JSON.stringify(config.triggers?.crons)!=='["17 * * * *"]'||
+      JSON.stringify(config.triggers?.crons)!=='["17 * * * *","27 * * * *","37 * * * *"]'||
       !Array.isArray(config.kv_namespaces)||
       config.kv_namespaces.length!==1||
       config.kv_namespaces[0]?.binding!=='SNAPSHOTS'){
