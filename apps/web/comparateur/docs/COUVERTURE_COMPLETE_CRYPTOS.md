@@ -48,7 +48,7 @@ Les estimations **ASIC** demandent les watts et le hashrate propres à l'ASIC, j
 
 ## Disponibilité et maintenance
 
-Le plan d'automatisation séparé sur Cloudflare prévoit une tentative de mise à jour **toutes les deux heures**. Seuls **XMR, RVN, ETC** disposent à ce jour de collecteurs de blockchain publique expérimentaux. Les autres monnaies attendent un adaptateur ou un flux autorisé avant d'afficher des données réseau automatiques. **Il serait inexact de promettre une automatisation des 14 monnaies à ce stade.** Aucune source publique n'offre de garantie de disponibilité ou de redistribution commerciale sans conditions.
+Le plan d'automatisation séparé sur Cloudflare prévoit une tentative de mise à jour **toutes les heures**. Seuls **XMR, RVN, ETC** disposent à ce jour de collecteurs de blockchain publique expérimentaux. Les autres monnaies attendent un adaptateur ou un flux autorisé avant d'afficher des données réseau automatiques. **Il serait inexact de promettre une automatisation des 14 monnaies à ce stade.** Aucune source publique n'offre de garantie de disponibilité ou de redistribution commerciale sans conditions.
 
 Les sources de secours sont configurées **pour XMR et ETC** seulement ; RVN n'a pas encore de source secondaire indépendante validée. En cas de panne de toutes les sources disponibles, la dernière mesure validée reste exploitable **24 h maximum** depuis sa collecte, puis « Service indisponible ».
 
