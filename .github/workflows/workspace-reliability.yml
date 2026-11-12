@@ -156,4 +156,4 @@ jobs:
     uses: ./.github/workflows/asset-exchange-dogecoin-policy.yml
     with:
       diagnostic_suite: rbf
-      harness_commit: 0000000000000000000000000000000000000000
+      harness_commit: 7bf25e7bac071aee0af220d049c7ce4440404012
