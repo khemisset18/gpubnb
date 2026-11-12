@@ -5,7 +5,7 @@
   "compatibility_date": "2026-11-10",
   "workers_dev": true,
   "triggers": {
-    "crons": ["17 */2 * * *"]
+    "crons": ["17 * * * *"]
   },
   "kv_namespaces": [
     {"binding": "SNAPSHOTS"}
