@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070908">
+  <!-- Standalone comparateur: no external scripts, network calls or frames. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'">
+  <meta name="description" content="Comparateur clair de rentabilité de minage GPU et CPU : revenus par jour, par mois, par an et coût de l’électricité.">
+  <title>Comparateur de rentabilité GPU / CPU — GPUbnb</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="model.js"></script>
+  <script defer src="app.js"></script>
+  <script type="module" src="monero-ui.mjs"></script>
+  <script type="module" src="pow-ui.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#calculateur">Aller au calculateur</a>
+  <header class="site-header">
+    <div class="layout header-inner">
+      <div class="brand"><span class="brand-symbol">G</span><span>GPUbnb</span><span class="brand-separator"></span><span class="brand-extension">Rentabilité</span></div>
+      <div class="header-right"><span class="header-hint">GPUbnb / OUTILS</span><a class="top-link" href="../index.html">Retour à GPUbnb <span aria-hidden="true">↗</span></a></div>
+    </div>
+  </header>
+  <main class="layout">
+    <section class="hero">
+      <div class="eyebrow"><span class="dot"></span> ANALYSE DU MATÉRIEL <span class="eyebrow-divider"></span> GPU / CPU</div>
+      <h1>Quelle rentabilité pour<br><span>votre GPU ou CPU ?</span></h1>
+      <p>Comparez les performances économiques de votre matériel. Rendement journalier, mensuel et annuel, coûts électriques et profit net — tout en un seul endroit.</p>
+    </section>
+    <section class="content-grid" id="calculateur" aria-label="Calculateur de rentabilité">
+      <div class="form-column">
+        <article class="surface form-card">
+          <div class="section-kicker">01 <span>MATÉRIEL</span></div>
+          <div class="section-heading"><h2>Choisissez votre configuration</h2><p>Recherchez votre modèle parmi les références courantes.</p></div>
+          <div class="segmented" role="group" aria-label="Type d’appareil">
+            <button id="tabGpu" class="on" type="button" aria-pressed="true">Carte graphique <small>GPU</small></button>
+            <button id="tabCpu" type="button" aria-pressed="false">Processeur <small>CPU</small></button>
+          </div>
+          <label for="deviceSearch">Rechercher un modèle</label>
+          <div class="search-wrap"><span class="search-icon" aria-hidden="true">⌕</span><input id="deviceSearch" type="search" placeholder="Ex. RTX 4070, RX 6800, Ryzen 9…" autocomplete="off"></div>
+          <label for="deviceSelect">Modèle <span class="required">*</span></label>
+          <select id="deviceSelect" aria-describedby="powerHelp"></select>
+          <p class="field-hint" id="powerHelp">Les puissances indiquées sont des repères approximatifs : mesurez votre consommation réelle pour un calcul plus juste.</p>
+          <div class="field-row">
+            <div><label for="quantity">Quantité</label><div class="suffix-field"><input id="quantity" type="number" min="1" max="100" step="1" value="1"><span>app.</span></div></div>
+            <div><label for="power">Consommation par appareil</label><div class="suffix-field"><input id="power" type="number" min="1" max="1500" step="1"><span>W</span></div></div>
+          </div>
+        </article>
+        <article class="surface form-card">
+          <div class="section-kicker">02 <span>PARAMÈTRES</span></div>
+          <div class="section-heading"><h2>Coût et utilisation</h2><p>Les résultats se recalculent dès que vous modifiez une valeur.</p></div>
+          <div class="field-row">
+            <div><label for="electricity">Prix de l’électricité</label><div class="suffix-field"><input id="electricity" type="number" min="0" max="5" step="0.001" value="0.20"><span>€/kWh</span></div></div>
+            <div><label for="hours">Minage par jour</label><div class="suffix-field"><input id="hours" type="number" min="0" max="24" step="0.5" value="24"><span>h</span></div></div>
+          </div>
+          <div class="field-row">
+            <div><label for="poolFee">Frais du pool</label><div class="suffix-field"><input id="poolFee" type="number" min="0" max="100" step="0.1" value="1"><span>%</span></div></div>
+            <div><label for="purchase">Prix d’achat / appareil <small>(optionnel)</small></label><div class="suffix-field"><input id="purchase" type="number" min="0" max="1000000" step="1" placeholder="Ex. 450"><span>€</span></div></div>
+          </div>
+        </article>
+        <article class="surface form-card">
+          <div class="section-kicker">03 <span>REVENUS DE MINAGE</span></div>
+          <div class="section-heading"><h2>Revenu brut estimé</h2><p>Entrez un revenu observé auprès de votre pool de minage. Un flux de données peut être connecté plus tard.</p></div>
+          <div id="coinWrap" hidden><label for="coin">Cryptomonnaie / algorithme</label><select id="coin"></select></div>
+          <label for="gross">Revenu brut pour 1 appareil, sur 24 h</label>
+          <div class="suffix-field"><input id="gross" type="number" min="0" max="100000" step="0.0001" placeholder="Ex. 0,50"><span>€/24 h</span></div>
+          <p class="field-hint" id="grossHelp">Les valeurs de minage ne sont pas inventées. Saisissez un chiffre provenant de votre pool pour obtenir votre estimation.</p>
+          <div class="feed-row"><div id="feedStatus" class="feed-status" role="status"><span class="tiny-dot"></span> Mode manuel · Pas de flux temps réel connecté</div><button id="refresh" class="text-button" type="button">Actualiser</button></div>
+        </article>
+      </div>
+      <aside class="result-column" aria-label="Résultats de rentabilité">
+        <article class="surface result-card">
+          <div class="result-top"><div><span class="section-kicker result-kicker">SYNTHÈSE DE RENTABILITÉ</span><h2>Votre rendement net</h2></div><span id="resultBadge" class="mode-pill">À renseigner</span></div>
+          <div class="period-rows">
+            <div class="period-row main-period"><div class="period-name">Par jour <small>24 h max.</small></div><div><strong id="day">—</strong><small>€/jour</small></div></div>
+            <div class="period-row"><div class="period-name">Par mois <small>30 jours</small></div><div><strong id="month">—</strong><small>€/mois</small></div></div>
+            <div class="period-row"><div class="period-name">Par an <small>365 jours</small></div><div><strong id="year">—</strong><small>€/an</small></div></div>
+          </div>
+          <p class="result-notice" id="resultNotice">Saisissez votre revenu brut pour connaître votre rendement net.</p>
+          <div class="detail-title">Détail du calcul <span>par jour</span></div>
+          <dl class="breakdown">
+            <div><dt>Revenu brut</dt><dd id="grossOut">—</dd></div>
+            <div><dt>Électricité</dt><dd id="electricOut">—</dd></div>
+            <div><dt>Frais de pool</dt><dd id="poolOut">—</dd></div>
+            <div class="breakdown-total"><dt>Profit net</dt><dd id="netOut">—</dd></div>
+          </dl>
+          <div class="secondary-metrics"><div><span>Consommation / jour</span><strong id="kwhOut">—</strong></div><div><span>Amortissement théorique</span><strong id="roiOut">—</strong></div></div>
+          <p class="disclaimer">Une estimation ne garantit aucun gain. La difficulté de minage, les cours, les interruptions, l’usure et les impôts peuvent changer le rendement réel.</p>
+        </article>
+      </aside>
+    </section>
+    <section class="xmr-section" id="monero-rendement" aria-labelledby="xmrTitle">
+      <div class="compare-header">
+        <div>
+          <span class="section-kicker">CALCUL INDÉPENDANT · XMR / RANDOMX</span>
+          <h2 id="xmrTitle">Estimez le rendement Monero sans API payante</h2>
+          <p>Nous calculons la quantité de XMR à partir de la difficulté du réseau et de votre hashrate mesuré. Aucun benchmark ni cours fictif.</p>
+        </div>
+        <span class="mode-pill" id="xmrState" role="status">Réseau non connecté</span>
+      </div>
+      <div class="surface xmr-layout">
+        <div class="xmr-settings">
+          <div class="xmr-choice"><span>Matériel sélectionné</span><strong id="xmrDevice">—</strong><small>RandomX favorise généralement les CPU. La compatibilité et les H/s réels doivent être mesurés.</small></div>
+          <label for="xmrHashrate">Hashrate mesuré sur RandomX (H/s) <span class="required">*</span></label>
+          <input id="xmrHashrate" type="number" min="0.001" max="1000000000" step="any" placeholder="Ex. votre valeur mesurée">
+          <p class="field-hint">Saisissez le hashrate pour UN appareil. La quantité, la puissance et le coût électrique sont repris du calculateur ci-dessus.</p>
+          <label for="xmrPrice">Cours du XMR (€ / XMR) <small>facultatif, saisi manuellement</small></label>
+          <input id="xmrPrice" type="number" min="0.000001" max="10000000" step="any" placeholder="Laisser vide pour afficher uniquement les XMR">
+          <div class="xmr-network">
+            <div class="xmr-network-head">
+              <strong>Données du réseau</strong>
+              <span id="xmrUpdated">En attente d'un nœud Monero synchronisé</span>
+            </div>
+            <label class="xmr-toggle" for="xmrManual"><input type="checkbox" id="xmrManual"> Saisir moi-même la difficulté et la récompense d'un bloc</label>
+            <div id="xmrManualFields" hidden>
+              <label for="xmrDifficulty">Difficulté réseau <span class="required">*</span></label>
+              <input id="xmrDifficulty" type="number" min="1" step="any" placeholder="Valeur observée sur votre nœud">
+              <label for="xmrReward">Récompense par bloc (XMR) <span class="required">*</span></label>
+              <input id="xmrReward" type="number" min="0.000001" max="25" step="any" placeholder="Récompense réelle observée">
+              <p class="field-hint">Données manuelles : leur fraîcheur n'est pas vérifiable. Ce n'est pas du temps réel.</p>
+            </div>
+          </div>
+        </div>
+        <div class="xmr-output">
+          <span class="section-kicker">QUANTITÉ THÉORIQUE</span>
+          <div class="xmr-stats">
+            <div><span>Par jour</span><strong id="xmrDay">—</strong><small>XMR / jour</small></div>
+            <div><span>Par mois <small>30 jours</small></span><strong id="xmrMonth">—</strong><small>XMR / mois</small></div>
+            <div><span>Par an <small>365 jours</small></span><strong id="xmrYear">—</strong><small>XMR / an</small></div>
+          </div>
+          <div class="xmr-eur">
+            <div><span>Profit estimé / jour</span><strong id="xmrNetDay">—</strong></div>
+            <div><span>Profit estimé / mois</span><strong id="xmrNetMonth">—</strong></div>
+            <div><span>Profit estimé / an</span><strong id="xmrNetYear">—</strong></div>
+          </div>
+          <p id="xmrExplanation" class="xmr-explanation" aria-live="polite">Renseignez votre hashrate et connectez un nœud ou saisissez les données du réseau.</p>
+          <p class="field-hint">Projection mathématique, pas une promesse de gains : difficulté, frais réels, variation du cours, disponibilité et consommation mesurée peuvent changer les résultats.</p>
+        </div>
+      </div>
+    </section>
+    <section class="pow-section" aria-labelledby="powHeading">
+      <div class="compare-header">
+        <div>
+          <span class="section-kicker">CATALOGUE MULTI-CRYPTO · GPU / CPU / ASIC</span>
+          <h2 id="powHeading">14 cryptomonnaies, des calculs adaptés</h2>
+          <p>GPUbnb Host, profils de minage, Bitcoin et Zcash : rendement théorique par algorithme ou gains Pearl observés. Aucune performance inventée ni API payante.</p>
+        </div>
+        <span class="mode-pill" id="powMode" role="status">Données manuelles</span>
+      </div>
+      <div class="surface pow-layout" id="powCalculator">
+        <div class="pow-entry">
+          <label for="powCoin">Cryptomonnaie</label>
+          <select id="powCoin">
+            <optgroup label="GPU et algorithmes spécialisés">
+              <option value="PRL">Pearl (PRL) — GPU / IA</option>
+              <option value="RVN">Ravencoin (RVN) — KawPoW</option>
+              <option value="ETC">Ethereum Classic (ETC) — Etchash</option>
+              <option value="ERG">Ergo (ERG) — Autolykos v2</option>
+              <option value="FLUX">Flux (FLUX) — FluxHash</option>
+              <option value="CFX">Conflux (CFX) — Octopus</option>
+              <option value="NEOX">Neoxa (NEOX) — KawPoW</option>
+              <option value="BEAM">Beam (BEAM) — BeamHash III</option>
+              <option value="CTXC">Cortex (CTXC) — Cuckatoo32</option>
+            </optgroup>
+            <optgroup label="ASIC dominants : équipement spécialisé">
+              <option value="BTC">Bitcoin (BTC) — SHA-256</option>
+              <option value="ZEC">Zcash (ZEC) — Equihash 200,9</option>
+              <option value="KAS">Kaspa (KAS) — kHeavyHash</option>
+              <option value="ALPH">Alephium (ALPH) — Blake3</option>
+            </optgroup>
+          </select>
+          <div class="pow-hardware"><span id="powDeviceContext">Matériel sélectionné</span><strong id="powDevice">—</strong><small id="powAlgorithm">Chaque algorithme demande un hashrate mesuré séparément.</small></div>
+          <div class="pow-asics" id="powAsicFields" hidden>
+            <p class="pow-caution">Pour cette monnaie, un ASIC spécialisé est nécessaire pour une rentabilité réaliste. Les watts et le hashrate d'une carte graphique ne sont pas représentatifs.</p>
+            <label for="powAsicWatts">Consommation réelle de votre ASIC (W)</label>
+            <input id="powAsicWatts" type="number" min="1" max="20000" step="any" placeholder="Puissance mesurée de votre ASIC">
+          </div>
+          <div class="pow-pearl" id="powPearlFields" hidden>
+            <p class="pow-caution">Pearl utilise PearlHash / Proof of Useful Work. Le hashrate GPU classique ne permet pas de calculer un rendement fiable. Saisissez les PRL réellement observés pour UN GPU.</p>
+            <div class="pow-pair">
+              <div><label for="powPearlCoins">PRL bruts observés / GPU</label><input id="powPearlCoins" type="number" min="0" step="any" placeholder="Montant observé avant frais"></div>
+              <div><label for="powPearlHours">Heures de minage mesurées</label><input id="powPearlHours" type="number" min="1" max="8760" step="any" placeholder="Ex. 168"></div>
+            </div>
+            <p class="field-hint">Historique de pool, pas une promesse de gains futurs. Si les frais sont déjà déduits, réglez les frais de pool à 0 % pour éviter de les compter deux fois.</p>
+          </div>
+          <div id="powHashFields">
+          <div class="pow-pair">
+            <div><label for="powDeviceRate">Hashrate mesuré / appareil</label><input id="powDeviceRate" type="number" min="0.000001" step="any" placeholder="Mesure réelle"></div>
+            <div><label for="powDeviceScale">Unité de puissance</label><select id="powDeviceScale"><option value="1">H/s</option><option value="1000">kH/s</option><option value="1000000">MH/s</option><option value="1000000000">GH/s</option><option value="1000000000000">TH/s</option><option value="1000000000000000">PH/s</option></select></div>
+          </div>
+          <p class="field-hint" id="powHardwareHelp">Ne réutilisez pas les H/s d'un autre algorithme.</p>
+          <div class="pow-network">
+            <div class="pow-network-status">
+              <strong>Données du réseau</strong><span id="powObservedAt">Aucun nœud connecté</span>
+            </div>
+            <div class="pow-pair">
+              <div><label for="powNetworkRate">Hashrate total du réseau</label><input id="powNetworkRate" type="number" min="0.000001" step="any" placeholder="Valeur observée"></div>
+              <div><label for="powNetworkScale">Unité du réseau</label><select id="powNetworkScale"><option value="1">H/s</option><option value="1000">kH/s</option><option value="1000000">MH/s</option><option value="1000000000">GH/s</option><option value="1000000000000">TH/s</option><option value="1000000000000000">PH/s</option></select></div>
+            </div>
+            <div class="pow-pair">
+              <div><label for="powBlockSeconds">Temps moyen par bloc (s)</label><input id="powBlockSeconds" type="number" min="1" max="7200" step="any" placeholder="Mesure du réseau"></div>
+              <div><label for="powMinerReward">Récompense mineur / bloc</label><input id="powMinerReward" type="number" min="0.000000000000000001" step="any" placeholder="Part PoW uniquement"></div>
+            </div>
+            <p class="field-hint" id="powRewardHelp">Renseignez la récompense effectivement attribuée au mineur, pas forcément la récompense totale.</p>
+          </div>
+          </div>
+          <label for="powPrice">Cours de la cryptomonnaie en € <small>(facultatif, manuel)</small></label>
+          <input id="powPrice" type="number" min="0" max="10000000" step="any" placeholder="Sans cours, résultats en cryptomonnaie uniquement">
+        </div>
+        <div class="pow-output">
+          <span class="section-kicker">RENDEMENT THÉORIQUE</span>
+          <div class="pow-periods">
+            <div><span>Journalier</span><strong id="powDay">—</strong><small id="powDayUnit">RVN / jour</small></div>
+            <div><span>Mensuel · 30 jours</span><strong id="powMonth">—</strong><small id="powMonthUnit">RVN / mois</small></div>
+            <div><span>Annuel · 365 jours</span><strong id="powYear">—</strong><small id="powYearUnit">RVN / an</small></div>
+          </div>
+          <div class="pow-profit">
+            <div><span>Net par jour</span><strong id="powNetDay">—</strong></div>
+            <div><span>Net par mois</span><strong id="powNetMonth">—</strong></div>
+            <div><span>Net par an</span><strong id="powNetYear">—</strong></div>
+          </div>
+          <p class="pow-explanation" id="powExplanation" aria-live="polite">Entrez les performances de votre GPU et les mesures du réseau pour obtenir une estimation.</p>
+          <p class="field-hint">Les projections ne garantissent aucun gain. Pearl utilise des gains de pool mesurés ; les ASIC exigent des caractéristiques propres. La difficulté, le cours et les frais réels peuvent évoluer.</p>
+        </div>
+      </div>
+    </section>
+    <section class="compare-section" id="comparaison">
+      <div class="compare-header"><div><span class="section-kicker">COMPARATIF</span><h2>Les modèles en détail</h2><p>Retrouvez rapidement votre GPU ou CPU. Les gains ne s’affichent que lorsqu’une donnée de rendement est disponible.</p></div><div><label class="visually-hidden" for="tableSearch">Rechercher dans le tableau</label><input id="tableSearch" class="table-search" type="search" placeholder="Filtrer les modèles…"></div></div>
+      <div class="table-container surface"><table><thead><tr><th>Matériel</th><th>Consommation <small>indicative</small></th><th>Électricité <small>/ jour</small></th><th>Bénéfice net <small>/ jour</small></th><th></th></tr></thead><tbody id="tableBody"></tbody></table><p class="table-empty" id="tableEmpty" hidden>Aucun modèle correspondant.</p><p class="table-caption">La consommation d’une configuration complète peut être supérieure à celle de la puce seule. Les prix d’achat et les revenus en direct nécessitent des fournisseurs de données distincts.</p></div>
+    </section>
+    <section class="notes" aria-label="Informations utiles"><article><h3>Une formule transparente</h3><p><strong>Profit net = revenu brut − frais de pool − électricité.</strong> Les montants mensuels et annuels sont des projections au même rythme quotidien, pas des prévisions garanties.</p></article><article><h3>Le temps réel, sans chiffres fictifs</h3><p>GPUbnb peut calculer une estimation XMR depuis son propre nœud Monero. La sélection du matériel seule ne suffit pas : le hashrate doit être mesuré, et le prix en euros reste manuel sans source autorisée.</p></article></section>
+  </main>
+  <footer class="footer"><div class="layout footer-inner"><strong>GPUbnb <span>· Mining intelligence</span></strong><span>Calculs indicatifs · Aucune donnée personnelle requise</span></div></footer>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Cloudflare static assets: exclude server-side code, tests and operational files.
+edge/
+tools/
+tests/
+docs/
+README.md
+package.json
+wrangler.jsonc
+_headers
+.assetsignore
+*.tmp
+*.log
+# Never distribute raw credentials or unreviewed inputs.
+*.secret
+*.env
+.env*
+private/
+
+# Cloudflare namespace is public, but its per-account generated config is not a site asset.
+wrangler.deploy.jsonc
