@@ -1,7 +1,7 @@
 /**
  * GPUbnb automated FREE tier updater.
  * Serve the standalone comparator's static assets and its cached blockchain stats.
- * Runs every 2h on Cloudflare Cron; KV stores small public snapshots.
+ * Runs every hour on Cloudflare Cron; KV stores small public snapshots.
  * Never exposes a private key or talks to the main GPUbnb site.
  *
  * Important: community RPC endpoints have best-effort availability and can rate-limit.
@@ -15,7 +15,8 @@ const KEYS=Object.freeze({XMR:'net:xmr',ETC:'net:etc',RVN:'net:rvn'});
 // No stale-data reset after an outage: expiry is measured from the LAST successful collection.
 const BACKUP_MAX_MS=Math.min(MAX_PUBLIC_AGE_MS,PUBLIC_FRESH_MS);
 const BACKUP_TTL_SECONDS=BACKUP_MAX_MS/1000;
-const EXPECTED_REFRESH_MS=2*60*60*1000;
+// Hourly cron + 15-minute grace for propagation and upstream latency.
+const EXPECTED_REFRESH_MS=75*60*1000;
 const jsonHeaders=Object.freeze({
  'Content-Type':'application/json; charset=utf-8',
  'Cache-Control':'no-store, max-age=0',
@@ -85,7 +86,7 @@ export async function handleRequest(request,env,now=Date.now()){
     operator:data?.activeOperator||data?.operator||null,
     fallback:data?.usedFallback===true};
   }));
-  return sendJson({service:'gpubnb-comparateur',refresh:'every-two-hours',
+  return sendJson({service:'gpubnb-comparateur',refresh:'hourly',expectedRefreshMinutes:60,graceMinutes:15,
     pricing:'manual-only',backupMaxHours:24,sources:found});
  }
  if(!env?.ASSETS?.fetch)return sendJson({status:'not_found'},404);
