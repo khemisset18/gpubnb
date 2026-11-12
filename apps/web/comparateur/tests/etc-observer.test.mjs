@@ -44,3 +44,12 @@ test('never include guessed transaction fees or uncle payouts',()=>{
  const s=buildEtcObservation(fixture(),now);
  assert.match(s.methodology,/excluding fees, uncles and MEV/);
 });
+
+test('only an explicitly restricted ETC RPC can omit eth_syncing',()=>{
+ assert.throws(()=>buildEtcObservation({...fixture(),syncing:null},now));
+ const withOptIn=buildEtcObservation({...fixture(),syncing:null,allowMissingSyncStatus:true},now);
+ assert.equal(withOptIn.coin,'ETC');
+ assert.ok(validateOwnPoWSnapshot(withOptIn,now));
+ const malicious=fixture();malicious.blocks.at(-1).parentHash='0x'+'a'.repeat(64);
+ assert.throws(()=>buildEtcObservation({...malicious,syncing:null,allowMissingSyncStatus:true},now));
+});
