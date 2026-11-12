@@ -8,7 +8,8 @@ const manualValues = new Map();
 let feed = new Map();
 let currentCoin = 'RVN';
 let lastFetchFailed = false;
-const REFRESH_MS = 2 * 60 * 60 * 1000;
+// Hourly collection + 15 min scheduling tolerance; 24h hard expiry unchanged.
+const REFRESH_MS = 75 * 60 * 1000;
 const number = (id,min,max,optional=false) => {
   const raw=byId(id).value.trim();
   if(optional && raw==='') return null;
