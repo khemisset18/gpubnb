@@ -27,7 +27,7 @@ async function status(timestamp) {
 
 test('Wrangler schedules one automatic refresh per hour, at minute 17 UTC',async()=>{
  const config=JSON.parse(await readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
- assert.deepEqual(config.triggers.crons,['17 * * * *']);
+ assert.deepEqual(config.triggers.crons,['17 * * * *','27 * * * *','37 * * * *']);
  assert.deepEqual(config.assets.run_worker_first,
   ['/data/monero-reseau.json','/data/pow-reseaux.json','/api/status']);
 });
