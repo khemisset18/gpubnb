@@ -10,7 +10,7 @@ async function template(){
 test('the repository template never pretends a real Cloudflare KV exists',async()=>{
  const original=JSON.parse(await template());
  assert.equal(original.name,'gpubnb-rentabilite-autonome');
- assert.deepEqual(original.triggers.crons,['17 * * * *']);
+ assert.deepEqual(original.triggers.crons,['17 * * * *','27 * * * *','37 * * * *']);
  assert.equal(original.kv_namespaces.length,1);
  assert.deepEqual(original.kv_namespaces[0],{binding:'SNAPSHOTS'});
 });
