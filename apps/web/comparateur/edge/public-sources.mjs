@@ -170,7 +170,7 @@ async function collectEtcFromSource(fetchImpl,now,source,sourceIndex){
     throw e;
   }),
   etcRpc(fetchImpl,url,'eth_blockNumber')]);
- if(chainId!=='0x3d'||syncing!==false)throw Error('ETC public RPC chain mismatch');
+ if(chainId!=='0x3d'||(syncing!==false&&syncing!==null))throw Error('ETC public RPC chain mismatch');
  const height=Number(BigInt(number));
  if(!Number.isSafeInteger(height)||height<ETC_WINDOW+1)throw Error('ETC height unsupported');
  const batch=Array.from({length:ETC_WINDOW+1},(_,i)=>({
