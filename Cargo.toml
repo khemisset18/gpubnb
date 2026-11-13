@@ -11,3 +11,6 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+[patch.crates-io]
+solana-secp256k1-recover = { path = "vendor/security/solana-secp256k1-recover-2.2.1" }

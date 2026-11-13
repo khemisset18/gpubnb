@@ -1,0 +1,634 @@
+{
+  "SbfRuntime": "NOT_TESTED",
+  "activeCargoLockSha256": "aa45a09c82e3d7aae9fa7c1a324be781ac7e524a217135c4c7124cbd9c0c903a",
+  "archiveSha256": "baa3120b6cdaa270f39444f5093a90a7b03d296d362878f7a6991d6de3bbe496",
+  "archiveSourceCommit": "1c1d667f161666f12f5a43ebef8eda9470a8c6ee",
+  "backportedSourceSha256": "c83a4990493a181a8d32a1dcfdb3ff75c744a2ae2ef12e90c02e65a0fa7c5c14",
+  "baseCommit": "a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed",
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "licenseGitBlob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+  "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "licenseSource": "https://github.com/anza-xyz/solana-sdk/blob/1c1d667f161666f12f5a43ebef8eda9470a8c6ee/LICENSE",
+  "lockDelta": {
+    "added": [
+      [
+        "base16ct",
+        "1.0.0"
+      ],
+      [
+        "base64ct",
+        "1.8.3"
+      ],
+      [
+        "const-oid",
+        "0.10.3"
+      ],
+      [
+        "cpubits",
+        "0.1.1"
+      ],
+      [
+        "crypto-bigint",
+        "0.7.11"
+      ],
+      [
+        "ctutils",
+        "0.4.8"
+      ],
+      [
+        "der",
+        "0.8.3"
+      ],
+      [
+        "ecdsa",
+        "0.17.0"
+      ],
+      [
+        "elliptic-curve",
+        "0.14.3"
+      ],
+      [
+        "ff",
+        "0.14.0"
+      ],
+      [
+        "group",
+        "0.14.0"
+      ],
+      [
+        "hmac",
+        "0.13.0"
+      ],
+      [
+        "k256",
+        "0.14.0"
+      ],
+      [
+        "pkcs8",
+        "0.11.0"
+      ],
+      [
+        "primefield",
+        "0.14.0"
+      ],
+      [
+        "primeorder",
+        "0.14.0"
+      ],
+      [
+        "rand_core",
+        "0.10.1"
+      ],
+      [
+        "rfc6979",
+        "0.6.0"
+      ],
+      [
+        "sec1",
+        "0.8.1"
+      ],
+      [
+        "serdect",
+        "0.4.3"
+      ],
+      [
+        "sha2",
+        "0.11.1"
+      ],
+      [
+        "signature",
+        "3.0.0"
+      ],
+      [
+        "spki",
+        "0.8.1"
+      ],
+      [
+        "wnaf",
+        "0.14.1"
+      ]
+    ],
+    "changedExisting": [
+      {
+        "after": {
+          "checksum": "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453",
+          "dependencies": [
+            "getrandom 0.4.3",
+            "hybrid-array",
+            "rand_core 0.10.1"
+          ],
+          "name": "crypto-common",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.2.2"
+        },
+        "before": {
+          "checksum": "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453",
+          "dependencies": [
+            "hybrid-array"
+          ],
+          "name": "crypto-common",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.2.2"
+        },
+        "package": [
+          "crypto-common",
+          "0.2.2"
+        ]
+      },
+      {
+        "after": {
+          "checksum": "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2",
+          "dependencies": [
+            "block-buffer 0.12.1",
+            "const-oid",
+            "crypto-common 0.2.2",
+            "ctutils"
+          ],
+          "name": "digest",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.11.3"
+        },
+        "before": {
+          "checksum": "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2",
+          "dependencies": [
+            "block-buffer 0.12.1",
+            "crypto-common 0.2.2",
+            "ctutils"
+          ],
+          "name": "digest",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.11.3"
+        },
+        "package": [
+          "digest",
+          "0.11.3"
+        ]
+      },
+      {
+        "after": {
+          "checksum": "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0",
+          "dependencies": [
+            "cfg-if",
+            "js-sys",
+            "libc",
+            "wasi",
+            "wasm-bindgen"
+          ],
+          "name": "getrandom",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.2.17"
+        },
+        "before": {
+          "checksum": "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0",
+          "dependencies": [
+            "cfg-if",
+            "js-sys",
+            "libc",
+            "wasi 0.11.1+wasi-snapshot-preview1",
+            "wasm-bindgen"
+          ],
+          "name": "getrandom",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.2.17"
+        },
+        "package": [
+          "getrandom",
+          "0.2.17"
+        ]
+      },
+      {
+        "after": {
+          "checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+          "dependencies": [
+            "cfg-if",
+            "libc",
+            "r-efi 6.0.0",
+            "rand_core 0.10.1"
+          ],
+          "name": "getrandom",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.4.3"
+        },
+        "before": {
+          "checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+          "dependencies": [
+            "cfg-if",
+            "libc",
+            "r-efi 6.0.0"
+          ],
+          "name": "getrandom",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.4.3"
+        },
+        "package": [
+          "getrandom",
+          "0.4.3"
+        ]
+      },
+      {
+        "after": {
+          "dependencies": [
+            "anchor-lang",
+            "serde_json"
+          ],
+          "name": "gpu_escrow",
+          "version": "0.2.0"
+        },
+        "before": {
+          "dependencies": [
+            "anchor-lang"
+          ],
+          "name": "gpu_escrow",
+          "version": "0.2.0"
+        },
+        "package": [
+          "gpu_escrow",
+          "0.2.0"
+        ]
+      },
+      {
+        "after": {
+          "checksum": "818356c5132c1fede50f837ca96afbe78ff42413047f4abb886217845e1b6c8c",
+          "dependencies": [
+            "subtle",
+            "typenum",
+            "zeroize"
+          ],
+          "name": "hybrid-array",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.4.13"
+        },
+        "before": {
+          "checksum": "818356c5132c1fede50f837ca96afbe78ff42413047f4abb886217845e1b6c8c",
+          "dependencies": [
+            "typenum"
+          ],
+          "name": "hybrid-array",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.4.13"
+        },
+        "package": [
+          "hybrid-array",
+          "0.4.13"
+        ]
+      },
+      {
+        "after": {
+          "checksum": "30d65c71f1ce40ab09135ce117d742b9f8a19ff91a41a8b57ed50bc2de59c427",
+          "dependencies": [
+            "libc",
+            "wasi",
+            "windows-sys 0.61.2"
+          ],
+          "name": "mio",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "1.2.2"
+        },
+        "before": {
+          "checksum": "30d65c71f1ce40ab09135ce117d742b9f8a19ff91a41a8b57ed50bc2de59c427",
+          "dependencies": [
+            "libc",
+            "wasi 0.11.1+wasi-snapshot-preview1",
+            "windows-sys 0.61.2"
+          ],
+          "name": "mio",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "1.2.2"
+        },
+        "package": [
+          "mio",
+          "1.2.2"
+        ]
+      },
+      {
+        "after": {
+          "checksum": "22f6172bdec972074665ed81ed53b71da00bfc44b65a753cfde883ec4c702a1a",
+          "dependencies": [
+            "libc",
+            "rand_chacha",
+            "rand_core 0.6.4"
+          ],
+          "name": "rand",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.8.7"
+        },
+        "before": {
+          "checksum": "22f6172bdec972074665ed81ed53b71da00bfc44b65a753cfde883ec4c702a1a",
+          "dependencies": [
+            "libc",
+            "rand_chacha 0.3.1",
+            "rand_core 0.6.4"
+          ],
+          "name": "rand",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "0.8.7"
+        },
+        "package": [
+          "rand",
+          "0.8.7"
+        ]
+      },
+      {
+        "after": {
+          "checksum": "98eca145bd3545e2fbb07166e895370576e47a00a7d824e325390d33bf467210",
+          "dependencies": [
+            "bincode",
+            "blake3",
+            "borsh 0.10.4",
+            "borsh 1.8.0",
+            "bs58",
+            "bytemuck",
+            "console_error_panic_hook",
+            "console_log",
+            "getrandom 0.2.17",
+            "lazy_static",
+            "log",
+            "memoffset",
+            "num-bigint",
+            "num-derive",
+            "num-traits",
+            "rand",
+            "serde",
+            "serde_bytes",
+            "serde_derive",
+            "solana-account-info",
+            "solana-address-lookup-table-interface",
+            "solana-atomic-u64",
+            "solana-big-mod-exp",
+            "solana-bincode",
+            "solana-blake3-hasher",
+            "solana-borsh",
+            "solana-clock",
+            "solana-cpi",
+            "solana-decode-error",
+            "solana-define-syscall",
+            "solana-epoch-rewards",
+            "solana-epoch-schedule",
+            "solana-example-mocks",
+            "solana-feature-gate-interface",
+            "solana-fee-calculator",
+            "solana-hash",
+            "solana-instruction",
+            "solana-instructions-sysvar",
+            "solana-keccak-hasher",
+            "solana-last-restart-slot",
+            "solana-loader-v2-interface",
+            "solana-loader-v3-interface",
+            "solana-loader-v4-interface",
+            "solana-message",
+            "solana-msg",
+            "solana-native-token",
+            "solana-nonce",
+            "solana-program-entrypoint",
+            "solana-program-error",
+            "solana-program-memory",
+            "solana-program-option",
+            "solana-program-pack",
+            "solana-pubkey",
+            "solana-rent",
+            "solana-sanitize",
+            "solana-sdk-ids",
+            "solana-sdk-macro",
+            "solana-secp256k1-recover",
+            "solana-serde-varint",
+            "solana-serialize-utils",
+            "solana-sha256-hasher",
+            "solana-short-vec",
+            "solana-slot-hashes",
+            "solana-slot-history",
+            "solana-stable-layout",
+            "solana-stake-interface",
+            "solana-system-interface",
+            "solana-sysvar",
+            "solana-sysvar-id",
+            "solana-vote-interface",
+            "thiserror 2.0.19",
+            "wasm-bindgen"
+          ],
+          "name": "solana-program",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "2.3.0"
+        },
+        "before": {
+          "checksum": "98eca145bd3545e2fbb07166e895370576e47a00a7d824e325390d33bf467210",
+          "dependencies": [
+            "bincode",
+            "blake3",
+            "borsh 0.10.4",
+            "borsh 1.8.0",
+            "bs58",
+            "bytemuck",
+            "console_error_panic_hook",
+            "console_log",
+            "getrandom 0.2.17",
+            "lazy_static",
+            "log",
+            "memoffset",
+            "num-bigint",
+            "num-derive",
+            "num-traits",
+            "rand 0.8.7",
+            "serde",
+            "serde_bytes",
+            "serde_derive",
+            "solana-account-info",
+            "solana-address-lookup-table-interface",
+            "solana-atomic-u64",
+            "solana-big-mod-exp",
+            "solana-bincode",
+            "solana-blake3-hasher",
+            "solana-borsh",
+            "solana-clock",
+            "solana-cpi",
+            "solana-decode-error",
+            "solana-define-syscall",
+            "solana-epoch-rewards",
+            "solana-epoch-schedule",
+            "solana-example-mocks",
+            "solana-feature-gate-interface",
+            "solana-fee-calculator",
+            "solana-hash",
+            "solana-instruction",
+            "solana-instructions-sysvar",
+            "solana-keccak-hasher",
+            "solana-last-restart-slot",
+            "solana-loader-v2-interface",
+            "solana-loader-v3-interface",
+            "solana-loader-v4-interface",
+            "solana-message",
+            "solana-msg",
+            "solana-native-token",
+            "solana-nonce",
+            "solana-program-entrypoint",
+            "solana-program-error",
+            "solana-program-memory",
+            "solana-program-option",
+            "solana-program-pack",
+            "solana-pubkey",
+            "solana-rent",
+            "solana-sanitize",
+            "solana-sdk-ids",
+            "solana-sdk-macro",
+            "solana-secp256k1-recover",
+            "solana-serde-varint",
+            "solana-serialize-utils",
+            "solana-sha256-hasher",
+            "solana-short-vec",
+            "solana-slot-hashes",
+            "solana-slot-history",
+            "solana-stable-layout",
+            "solana-stake-interface",
+            "solana-system-interface",
+            "solana-sysvar",
+            "solana-sysvar-id",
+            "solana-vote-interface",
+            "thiserror 2.0.19",
+            "wasm-bindgen"
+          ],
+          "name": "solana-program",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "2.3.0"
+        },
+        "package": [
+          "solana-program",
+          "2.3.0"
+        ]
+      },
+      {
+        "after": {
+          "dependencies": [
+            "k256",
+            "solana-define-syscall",
+            "thiserror 2.0.19"
+          ],
+          "name": "solana-secp256k1-recover",
+          "version": "2.2.1"
+        },
+        "before": {
+          "checksum": "baa3120b6cdaa270f39444f5093a90a7b03d296d362878f7a6991d6de3bbe496",
+          "dependencies": [
+            "libsecp256k1",
+            "solana-define-syscall",
+            "thiserror 2.0.19"
+          ],
+          "name": "solana-secp256k1-recover",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "version": "2.2.1"
+        },
+        "package": [
+          "solana-secp256k1-recover",
+          "2.2.1"
+        ]
+      }
+    ],
+    "removed": [
+      [
+        "base64",
+        "0.12.3"
+      ],
+      [
+        "block-buffer",
+        "0.9.0"
+      ],
+      [
+        "crunchy",
+        "0.2.4"
+      ],
+      [
+        "ctutils",
+        "0.4.2"
+      ],
+      [
+        "digest",
+        "0.9.0"
+      ],
+      [
+        "getrandom",
+        "0.1.16"
+      ],
+      [
+        "libsecp256k1",
+        "0.6.0"
+      ],
+      [
+        "libsecp256k1-core",
+        "0.2.2"
+      ],
+      [
+        "libsecp256k1-gen-ecmult",
+        "0.2.1"
+      ],
+      [
+        "libsecp256k1-gen-genmult",
+        "0.2.1"
+      ],
+      [
+        "opaque-debug",
+        "0.3.1"
+      ],
+      [
+        "rand",
+        "0.7.3"
+      ],
+      [
+        "rand_chacha",
+        "0.2.2"
+      ],
+      [
+        "rand_core",
+        "0.5.1"
+      ],
+      [
+        "rand_hc",
+        "0.2.0"
+      ],
+      [
+        "sha2",
+        "0.9.9"
+      ],
+      [
+        "wasi",
+        "0.9.0+wasi-snapshot-preview1"
+      ]
+    ]
+  },
+  "omittedUnusedSupplierLockSha256": "5818be465836558d3b02dc87aa64270a292c53511f654fc159db015b2820e941",
+  "originalSourceSha256": "54da9d67a371b6cb91cd22ccedd7a2389b09ad2486bd5409c1a3e509ff18e60b",
+  "packageVersionsSpoofed": false,
+  "patchSha256": "3b593a92f0d7a026a008bc2d841981e14acb7ad3ce336cc0eed1981cbc4c3cac",
+  "priorBackportPr": "https://github.com/khemisset18/gpubnb/pull/358",
+  "publicFixtureSchemaChange": {
+    "all1636PriorCasesRetained": true,
+    "change": "Rename expected.key to expected.point; all public affine-point hex bytes, all errors, inputs and case IDs retained exactly. No redaction, encoding change or scanner exception.",
+    "errorCases": 1048,
+    "oldSchemaVersion": 1,
+    "priorFixtureSha256": "ba44e059b1a554936bfe3aee624fba0bb1d903a784f46979ebd99a0654b98e44",
+    "publicPointCases": 588,
+    "schemaVersion": 2
+  },
+  "publicFixtureSha256": "ddfb6f2f9ef069fd107d95d959c169b1d053a14dd7f573fe5312891f75412905",
+  "publicVector": {
+    "commit": "d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9",
+    "license": "Apache-2.0",
+    "licenseGitBlob": "7a4a3ea2424c09fbe48d455aed1eaa94d9124835",
+    "licenseSha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+    "path": "testvectors_v1/ecdsa_secp256k1_sha256_test.json",
+    "sha256": "43db761c0a2eae71fb0755d355d5130e28ce64a5b07846cf27e7072082597a81"
+  },
+  "qualificationStatus": "BLOCKED",
+  "scannerExemptions": false,
+  "schemaVersion": 1,
+  "unchangedSolanaSyscallBlockSha256": "54c3ad70b707283ffd462d2b7e498e6b857a44aebce9b9766e4c586d590c5962",
+  "upstreamMigrationCommit": "1dd727d4754b22157ce2b890b0f6dfe5237bc0d1",
+  "upstreamMigrationSourceGitBlob": "ac0ce42bcac09ef11dd3467bae0440d70b955c64",
+  "upstreamMigrationSourceSha256": "5ebd55959a6f3943aeb3eee8a229dc266cbfea86169d04b22361565ff51409d0",
+  "vendorFiles": {
+    ".cargo_vcs_info.json": "1e4b80c32ba8756c35f13d24805b549952850ee5052ec7f2402871c351ddf16e",
+    "BACKPORT.md": "fc7108794febdd78b53f31cb2f13c47d9bb9173800d9062bb9281f9aa3678375",
+    "Cargo.toml": "036b4d7df2fc632e064d84d8d8bef3a432ab24951b455c8a006f2a135505070f",
+    "Cargo.toml.orig": "808a7c6360189801b796df84e077248e93b221196c047fc11e7a41425a90f201",
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "src/lib.rs": "c83a4990493a181a8d32a1dcfdb3ff75c744a2ae2ef12e90c02e65a0fa7c5c14"
+  },
+  "vendorPath": "vendor/security/solana-secp256k1-recover-2.2.1"
+}
