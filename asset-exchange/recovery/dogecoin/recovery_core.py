@@ -174,8 +174,11 @@ def observe(bundle,rpc,previous=None):
         confirmed=active_confirmation(rpc,value)
         pending=None if confirmed else rpc('getmempoolentry',entry['txid'],missing_ok=True)
         if confirmed or pending is not None:known.append((entry,confirmed,value))
-    require(sum(bool(x[1]) for x in known)<=1,'conflicting active refund observations')
+    # Every ladder entry spends the same outpoint. Multiple pending/confirmed
+    # entries are inconsistent too; never choose the first contradictory RPC.
+    require(len(known)<=1,'conflicting active refund observations')
     utxo=rpc('gettxout',funding['txid'],funding['vout'],'true')
+    require(not known or utxo is None,'refund and unspent funding observations conflict')
     if utxo is not None:
         live_amount=Decimal(str(utxo.get('value')))*100_000_000
         require(live_amount==amount(funding['valueKoinu']) and utxo.get('scriptPubKey',{}).get('hex')==bundle['contract']['outputHex'],
@@ -184,6 +187,7 @@ def observe(bundle,rpc,previous=None):
     require(current.get('bestblockhash')==chain['bestblockhash'] and current.get('blocks')==chain['blocks'],'chain changed during observation; retry required')
     confirmed=next((x for x in known if x[1]),None)
     pending=next((x for x in known if not x[1]),None)
+    require(not confirmed or funding_confirmed,'confirmed refund without confirmed funding; inconsistent RPC observations')
     if confirmed:state='CONFIRMED';entry=confirmed[0]
     elif pending:state='PENDING';entry=pending[0]
     elif utxo is not None and funding_confirmed:state='UTXO_AVAILABLE';entry=None
@@ -208,6 +212,7 @@ def rebroadcast(bundle,rpc,previous=None):
     if status['state']=='CONFIRMED':return {**status,'action':'ALREADY_CONFIRMED'}
     require(status['nodeSynchronized'],'node has an unresolved header lead; no broadcast')
     require(status['state'] in ('UTXO_AVAILABLE','PENDING'),'funding unavailable or ambiguous; no broadcast')
+    require(status['fundingConfirmed'],'funding is not confirmed on active chain; no broadcast')
     chain=rpc('getblockchaininfo');info=rpc('getmempoolinfo');network=rpc('getnetworkinfo')
     rate=max(fee_floor_koinu(info['mempoolminfee']),fee_floor_koinu(network['relayfee']))
     eligible=[]
