@@ -36,11 +36,12 @@ RPC_PORTS = {'a':18332, 'b':18333}
 MAX_BLOCKS, MAX_RPC, MAX_FIXTURES = 1370, 480, 8
 FEE_MAX_FIXTURES, FEE_MAX_BYTES = 96, 60000
 VM_SUITES=('recovery-handoff','recovery-independent','recovery-resume')
-LAB_SUITES=('multinode','fee-pinning',*VM_SUITES,'auxpow-expanded')
+LAB_SUITES=('multinode','fee-pinning',*VM_SUITES,'auxpow-expanded','recovery-funding-reorg')
 METHODS = frozenset({'getblockchaininfo','getblockhash','getnetworkinfo','getpeerinfo',
     'generatetoaddress','getblock','getrawtransaction','gettxout','sendrawtransaction',
     'getmempoolentry','getrawmempool','getblockheader','getmempoolinfo','addnode','setnetworkactive','invalidateblock','reconsiderblock','stop',
     'createauxblock','submitauxblock'})
+FUNDING_METHODS=METHODS-{'createauxblock','submitauxblock'}
 AUX_METHODS=METHODS-{'getrawtransaction','gettxout','sendrawtransaction','getmempoolentry','getrawmempool','getmempoolinfo'}
 
 
@@ -78,13 +79,18 @@ def manifest(lab_suite='multinode'):
             keys='no signing keys created or provided',signingAllowed=False,
             repeatsPreviouslyQualifiedSuite=False,
             notCovered=['exhaustive AuxPoW byte fuzzing','independent external review','all D0-D9 requirements'])
+    if lab_suite=='recovery-funding-reorg':
+        result.update(rpcAllowlist=sorted(FUNDING_METHODS),maxRpc=400,maxGeneratedBlocks=2,
+            maxBroadcastFixtures=2,maxAuxpowFixtures=0,importedPublicBlocksMaximum=1355,
+            maxStandaloneInvocations=8,keys='no signing keys created or provided',signingAllowed=False,
+            repeatsPreviouslyQualifiedSuite=False)
     return result
 
 
 def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, aux_submitted=frozenset(),
                  lab_suite='multinode',mocktimes=frozenset()):
     require(lab_suite in LAB_SUITES,'fixed laboratory suite required')
-    methods=AUX_METHODS if lab_suite=='auxpow-expanded' else METHODS|({'setmocktime'} if lab_suite=='fee-pinning' else set())
+    methods=AUX_METHODS if lab_suite=='auxpow-expanded' else FUNDING_METHODS if lab_suite=='recovery-funding-reorg' else METHODS|({'setmocktime'} if lab_suite=='fee-pinning' else set())
     require(node in NODES and method in methods, 'fixed node/method required')
     require(type(params) in (tuple,list) and all(type(p) is str for p in params), 'string RPC parameters required')
     params=tuple(params)
@@ -92,8 +98,9 @@ def validate_rpc(node, method, params, *, addresses, blocks, txids, submitted, a
         require(len(params)==4 and params[0] in ('1352','1','2','4')
                 and params[1]==addresses[node] and params[2]=='1000000'
                 and params[3]==('0' if params[0]=='1352' else '1'), 'bounded mining parameters required')
-        require(lab_suite not in ('recovery-independent','recovery-resume','auxpow-expanded') or params[0]!='1352',
+        require(lab_suite not in ('recovery-independent','recovery-resume','auxpow-expanded','recovery-funding-reorg') or params[0]!='1352',
                 'consumer may replay public blocks but cannot remine initial chain')
+        require(lab_suite!='recovery-funding-reorg' or params[0]=='1','one new confirmation block only')
     elif method=='addnode':
         other='b' if node=='a' else 'a'
         require(params==(f'127.0.0.1:{P2P_PORTS[other]}','onetry'), 'only fixed private peer allowed')
@@ -200,12 +207,12 @@ def run(args, recovery_runner=None, bundle_validator=None):
         (out/'multinode-report.json').write_text(dump(report));(out/'rpc-requests.json').write_text(dump(trace))
     save();report['members']=extract_verified_members(evidence/ARCHIVE,sbom,bins)
     handoff_root=getattr(args,'handoff_directory',None);handoff_manifest=None
-    if lab_suite in (*VM_SUITES,'auxpow-expanded'):
+    if lab_suite in (*VM_SUITES,'auxpow-expanded','recovery-funding-reorg'):
         require(re.fullmatch('[0-9a-f]{40}',getattr(args,'execution_commit','') or '') is not None,
                 'exact VM experiment execution commit required')
-    if lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded'):
+    if lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded','recovery-funding-reorg'):
         require(handoff_root is not None,'independently retained handoff required')
-        if lab_suite=='auxpow-expanded':
+        if lab_suite in ('auxpow-expanded','recovery-funding-reorg'):
             from auxpow_boundaries import load_public_seed
             handoff_manifest=load_public_seed(handoff_root,getattr(args,'handoff_sha256',None))
         else:
@@ -266,7 +273,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
         if lab_suite in ('fee-pinning',*VM_SUITES):
             daemon+=['-mempoolreplacement='+('0' if node=='b' else '1'),'-debug=mempoolrej']
         if import_file is not None:
-            require(lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded') and handoff_root is not None
+            require(lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded','recovery-funding-reorg') and handoff_root is not None
                     and Path(import_file).resolve()==Path(handoff_root).resolve()/'public-chain.dat',
                     'only verified public block handoff may be imported')
             daemon+=['-loadblock='+str(import_file)]
@@ -344,7 +351,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
             entry['retainedTestDumpSha256']=hashlib.sha256(backup.read_bytes()).hexdigest()
         report.setdefault('feeRestarts',[]).append(entry);save();return start(node)
     def import_chain(path,tip,height):
-        require(lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded') and handoff_manifest is not None
+        require(lab_suite in ('recovery-independent','recovery-resume','auxpow-expanded','recovery-funding-reorg') and handoff_manifest is not None
                 and tip==handoff_manifest['blocks'][-1] and height==len(handoff_manifest['blocks']),
                 'verified independent public chain required')
         for node in NODES:
@@ -356,9 +363,9 @@ def run(args, recovery_runner=None, bundle_validator=None):
         report['publicReplay']={'blocks':height,'tip':tip,'nodeDatabasesTransferred':False,
             'streamSha256':hashlib.sha256(path.read_bytes()).hexdigest()};save()
     def independent_fee_recovery(context):
-        require(lab_suite in ('fee-pinning','recovery-independent','recovery-resume') and recovery_runner is not None,'standalone fee recovery required')
+        require(lab_suite in ('fee-pinning','recovery-independent','recovery-resume','recovery-funding-reorg') and recovery_runner is not None,'standalone fee recovery required')
         label='feeRecoveryCalls' if lab_suite=='fee-pinning' else 'independentRecoveryCalls'
-        require(len(report.get(label,[]))<(12 if lab_suite=='fee-pinning' else 24),'bounded fee recovery invocations required')
+        require(len(report.get(label,[]))<(12 if lab_suite=='fee-pinning' else 8 if lab_suite=='recovery-funding-reorg' else 24),'bounded fee recovery invocations required')
         disconnected=context.get('disconnectBlockchain',False)
         require(type(disconnected) is bool and (not disconnected or lab_suite=='recovery-independent'),
                 'disconnect injection only in independent VM incident scope')
@@ -375,7 +382,7 @@ def run(args, recovery_runner=None, bundle_validator=None):
         calls=result['rpcCalls'];require(len(calls)<=min(64,remaining),'external fee recovery budget mismatch')
         for call in calls:
             require(set(call)=={'method','params'},'exact recovery RPC row required')
-            validate_rpc(node,call['method'],call['params'],addresses=addresses,blocks=blocks,txids=txids,submitted=submitted)
+            validate_rpc(node,call['method'],call['params'],addresses=addresses,blocks=blocks,txids=txids,submitted=submitted,lab_suite=lab_suite)
         external_calls.extend({'source':node,'reachedServer':not disconnected,**c} for c in calls)
         result.update(source=node,labLabel=context.get('labLabel',''))
         report.setdefault(label,[]).append(result);save();return result
@@ -403,6 +410,13 @@ def run(args, recovery_runner=None, bundle_validator=None):
             run_expanded(dict(rpc=rpc,wait=wait_for,sync=synchronized,peers=peer_view,mine=mine,
                 import_chain=import_chain,addresses=addresses,blocks=blocks,aux_submitted=aux_submitted,
                 out=out,report=report,save=save),handoff_root,handoff_manifest)
+            finish();return
+        if lab_suite=='recovery-funding-reorg':
+            from funding_reorg import run_funding_reorg
+            run_funding_reorg(dict(rpc=rpc,submit=submit,mine=mine,tx=tx,wait=wait_for,sync=synchronized,
+                peers=peer_view,recover=independent_fee_recovery,import_chain=import_chain,
+                keys=keys,out=out,report=report,save=save,submitted=submitted,txids=txids,blocks=blocks,
+                addresses=addresses,normalize=normalize_observation),handoff_root,handoff_manifest)
             finish();return
         if lab_suite in ('recovery-independent','recovery-resume'):
             from vm_recovery import consume

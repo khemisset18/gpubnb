@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "runId": 43486987680,
+  "executionCommit": "4766d0de2468acdaa04ed6b8fef1ac7f7dd74b58",
+  "harnessCommit": "b9ad755099024bd68053359ddb009b3ae2521152",
+  "artifactId": 14068440661,
+  "artifactZipSha256": "db1738fe6af58bef481ce750ea7d92646c82f87502946c95eb0d0de383620b43",
+  "nativeStatus": "FAIL",
+  "error": "ValueError: new funding relay timeout",
+  "casesPassed": 0,
+  "generatedBlocks": 0,
+  "rpcCalls": 86,
+  "nativeObservedSeed": {
+    "a": {
+      "blocks": 1355,
+      "bestblockhash": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a",
+      "initialblockdownload": true
+    },
+    "b": {
+      "blocks": 1355,
+      "bestblockhash": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a",
+      "initialblockdownload": true
+    }
+  },
+  "broadcastsBeforeTimeout": 1,
+  "refundBroadcasts": 0,
+  "checksAfterDownload": [
+    "ZIP SHA256",
+    "all internal native checksums",
+    "actual RPC initialblockdownload observations"
+  ],
+  "causeFromPinnedSource": "IsInitialBlockDownload checks a 24h tip age; transaction inventory is not requested during IBD. The retained1355-block seed is older than this limit.",
+  "correction": "Mine the already-budgeted funding confirmation block immediately after native RPC admission, use ordinary block relay to exit IBD on both nodes, then test refund relay and funding rollback. No mocktime, IBD bypass, extra block or changed node policy.",
+  "keysCreated": 0,
+  "transactionsSigned": 0,
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false
+}

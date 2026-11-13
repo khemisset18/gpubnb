@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "cdb3e24759ed501b0e304dc15f58aaaedacb78f3",
+  "before": {
+    "codeSha256": "ab7984c43e29f95ffb61b018cd50fa8e32a15e67163bcff3851938eba6ebaded",
+    "testsSha256": "e7a6fc90cfd011a0244dc499069a2ec2f42df7875e8f8b306725e9eefcd159c8",
+    "logSha256": "0566e1e2d642b06d19bbf1a61de3a0e3353458959f668241ac2706ab262f2d73",
+    "pass": 1,
+    "fail": 5,
+    "skip": 0
+  },
+  "after": {
+    "codeSha256": "0b5ea29713c5878e6787e38d46951f41acc54f0bafaf7e2424d51e82a871bd37",
+    "logSha256": "4a92faf7876a3bf7016407fa722059b90c7b3f8446a5103a20171d59b278630b",
+    "pass": 28,
+    "fail": 0,
+    "skip": 0
+  },
+  "tests": [
+    "test_active_confirmed_refund_requires_active_confirmed_funding",
+    "test_confirmed_and_conflicting_pending_cannot_be_reported_together",
+    "test_pending_refund_after_funding_reorg_can_be_observed_but_not_rebroadcast",
+    "test_refund_observed_spending_an_unspent_funding_output_refuses",
+    "test_two_confirmed_conflicts_remain_rejected",
+    "test_two_conflicting_pending_refunds_are_not_arbitrarily_selected"
+  ],
+  "nativeStatus": "NOT_TESTED",
+  "rpcMode": "controlled software responses; no native node in these tests",
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false
+}
