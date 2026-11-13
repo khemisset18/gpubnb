@@ -118,6 +118,7 @@ class FundingReorgBoundaries(unittest.TestCase):
             stages.append({'label':label,'observations':rows})
         return {'experimentStatus':'PASS','qualificationStatus':'BLOCKED','manifest':{'labSuite':'recovery-funding-reorg'},
             'fundingReorg':{'keysCreated':0,'transactionsSigned':0,'previousNativeSuitesRepeated':False,
+                'newFundingGuardIsolatedNatively':False,
                 'cases':[{'id':'pending-refund-after-funding-reorg','status':'PASS'},
                          {'id':'same-refund-after-funding-restoration','status':'PASS'}]},'stages':stages}
 

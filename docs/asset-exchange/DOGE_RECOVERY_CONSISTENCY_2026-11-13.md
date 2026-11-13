@@ -79,3 +79,22 @@ déjà prévu et relais ordinaire de ce bloc, puis vérification de la sortie
 de synchronisation initiale sur les deux nœuds avant le remboursement.
 Aucune horloge, politique, limite ni validation native n’est modifiée ;
 le budget reste deux blocs et le scénario de réorganisation est identique.
+
+## Deuxième essai : motif de refus trop spécifique dans le diagnostic
+
+Le run [43487873755](https://github.com/khemisset18/gpubnb/actions/runs/43487873755)
+est **FAIL** après un bloc : sortie IBD sur les deux nœuds, remboursement en
+attente avec financement confirmé, puis financement et remboursement en attente
+après rollback. Les observations autonomes attestent `fundingConfirmed=true`
+puis `false`. L’attente du message de refus est incorrecte : `invalidateblock`
+conserve 1356 en-têtes avec 1355 blocs actifs, et le contrôle préexistant
+`nodeSynchronized` intervient avant le nouveau garde de financement.
+Le [reçu](research/2026-11-13/recovery-consistency/second-native-result.json)
+conserve cet échec ; son archive ne contient pas le JSON du refus effectif.
+
+Le diagnostic exige désormais ces hauteurs et le motif exact du contrôle
+d’en-têtes existant. L’ordre et les exigences de `recovery_core` ne changent pas.
+Cette régression native teste le refus global et la reprise après restauration ;
+elle **n’isole pas** le nouveau garde de financement. Le test logiciel ciblé,
+avec hauteurs d’en-têtes et de blocs égales, isole ce nouveau garde. Aucun
+contrôle préexistant n’est déplacé pour obtenir un motif de refus particulier.

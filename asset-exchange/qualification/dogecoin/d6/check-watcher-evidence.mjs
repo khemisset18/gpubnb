@@ -33,6 +33,7 @@ if(report.auxpowExpanded){
   assert.equal(report.fundingReorg.keysCreated,0);
   assert.equal(report.fundingReorg.transactionsSigned,0);
   assert.equal(report.fundingReorg.previousNativeSuitesRepeated,false);
+  assert.equal(report.fundingReorg.newFundingGuardIsolatedNatively,false);
   assert.deepEqual(report.fundingReorg.cases.map(x=>[x.id,x.status]),[
     ["pending-refund-after-funding-reorg","PASS"],["same-refund-after-funding-restoration","PASS"]]);
   const expected={"pending-confirmed-funding":"CONSISTENT","funding-rolled-back":"UNCERTAIN",

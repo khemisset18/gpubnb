@@ -46,6 +46,7 @@ exec "$@"
 '''
 PACKAGE_DIGESTS={}
 EXPECTED_REFUSALS=frozenset({
+    'node has an unresolved header lead; no broadcast',
     'funding is not confirmed on active chain; no broadcast',
     'funding unavailable or ambiguous; no broadcast',
     'no pre-signed refund covers current fee floor; signatory or new authorization required',

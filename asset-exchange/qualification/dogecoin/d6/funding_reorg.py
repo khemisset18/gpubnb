@@ -9,7 +9,9 @@ from script_diagnostics import require
 from test_signer import hash256
 from recovery_core import load_bundle,read_regular
 
-REFUSAL='funding is not confirmed on active chain; no broadcast'
+# invalidateblock retains the higher header. The existing header-lead guard
+# therefore refuses before the new funding guard; do not weaken or reorder it.
+REFUSAL='node has an unresolved header lead; no broadcast'
 
 
 def run_funding_reorg(c,directory,seed):
@@ -32,7 +34,8 @@ def run_funding_reorg(c,directory,seed):
     c['blocks'].update(seed['blocks'])
     result={'cases':[],'keysCreated':0,'transactionsSigned':0,'retainedBundleSha256':digest,
         'refundTxid':tid,'refundSha256':refund['sha256'],'retainedKoinu':'98000000','feeKoinu':'1000000',
-        'previousNativeSuitesRepeated':False,'qualificationStatus':'BLOCKED'}
+        'previousNativeSuitesRepeated':False,'newFundingGuardIsolatedNatively':False,
+        'qualificationStatus':'BLOCKED'}
     report['fundingReorg']=result;save()
     c['import_chain'](root/'public-chain.dat',seed['blocks'][-1],len(seed['blocks']))
     rpc('a','addnode','127.0.0.1:18445','onetry')
@@ -74,7 +77,9 @@ def run_funding_reorg(c,directory,seed):
     rpc('b','setnetworkactive','false')
     c['wait']('funding rollback partition',lambda:not c['peers']('a') and not c['peers']('b'))
     rpc('a','invalidateblock',funding_block)
-    require(rpc('a','getblockchaininfo')['blocks']==1355,'funding rollback depth differs')
+    rolled_chain=rpc('a','getblockchaininfo')
+    require(rolled_chain['blocks']==1355 and rolled_chain['headers']==1356,
+            'native funding rollback/header lead differs')
     pool=rpc('a','getrawmempool')
     require(fid in pool and tid in pool,'native parent and refund did not both return to mempool')
     require(c['tx']('a',fid).get('confirmations',0)==0 and c['tx']('a',tid).get('confirmations',0)==0,
@@ -87,7 +92,8 @@ def run_funding_reorg(c,directory,seed):
             'unconfirmed funding retry was not refused before broadcast')
     result['cases'].append({'id':'pending-refund-after-funding-reorg','status':'PASS',
         'expectationScope':'exchange-protocol','fundingBlock':funding_block,'rollbackDepth':1,
-        'nativeParentAndRefundPending':True,'standaloneRefusal':REFUSAL,'refusalBroadcasts':0})
+        'nativeParentAndRefundPending':True,'nativeHeaders':1356,'nativeActiveBlocks':1355,
+        'standaloneRefusal':REFUSAL,'refusalBroadcasts':0,'preexistingHeaderGuardRefusedFirst':True})
     snapshot('funding-rolled-back')
     rpc('a','reconsiderblock',funding_block);c['wait']('funding anchor restored',c['sync'])
     require(c['tx']('a',fid)['confirmations']==1 and tid in rpc('a','getrawmempool'),
