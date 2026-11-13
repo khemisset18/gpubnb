@@ -20,6 +20,7 @@ fn actual_solana_reexport_matches_independent_public_recovery_oracle() {
         ))
         .unwrap(),
     };
+    assert_eq!(fixtures["schemaVersion"], 2);
     let cases = fixtures["cases"].as_array().unwrap();
     assert_eq!(
         cases.len() as u64,
@@ -37,10 +38,10 @@ fn actual_solana_reexport_matches_independent_public_recovery_oracle() {
         let recovery_id = case["recoveryId"].as_u64().unwrap() as u8;
         let actual = secp256k1_recover(&message_hash, recovery_id, &signature);
         let expected = &case["expected"];
-        if let Some(key) = expected["key"].as_str() {
+        if let Some(point) = expected["point"].as_str() {
             assert_eq!(
                 actual.as_ref().map(|key| key.to_bytes().to_vec()),
-                Ok(bytes(key)),
+                Ok(bytes(point)),
                 "public recovery case {}",
                 case["id"]
             );

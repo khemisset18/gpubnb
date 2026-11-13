@@ -52,11 +52,11 @@ def validate_committed(repo, pins):
     base = pins['baseCommit']
     original_manifest = git(repo, 'show', base+':Cargo.toml').decode()
     expected = original_manifest+'\n[patch.crates-io]\nsolana-secp256k1-recover = { path = "'+pins['vendorPath']+'" }\n'
-    assert (repo/'Cargo.toml').read_text() == expected, 'unrelated workspace manifest change'
+    assert (repo/'Cargo.toml').read_text(encoding='utf-8') == expected, 'unrelated workspace manifest change'
     original_program = git(repo, 'show', base+':programs/gpu_escrow/Cargo.toml').decode()
-    assert (repo/'programs/gpu_escrow/Cargo.toml').read_text() == original_program+'\n[dev-dependencies]\nserde_json = "=1.0.151"\n', 'unrelated program dependency change'
+    assert (repo/'programs/gpu_escrow/Cargo.toml').read_text(encoding='utf-8') == original_program+'\n[dev-dependencies]\nserde_json = "=1.0.151"\n', 'unrelated program dependency change'
     original_lock = tomllib.loads(git(repo, 'show', base+':Cargo.lock').decode())
-    candidate_lock = tomllib.loads((repo/'Cargo.lock').read_text())
+    candidate_lock = tomllib.loads((repo/'Cargo.lock').read_text(encoding='utf-8'))
     assert lock_delta(original_lock, candidate_lock) == pins['lockDelta'], 'unreviewed lock graph change'
     old = {(p['name'], p['version']): p for p in original_lock['package']}
     new = {(p['name'], p['version']): p for p in candidate_lock['package']}
@@ -94,17 +94,17 @@ def rebuild_source(work, repo, pins):
     download('https://raw.githubusercontent.com/anza-xyz/solana-sdk/'+pins['upstreamMigrationCommit']+'/secp256k1-recover/src/lib.rs', upstream, pins['upstreamMigrationSourceSha256'])
     extract(archive, work)
     source = work/'solana-secp256k1-recover-2.2.1'
-    assert json.loads((source/'.cargo_vcs_info.json').read_text())['git']['sha1'] == pins['archiveSourceCommit']
+    assert json.loads((source/'.cargo_vcs_info.json').read_text(encoding='utf-8'))['git']['sha1'] == pins['archiveSourceCommit']
     assert sha(source/'src/lib.rs') == pins['originalSourceSha256']
-    original = (source/'src/lib.rs').read_text()
+    original = (source/'src/lib.rs').read_text(encoding='utf-8')
     assert sha(source/'Cargo.lock') == pins['omittedUnusedSupplierLockSha256']
     subprocess.run(['patch', '--batch', '--forward', '--fuzz=0', '-p1', '-i', str(HERE/'backport.patch')], cwd=source, check=True, capture_output=True, timeout=15)
     (source/'Cargo.lock').unlink()
     shutil.copyfile(license_path, source/'LICENSE')
     assert hashes(source) == pins['vendorFiles'], 'backport did not reproduce exact source/license files'
-    active = (repo/pins['vendorPath']/'src/lib.rs').read_text()
+    active = (repo/pins['vendorPath']/'src/lib.rs').read_text(encoding='utf-8')
     marker = '    #[cfg(not(target_os = "solana"))]\n'
-    assert active == '// GPUbnb host-only compatibility backport, 2026-11-12. See BACKPORT.md.\n'+original.split(marker)[0]+marker+upstream.read_text().split(marker)[1].replace('to_encoded_point(false)', 'to_sec1_point(false)'), 'host implementation differs from exact upstream adaptation'
+    assert active == '// GPUbnb host-only compatibility backport, 2026-11-12. See BACKPORT.md.\n'+original.split(marker)[0]+marker+upstream.read_text(encoding='utf-8').split(marker)[1].replace('to_encoded_point(false)', 'to_sec1_point(false)'), 'host implementation differs from exact upstream adaptation'
     start = original.index('    #[cfg(target_os = "solana")]\n', original.index('pub fn secp256k1_recover('))
     assert hashlib.sha256(original[start:original.index(marker, start)].encode()).hexdigest() == pins['unchangedSolanaSyscallBlockSha256']
 
@@ -112,7 +112,8 @@ def rebuild_source(work, repo, pins):
 def metadata(project, output, log, env):
     with output.open('wb') as stdout, log.open('wb') as stderr:
         subprocess.run(['cargo', 'metadata', '--locked', '--all-features', '--format-version=1'], cwd=project, env=env, stdout=stdout, stderr=stderr, check=True, timeout=900)
-    return json.loads(output.read_text())
+    # Cargo's JSON is UTF-8, independently of the Windows legacy locale.
+    return json.loads(output.read_bytes())
 
 
 def run_recovery(project, label, work, env):
@@ -121,7 +122,7 @@ def run_recovery(project, label, work, env):
     with output.open('wb') as log:
         result = subprocess.run(command, cwd=project, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=900)
     assert result.returncode == 0, label+' recovery failed; inspect '+str(output)
-    text = output.read_text()
+    text = output.read_text(encoding='utf-8')
     assert 'PUBLIC_RECOVERY_CASES_PASS=1636' in text and re.search(r'test result: ok\. 2 passed; 0 failed; 0 ignored;', text), label+' complete expected test count missing'
     return {'result': 'PASS', 'tests': 2, 'publicRecoveryCases': 1636, 'logSha256': sha(output), 'command': command}
 
@@ -133,7 +134,7 @@ def main():
     args = parser.parse_args()
     work = args.fresh_work_directory.resolve()
     work.mkdir(mode=0o700, exist_ok=False)
-    pins = json.loads((HERE/'source-pins.json').read_text())
+    pins = json.loads((HERE/'source-pins.json').read_text(encoding='utf-8'))
     repo = HERE.parents[1]
     report = {'schemaVersion': 1, 'result': 'FAIL', 'qualificationStatus': 'BLOCKED',
               'SbfRuntime': 'NOT_TESTED', 'transactionsOrPrivateKeys': False,
@@ -177,7 +178,7 @@ def main():
         for path in ['programs/gpu_escrow/Cargo.toml', 'programs/gpu_escrow/tests/secp256k1_host_compatibility.rs', 'prototypes/solana-recovery-migration/public-recovery-fixtures.json']:
             destination = baseline/path;destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(repo/path, destination)
-        lock = (baseline/'Cargo.lock').read_text()
+        lock = (baseline/'Cargo.lock').read_text(encoding='utf-8')
         old = 'name = "gpu_escrow"\nversion = "0.2.0"\ndependencies = [\n "anchor-lang",\n]'
         assert lock.count(old) == 1
         (baseline/'Cargo.lock').write_bytes(lock.replace(old, old.replace(' "anchor-lang",', ' "anchor-lang",\n "serde_json",')).encode())

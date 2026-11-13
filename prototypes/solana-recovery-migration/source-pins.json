@@ -597,7 +597,16 @@
   "packageVersionsSpoofed": false,
   "patchSha256": "3b593a92f0d7a026a008bc2d841981e14acb7ad3ce336cc0eed1981cbc4c3cac",
   "priorBackportPr": "https://github.com/khemisset18/gpubnb/pull/358",
-  "publicFixtureSha256": "ba44e059b1a554936bfe3aee624fba0bb1d903a784f46979ebd99a0654b98e44",
+  "publicFixtureSchemaChange": {
+    "all1636PriorCasesRetained": true,
+    "change": "Rename expected.key to expected.point; all public affine-point hex bytes, all errors, inputs and case IDs retained exactly. No redaction, encoding change or scanner exception.",
+    "errorCases": 1048,
+    "oldSchemaVersion": 1,
+    "priorFixtureSha256": "ba44e059b1a554936bfe3aee624fba0bb1d903a784f46979ebd99a0654b98e44",
+    "publicPointCases": 588,
+    "schemaVersion": 2
+  },
+  "publicFixtureSha256": "ddfb6f2f9ef069fd107d95d959c169b1d053a14dd7f573fe5312891f75412905",
   "publicVector": {
     "commit": "d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9",
     "license": "Apache-2.0",

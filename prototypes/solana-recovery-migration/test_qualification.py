@@ -1,4 +1,5 @@
 import copy
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -8,6 +9,17 @@ import qualify
 
 
 class QualificationBoundaryTests(unittest.TestCase):
+    def test_cargo_unicode_metadata_is_decoded_without_the_legacy_locale(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            expected = {'packages': [{'description': 'UTF-8 author: 東京, Zoë'}]}
+            def cargo_output(*args, stdout, **kwargs):
+                stdout.write(json.dumps(expected, ensure_ascii=False).encode('utf-8'))
+            # Reproduce the observed Windows cp1252 failure for text-mode reads.
+            legacy_error = UnicodeDecodeError('charmap', b'\x81', 0, 1, 'undefined byte')
+            with patch('subprocess.run', side_effect=cargo_output), patch.object(Path, 'read_text', side_effect=legacy_error):
+                self.assertEqual(qualify.metadata(root, root/'metadata.json', root/'cargo.log', {}), expected)
+
     def test_altered_vendor_is_refused_before_git_or_cargo(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

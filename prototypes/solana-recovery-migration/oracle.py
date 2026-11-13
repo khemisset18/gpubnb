@@ -79,10 +79,10 @@ def recover(message_hash, recovery_id, signature):
     inverse_r = pow(r, -1, N)
     a = multiply(s*inverse_r % N, (x, y))
     b = multiply((-int.from_bytes(message_hash, 'big')*inverse_r) % N, G)
-    key = affine(add_mixed((*a, 1) if a else (0, 1, 0), b))
-    if key is None:
+    point = affine(add_mixed((*a, 1) if a else (0, 1, 0), b))
+    if point is None:
         return {'error': 'InvalidSignature'}
-    return {'key': ''.join(v.to_bytes(32, 'big').hex() for v in key)}
+    return {'point': ''.join(v.to_bytes(32, 'big').hex() for v in point)}
 
 
 def parse_der(raw):
@@ -134,7 +134,7 @@ def fixtures(vector_path):
             message_hash = hashlib.sha256(bytes.fromhex(test['msg'])).digest()
             recovered = [add(f"wycheproof-{test['tcId']}-rid{rid}", message_hash, rid, compact)
                          for rid in range(4)]
-            matching = [rid for rid, result in enumerate(recovered) if result.get('key') == public]
+            matching = [rid for rid, result in enumerate(recovered) if result.get('point') == public]
             if test['result'] == 'valid':
                 assert matching, ('independent oracle disagrees with valid public vector', test['tcId'])
                 public_expectations += 1
@@ -145,7 +145,7 @@ def fixtures(vector_path):
                 altered = compact[:32]+(N-int.from_bytes(compact[32:], 'big')).to_bytes(32, 'big')
                 for rid in matching:
                     result = add(f"wycheproof-{test['tcId']}-opposite-s-rid{rid^1}", message_hash, rid^1, altered)
-                    assert result == {'key': public}
+                    assert result == {'point': public}
                     high_s += int(int.from_bytes(altered[32:], 'big') > N//2)
             elif test['result'] == 'invalid':
                 assert not matching, ('independent oracle disagrees with invalid public vector', test['tcId'])
@@ -173,7 +173,7 @@ def fixtures(vector_path):
                'canonicalDerCases': (len([c for c in cases if c['id'].startswith('wycheproof-') and '-opposite-' not in c['id']]))//4,
                'independentPublicClassificationChecks': public_expectations,
                'explicitHighSMatches': high_s, 'totalRecoveryCases': len(cases)}
-    return {'schemaVersion': 1, 'vectorSha256': VECTOR_SHA256, 'summary': summary,
+    return {'schemaVersion': 2, 'vectorSha256': VECTOR_SHA256, 'summary': summary,
             'excludedDerCaseDetails': excluded, 'cases': cases}
 
 

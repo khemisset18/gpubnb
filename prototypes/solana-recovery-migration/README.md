@@ -51,8 +51,25 @@ unchanged syscall region, and regenerates every committed public fixture.
 Actual --locked --all-features metadata must select this vendor source and
 contain no libsecp256k1 or Rand0.7. It then runs the added public integration
 tests through Anchor's actual Solana reexport on the frozen base and candidate.
-Seven Python boundary/oracle checks guard changed sources, public inputs,
+Eight Python boundary/oracle checks guard changed sources, public inputs,
 archive links, DER conversion and the independent arithmetic constants.
+
+The first actual CI run43327949450 at head0c065e88 passed all1636 baseline and
+candidate comparisons on Linux and macOS. Windows reconstructed the source and
+fixtures, then stopped before the native comparisons because Python selected
+cp1252 for Cargo's UTF-8 metadata. The reader now decodes JSON bytes directly,
+and source/log text uses explicit UTF-8; a regression reproduces the locale
+failure without running native code. The original failure and artifact hashes
+are retained in evidence/initial-ci-summary.json.
+
+The initial global run43327949219 stopped at Gitleaks: the field `expected.key`
+held public affine-point hex values but matched its generic API-key rule.
+Fixture schema2 names that value `expected.point`. All588 public points,
+1048 errors, input bytes and case IDs are unchanged; reversing this field rename
+reconstructs the complete prior fixture SHA256 exactly. The points stay plainly
+visible, with no redaction, encoding change, scanner exception or path filter.
+The same independent arithmetic generator regenerates schema2. Trivy did not
+execute in that initial run, so no vulnerability result is claimed for it.
 
 The unused supplier development Cargo.lock is not part of this library import;
 its original SHA256 is recorded, the full published archive is verified, and all
