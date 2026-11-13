@@ -103,3 +103,21 @@ Le cas 100/101 réussi n'est pas relancé ; son code et ses helpers ont été
 comparés octet pour octet et restent inchangés. Les 14 gardes logiciels passent,
 avec 768 combinaisons de routage caller et 64 du workflow appelé. Le résultat
 natif de cette reprise reste NOT_TESTED jusqu'à son exécution manuelle.
+
+## Résultat de la reprise ciblée du 13 novembre
+
+Le run manuel [43484240757](https://github.com/khemisset18/gpubnb/actions/runs/43484240757),
+exécution `fc2d34c58e0696e48c4490cf758070d861058fc8` et harnais
+`e084af94b3792c7d675756a62067d44effe3a4a0`, est **PASS**. Le seul cas
+sélectionné passe ses **73 assertions**, avec rejet natif code64
+`replacement-adds-unconfirmed`, puis acceptation des octets signés identiques
+après confirmation du parent et réadmission de l’original identique.
+Trois fixtures, quatre signatures, cinq admissions et 241 blocs ; zéro RPC/P2P.
+Les 254 autres cas Boost sont non sélectionnés, dont le cas 100/101 déjà réussi.
+
+Le [reçu vérifié](research/2026-11-12/rbf-boundaries/retry-result.json)
+conserve l’archive, le binaire distinct de D0, les empreintes des sources et
+les namespaces UP loopback avant/après. Les deux propriétés ciblées disposent
+donc chacune d’une preuve native PASS ; le premier échec reste conservé et
+les anciennes suites ne sont pas relancées. Cela ne qualifie pas D2–D9,
+ne prouve pas P2P ni le remboursement HTLC complet. Statut global **BLOCKED**.
