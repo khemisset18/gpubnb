@@ -28,6 +28,28 @@ if(report.auxpowExpanded){
   assert.deepEqual(Object.keys(tipStages).sort(),Object.keys(expected).sort());
   fs.writeFileSync(output,JSON.stringify({historicalEvidenceReview:true,scope:"auxpow-chain-tips-only",
     qualificationStatus:"BLOCKED",settlementAllowed:false,tipStages},null,2)+"\n");
+}else if(report.fundingReorg){
+  assert.equal(report.manifest.labSuite,"recovery-funding-reorg");
+  assert.equal(report.fundingReorg.keysCreated,0);
+  assert.equal(report.fundingReorg.transactionsSigned,0);
+  assert.equal(report.fundingReorg.previousNativeSuitesRepeated,false);
+  assert.deepEqual(report.fundingReorg.cases.map(x=>[x.id,x.status]),[
+    ["pending-refund-after-funding-reorg","PASS"],["same-refund-after-funding-restoration","PASS"]]);
+  const expected={"pending-confirmed-funding":"CONSISTENT","funding-rolled-back":"UNCERTAIN",
+    "funding-restored":"CONSISTENT","refund-confirmed":"CONSISTENT"};
+  const stages={};let previousBySource={};
+  for(const stage of report.stages){
+    assert(Object.hasOwn(expected,stage.label)&&!Object.hasOwn(stages,stage.label));
+    assert.deepEqual(stage.observations.map(x=>x.sourceId).sort(),["doge-a","doge-b"]);
+    const nowUnixMs=Math.max(...stage.observations.map(x=>x.observedAtUnixMs));
+    const result=assessDogeObservations(stage.observations,{previousBySource,nowUnixMs});
+    assert.equal(result.consistency,expected[stage.label]);assert.equal(result.canAdvance,false);
+    assert.equal(result.settlementAllowed,false);stages[stage.label]=result;
+    previousBySource=Object.fromEntries(stage.observations.map(x=>[x.sourceId,x]));
+  }
+  assert.deepEqual(Object.keys(stages).sort(),Object.keys(expected).sort());
+  fs.writeFileSync(output,JSON.stringify({historicalEvidenceReview:true,scope:"funding-reorg-regression",
+    qualificationStatus:"BLOCKED",settlementAllowed:false,stages},null,2)+"\n");
 }else{
 const stages={};let previousBySource={};
 for(const stage of report.stages){

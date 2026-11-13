@@ -52,3 +52,13 @@ Les instantanés et profils de #361 restent associés à leurs commits exacts.
 Cette correction est une nouvelle révision à examiner, pas une réattribution
 des anciens runs à du code non exécuté. Audit externe, matériel, reboot réel
 et autres limites demeurent explicitement non qualifiés.
+
+Le mode exécutable `recovery-funding-reorg` appartient au laboratoire D6 existant,
+sélectionné uniquement par `recovery-consistency` sur la branche dédiée et un
+événement manuel du dépôt exact. Il interdit AuxPoW RPC, horloge artificielle
+et tout signataire. Son budget est de 400 RPC, 8 invocations autonomes et deux
+transactions publiques déjà signées. Le reçu [source-index.json](research/2026-11-13/recovery-consistency/source-index.json)
+fige les sources préparées et la référence amont de `gettxout`.
+Les gardes couvrent aussi les 768 combinaisons du routage appelant et 48
+combinaisons du nouveau mode appelé. Le contrôle des quatre étapes natives
+doit rester sans autorisation de règlement, y compris avec une confirmation.
