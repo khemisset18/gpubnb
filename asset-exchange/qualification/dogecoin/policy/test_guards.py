@@ -106,6 +106,30 @@ class Guards(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d,patch('subprocess.check_output',return_value='wrong'):
             with self.assertRaisesRegex(ValueError,'commit'):prepare.prepare(d)
             self.assertEqual(list(Path(d).iterdir()),[])
+
+    def test_retry_selects_only_the_failed_input_case_and_requires_its_own_pass_record(self):
+        selection=run.SUITES['rbf-input']
+        good=selection['passedCaseMarker']+'\n'+'\n'.join(selection['markers'])
+        for text,ok in [(good,True),(good.replace(selection['passedCaseMarker'],'omitted'),False),
+                        (good.replace('Running 1 test case...','Running 2 test cases...'),False),
+                        (good.replace('admissions=5','admissions=4'),False)]:
+            with self.subTest(ok=ok),tempfile.TemporaryDirectory() as d:
+                binary=Path(d)/'binary';binary.write_bytes(b'not executable');out=Path(d)/'out';calls=[]
+                def process(args,**kwargs):
+                    calls.append(args);kwargs['stdout'].write(text)
+                    return SimpleNamespace(returncode=0,check_returncode=lambda:None)
+                with patch('subprocess.check_output',return_value='[{"ifname":"lo","flags":["UP"]}]'), \
+                     patch('os.readlink',return_value='net:[2]'),patch('resource.setrlimit'), \
+                     patch('subprocess.run',side_effect=process):
+                    if ok:run.run(binary,hashlib.sha256(binary.read_bytes()).hexdigest(),'net:[1]',out,'rbf-input')
+                    else:
+                        with self.assertRaisesRegex(ValueError,'every selected'):
+                            run.run(binary,hashlib.sha256(binary.read_bytes()).hexdigest(),'net:[1]',out,'rbf-input')
+                import json
+                value=json.loads((out/'report.json').read_text())
+                self.assertEqual(value['selectedCases'],1);self.assertEqual(value['maxBlocks'],241)
+                self.assertEqual(value['qualificationStatus'],'BLOCKED')
+                self.assertIn('--run_test=gpubnb_rbf/new_input_unconfirmed_then_confirmed',calls[0])
     def test_dirty_source_rejected(self):
         with tempfile.TemporaryDirectory() as d,patch('subprocess.check_output',side_effect=[prepare.SOURCE,' M src/validation.cpp']):
             with self.assertRaisesRegex(ValueError,'clean'):prepare.prepare(d)

@@ -7,7 +7,7 @@ on:
         type: choice
         required: true
         default: policy
-        options: [policy, d3, rbf]
+        options: [policy, d3, rbf, rbf-input]
   workflow_call:
     inputs:
       diagnostic_suite:
@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   policy:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && ((inputs.diagnostic_suite == 'rbf' && github.ref == 'refs/heads/asset-exchange/doge-rbf-boundaries-20261112') || (inputs.diagnostic_suite != 'rbf' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'))
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && (((inputs.diagnostic_suite == 'rbf' || inputs.diagnostic_suite == 'rbf-input') && github.ref == 'refs/heads/asset-exchange/doge-rbf-boundaries-20261112') || (inputs.diagnostic_suite != 'rbf' && inputs.diagnostic_suite != 'rbf-input' && github.ref == 'refs/heads/asset-exchange/doge-independent-recovery-20261111'))
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist/policy-evidence
           git rev-parse HEAD > dist/policy-evidence/execution-commit.txt
-          if [[ "$DIAGNOSTIC_SUITE" == rbf ]]; then
+          if [[ "$DIAGNOSTIC_SUITE" == rbf || "$DIAGNOSTIC_SUITE" == rbf-input ]]; then
             [[ "$HARNESS_COMMIT" =~ ^[0-9a-f]{40}$ ]]
             git cat-file -e "${HARNESS_COMMIT}^{commit}"
             git diff --exit-code "$HARNESS_COMMIT" HEAD -- asset-exchange/qualification/dogecoin/ .github/workflows/asset-exchange-dogecoin-policy.yml

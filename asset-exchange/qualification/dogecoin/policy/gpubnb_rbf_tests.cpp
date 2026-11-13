@@ -141,11 +141,17 @@ BOOST_FIXTURE_TEST_CASE(new_input_unconfirmed_then_confirmed, RbfBoundarySetup)
     BOOST_REQUIRE_EQUAL(mempool.size(), 2);
     BOOST_REQUIRE(mempool.exists(original.GetHash()) && mempool.exists(parent.GetHash()));
 
-    // The fixture mines only the new parent, leaving the original pending.
-    // Retry the identical already-signed candidate after its new input confirms.
+    // The upstream fixture first assembles from the global pool, then replaces
+    // its transaction list. Park the original so its unselected fee cannot
+    // overpay that block's coinbase; restore the same original after mining.
+    // Every admission and the block still undergo unchanged native checks.
+    mempool.removeRecursive(CTransaction(original));
     CreateAndProcessBlock({parent}, destination);
     BOOST_REQUIRE_EQUAL(chainActive.Height(), 241);
-    BOOST_REQUIRE(!mempool.exists(parent.GetHash()) && mempool.exists(original.GetHash()));
+    BOOST_REQUIRE(!mempool.exists(parent.GetHash()) && !mempool.exists(original.GetHash()));
+    CValidationState restoredOriginal;
+    BOOST_REQUIRE(Admit(original, restoredOriginal));
+    BOOST_REQUIRE(mempool.exists(original.GetHash()));
     const CTxOut& confirmed = pcoinsTip->GetOutputFor(CTxIn(COutPoint(parent.GetHash(), 0)));
     BOOST_REQUIRE(confirmed.scriptPubKey == destination);
     BOOST_REQUIRE_EQUAL(confirmed.nValue, parent.vout[0].nValue);
@@ -154,7 +160,7 @@ BOOST_FIXTURE_TEST_CASE(new_input_unconfirmed_then_confirmed, RbfBoundarySetup)
     BOOST_REQUIRE(replacement.GetHash() == before);
     BOOST_REQUIRE_EQUAL(mempool.size(), 1);
     BOOST_REQUIRE(mempool.exists(before) && !mempool.exists(original.GetHash()));
-    BOOST_TEST_MESSAGE("rbf-new-input unconfirmed=rejected confirmed=accepted identical-signed-bytes=true"
+    BOOST_TEST_MESSAGE("rbf-new-input unconfirmed=rejected confirmed=accepted identical-signed-bytes=true original-reinserted-identically=true"
         << " native-code=" << rejected.GetRejectCode() << " reason=" << rejected.GetRejectReason()
         << " pool-after-reject=2 pool-after-accept=1 global-pool=true standardness=true blocks="
         << chainActive.Height() << " signed-fixtures=" << signedFixtures << " signatures=" << signatures

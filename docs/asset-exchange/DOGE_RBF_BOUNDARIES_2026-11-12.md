@@ -76,3 +76,30 @@ empreintes bornés seront ajoutés après vérification. La qualification D5 et
 D2–D9 reste **BLOCKED** jusqu'à satisfaction et revue de tous les critères.
 La limite de frais pré-signés, l'audit externe, les essais matériels et les
 autres limites du dossier #361 ne sont pas annulés par ces deux contrôles.
+
+
+## Premier résultat natif et correction du 13 novembre
+
+Le run manuel [43326020199](https://github.com/khemisset18/gpubnb/actions/runs/43326020199)
+a compilé correctement le diagnostic, puis terminé en **FAIL** : le contrôle
+100/101 remplacements passe avec **2853 assertions**, le contrôle de nouvelle
+entrée échoue sur une hauteur de bloc restée à 240 au lieu de 241. Le rejet
+non confirmé est vérifié avant cet échec, mais le cas complet reste FAIL.
+Le [reçu du premier run](research/2026-11-12/rbf-boundaries/first-run-result.json)
+conserve les identités, empreintes et observations réelles.
+
+La fixture amont construit initialement son coinbase avec les frais de tout
+le mempool, puis remplace la liste de transactions du bloc. Notre sélection
+manuelle du seul parent conservait donc les frais de l'original non sélectionné.
+La correction retire temporairement l'original pendant cette construction,
+confirme le parent avec les validations natives inchangées, puis réadmet
+exactement la même originale signée avant de réessayer le candidat inchangé.
+Cela ajoute un appel d'admission, sans nouvelle signature : 3 fixtures,
+4 signatures et 5 admissions pour ce cas. Aucun contrôle de bloc n'est relâché.
+
+La reprise sélectionne uniquement ce cas : `rbf-input`, filtre
+`gpubnb_rbf/new_input_unconfirmed_then_confirmed`, au plus 241 blocs.
+Le cas 100/101 réussi n'est pas relancé ; son code et ses helpers ont été
+comparés octet pour octet et restent inchangés. Les 14 gardes logiciels passent,
+avec 768 combinaisons de routage caller et 64 du workflow appelé. Le résultat
+natif de cette reprise reste NOT_TESTED jusqu'à son exécution manuelle.

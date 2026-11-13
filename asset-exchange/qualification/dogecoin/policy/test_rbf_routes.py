@@ -52,10 +52,10 @@ class RbfManualRoutes(unittest.TestCase):
         text=(ROOT/'.github/workflows/asset-exchange-dogecoin-policy.yml').read_text()
         expr=condition(text,'policy')
         for event in ['workflow_dispatch','push','pull_request','schedule']:
-            for suite in ['policy','d3','rbf']:
+            for suite in ['policy','d3','rbf','rbf-input']:
                 for branch in ['asset-exchange/doge-rbf-boundaries-20261112','asset-exchange/doge-independent-recovery-20261111','main','dev']:
                     got=permitted(expr,event=event,suite=suite,repo='khemisset18/gpubnb',repo_id='1305325878',ref='refs/heads/'+branch)
-                    want=event=='workflow_dispatch' and ((suite=='rbf' and branch.endswith('doge-rbf-boundaries-20261112')) or (suite!='rbf' and branch.endswith('doge-independent-recovery-20261111')))
+                    want=event=='workflow_dispatch' and ((suite in ('rbf','rbf-input') and branch.endswith('doge-rbf-boundaries-20261112')) or (suite not in ('rbf','rbf-input') and branch.endswith('doge-independent-recovery-20261111')))
                     self.assertEqual(got,want,(event,suite,branch))
 
 
