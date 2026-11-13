@@ -156,6 +156,6 @@ jobs:
     uses: ./.github/workflows/asset-exchange-dogecoin-multinode.yml
     with:
       execution_commit: ${{ github.sha }}
-      harness_commit: 0000000000000000000000000000000000000000
+      harness_commit: b9ad755099024bd68053359ddb009b3ae2521152
       authorization: AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST
       lab_suite: recovery-funding-reorg
