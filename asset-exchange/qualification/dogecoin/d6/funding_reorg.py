@@ -37,11 +37,18 @@ def run_funding_reorg(c,directory,seed):
     c['import_chain'](root/'public-chain.dat',seed['blocks'][-1],len(seed['blocks']))
     rpc('a','addnode','127.0.0.1:18445','onetry')
     c['wait']('funding regression peers',lambda:c['peers']('a') and c['peers']('b'))
+    result['seedInitialBlockDownload']={node:rpc(node,'getblockchaininfo')['initialblockdownload']
+                                       for node in ('a','b')}
     # Fund only after CLTV1355 is reached, so rollback does not independently
     # evict the refund for nonfinality and hide the funding-confirmation defect.
     c['submit']('a',bytes.fromhex(funding['transactionHex']))
-    c['wait']('new funding relay',lambda:fid in rpc('b','getrawmempool'))
+    # A retained chain can be older than native nMaxTipAge: nodes in initial
+    # download do not request transaction inventory. Mine the already-budgeted
+    # funding block first; ordinary block relay exits IBD on both nodes.
     c['mine']('a');c['wait']('new funding confirmation',c['sync'])
+    require(all(rpc(node,'getblockchaininfo')['initialblockdownload'] is False for node in ('a','b')),
+            'fresh funding block did not exit initial block download')
+    result['fundingBlockExitedInitialDownload']=True;save()
     c['submit']('a',bytes.fromhex(refund['transactionHex']))
     c['wait']('existing refund relay',lambda:tid in rpc('b','getrawmempool'))
 

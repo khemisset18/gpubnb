@@ -8,7 +8,7 @@
   "preparedSourceSha256": {
     "asset-exchange/recovery/dogecoin/recovery_core.py": "0b5ea29713c5878e6787e38d46951f41acc54f0bafaf7e2424d51e82a871bd37",
     "asset-exchange/recovery/dogecoin/cleanroom.py": "12781af67351949913d610b3dec91f39dc8390346bdadc8966be8000c75ed642",
-    "asset-exchange/qualification/dogecoin/d6/funding_reorg.py": "f23faf68dd41396c8ff9f54f63ce4618d3d8359e7da3e0fc9b795b6ac420539c",
+    "asset-exchange/qualification/dogecoin/d6/funding_reorg.py": "cc5101059aed13c841e067a5c49316709b64e7333b48b1934a2da872c1a11445",
     "asset-exchange/qualification/dogecoin/d6/multinode.py": "e9a13453954832e7872c3362c1ae801abfbac298e359aa6cd9ccbc4d7076df19",
     "asset-exchange/qualification/dogecoin/d6/check-watcher-evidence.mjs": "3a4707c234239dd64ba9ef844bc06a8ac5916e331f4b462ea779474ee4f7de8c"
   },
@@ -24,5 +24,11 @@
   "standaloneInvocationCap": 8,
   "nativeStatusAtPreparation": "NOT_TESTED",
   "qualificationStatus": "BLOCKED",
-  "settlementAllowed": false
+  "settlementAllowed": false,
+  "ibdSources": {
+    "src/validation.cpp": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00",
+    "src/validation.h": "8549c1b0d4f17b10f947865745b41cfc13f00cc89b6aeae1ed4f8a460063dc93",
+    "src/net_processing.cpp": "13a20f115f57c330aebedcea5f3b416c2313e5af21507ecd256f87aece6d2f5d"
+  },
+  "ibdSourceObservation": "validation.cpp IsInitialBlockDownload rejects a tip older than nMaxTipAge; validation.h defaults it to24h; net_processing.cpp only adds transaction inventory requests outside IBD. No source/flag change."
 }

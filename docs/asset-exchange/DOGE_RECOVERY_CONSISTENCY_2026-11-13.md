@@ -62,3 +62,20 @@ fige les sources préparées et la référence amont de `gettxout`.
 Les gardes couvrent aussi les 768 combinaisons du routage appelant et 48
 combinaisons du nouveau mode appelé. Le contrôle des quatre étapes natives
 doit rester sans autorisation de règlement, y compris avec une confirmation.
+
+## Premier essai natif et correction de préparation
+
+Le run [43486987680](https://github.com/khemisset18/gpubnb/actions/runs/43486987680)
+est **FAIL**, avant toute propriété ciblée : attente du relais du financement.
+Le [reçu](research/2026-11-13/recovery-consistency/first-native-result.json)
+retient 86 RPC, zéro nouveau bloc, une admission native sur A et aucun
+remboursement diffusé. Les deux nœuds déclaraient réellement
+`initialblockdownload=true` à la hauteur 1355, après rejeu du paquet ancien.
+La source amont épinglée limite l’âge du tip à 24h et suspend les requêtes
+d’inventaire transactionnel pendant cet état.
+
+L’ordre est corrigé : admission du financement sur A, minage de son bloc
+déjà prévu et relais ordinaire de ce bloc, puis vérification de la sortie
+de synchronisation initiale sur les deux nœuds avant le remboursement.
+Aucune horloge, politique, limite ni validation native n’est modifiée ;
+le budget reste deux blocs et le scénario de réorganisation est identique.
