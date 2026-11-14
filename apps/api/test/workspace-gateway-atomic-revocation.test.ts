@@ -16,6 +16,7 @@ const bounded = script('ENQUEUE_BOUND_WS_FRAME_SCRIPT');
 const machine = script('ENQUEUE_BOUND_MACHINE_RELAY_SCRIPT');
 const delivery = script('NATIVE_DELIVERY_FENCE_SCRIPT');
 const revokeAuthority = script('REVOKE_GATEWAY_AUTHORITY_SCRIPT');
+const markAccepted = script('MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT');
 
 test('both Agent frame paths atomically require the original Redis channel binding', () => {
   assert.match(deduped, /redis\.call\('GET', KEYS\[4\]\) ~= ARGV\[7\]/);
@@ -121,6 +122,38 @@ withRedis('real Redis: revoked/replaced native channel cannot enqueue frames, ev
     assert.equal(await redis.llen(machineQueueKey), 2);
   } finally {
     await redis.del(bindingKey, browserKey, authorityKey, queueKey, bytesKey, machineQueueKey, machineBytesKey, marker1, marker2, prefix + ':seen:generation').catch(() => undefined);
+    redis.disconnect();
+  }
+});
+
+withRedis('real Redis: hot-path readiness inherits binding TTLs without extending them', async () => {
+  const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
+  const prefix = 'gpubnb:test:stage4:ready-ttl:' + crypto.randomUUID();
+  const authorityKey = prefix + ':authority';
+  const browserKey = prefix + ':browser';
+  const readyKey = prefix + ':ready';
+  const channelKey = prefix + ':channel';
+  const authority = '00000000-0000-4000-8000-000000000001';
+  try {
+    await redis.set(authorityKey, authority, 'EX', 30);
+    await redis.set(browserKey, 'browser', 'EX', 12);
+    await redis.set(channelKey, 'channel', 'EX', 7);
+    const browserBefore = await redis.pttl(browserKey);
+    const channelBefore = await redis.pttl(channelKey);
+    assert.equal(Number(await redis.eval(markAccepted, 4, authorityKey, browserKey, readyKey, channelKey, authority, '0')), 1);
+    const browserAfter = await redis.pttl(browserKey);
+    const channelAfter = await redis.pttl(channelKey);
+    const readyAfter = await redis.pttl(readyKey);
+    assert.ok(browserAfter > 0 && browserAfter <= browserBefore, 'hot readiness may not refresh the browser binding');
+    assert.ok(channelAfter > 0 && channelAfter <= channelBefore, 'hot readiness may not refresh the channel binding');
+    assert.ok(readyAfter > 0 && readyAfter <= Math.min(browserBefore, channelBefore),
+      'readiness must inherit the shorter existing binding TTL');
+    await redis.del(channelKey, readyKey);
+    assert.equal(Number(await redis.eval(markAccepted, 4, authorityKey, browserKey, readyKey, channelKey, authority, '0')), 0,
+      'a missing channel binding cannot publish readiness');
+    assert.equal(await redis.exists(readyKey), 0);
+  } finally {
+    await redis.del(authorityKey, browserKey, readyKey, channelKey).catch(() => undefined);
     redis.disconnect();
   }
 });

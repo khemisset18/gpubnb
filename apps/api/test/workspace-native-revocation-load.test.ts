@@ -137,14 +137,15 @@ test('30/60 FPS over 1/4/8 channels uses zero PostgreSQL reads while generation 
   for(const fps of [30,60] as const)for(const channels of [1,4,8])await syntheticGenerationLoad(fps,channels);
 });
 
-test('a Redis-only hot-path frame cannot extend browser or channel TTLs without a session expiry',async()=>{
-  let evalCalls=0;
-  const redis={eval:async()=>{evalCalls++;return 1;}};
+test('a Redis-only hot-path frame publishes readiness without a 3600-second TTL refresh',async()=>{
+  let evalArguments:unknown[]=[];
+  const redis={eval:async(...args:unknown[])=>{evalArguments=args;return 1;}};
   const marked=await markAcceptedGatewayFrame(redis as never,'session','channel',{
     sessionId:'session',machineId:'machine',browserSessionKey:'browser:session',runtimeBackend:'WINDOWS_NATIVE',
   },authorityId(1));
-  assert.equal(marked,false);
-  assert.equal(evalCalls,0,'an unknown expiry must not fall back to a 3600-second Redis refresh');
+  assert.equal(marked,true);
+  assert.equal(evalArguments.at(-1),'0','an unknown expiry must select the inherit-only Lua branch');
+  assert.notEqual(evalArguments.at(-1),'3600','the hot path must never use the one-hour fallback TTL');
 });
 
 test('a database-backed authority refresh remains bounded by its known session expiry',async()=>{

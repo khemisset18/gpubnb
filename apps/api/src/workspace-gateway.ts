@@ -171,6 +171,16 @@ const MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT=`
 -- prevent periodic PostgreSQL revalidation. STOP between enqueue and this mark
 -- also suppresses publication of a fresh upstream-ready hint.
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+-- A Redis-only hot-path admission has no fresh database expiry snapshot. It
+-- must still publish legacy readiness, but it may only inherit the shorter of
+-- the already-bounded browser and channel TTLs; it must not refresh either key.
+if ARGV[2] == '0' then
+  local browserTtl = redis.call('TTL', KEYS[2])
+  local channelTtl = redis.call('TTL', KEYS[4])
+  if browserTtl <= 0 or channelTtl <= 0 then return 0 end
+  redis.call('SET', KEYS[3], '1', 'EX', math.min(browserTtl, channelTtl))
+  return 1
+end
 redis.call('EXPIRE', KEYS[2], ARGV[2])
 redis.call('SET', KEYS[3], '1', 'EX', ARGV[2])
 redis.call('EXPIRE', KEYS[4], ARGV[2])
@@ -752,16 +762,15 @@ export async function committedGatewayFrame(db:PrismaClient,sessionId:string,cha
 }
 
 export async function markAcceptedGatewayFrame(redis:Redis,sessionId:string,channelId:string,binding:GatewayChannelBinding,authorityId:string|undefined,expiresAt?:Date){
+  if(!authorityId)return false;
   // A Redis-only hot-path admission intentionally has no database expiry
-  // snapshot. Never turn that absence into the one-hour fallback TTL: the
-  // browser/channel bindings already carry their session-bounded TTL, and the
-  // next lease renewal (at most two seconds later) can refresh them from a
-  // fresh PostgreSQL expiry. This also keeps a stale readiness hint from
-  // outliving the workspace merely because frames remain busy.
-  if(!authorityId||!expiresAt)return false;
+  // snapshot. Pass the zero sentinel so Lua publishes legacy readiness using
+  // the existing bounded binding TTLs without extending either binding. The
+  // next lease renewal can refresh them from a fresh PostgreSQL expiresAt.
+  const ttl=expiresAt?String(gatewaySessionTtl(expiresAt)):'0';
   return Number(await boundedGatewayRedis(redis.eval(
     MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT,4,wsSessionActivatedKey(sessionId),binding.browserSessionKey,
-    wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,String(gatewaySessionTtl(expiresAt)),
+    wsUpstreamReadyKey(channelId),wsChannelKey(channelId),authorityId,ttl,
   )))===1;
 }
 
