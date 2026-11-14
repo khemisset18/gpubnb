@@ -175,10 +175,10 @@ if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 -- must still publish legacy readiness, but it may only inherit the shorter of
 -- the already-bounded browser and channel TTLs; it must not refresh either key.
 if ARGV[2] == '0' then
-  local browserTtl = redis.call('TTL', KEYS[2])
-  local channelTtl = redis.call('TTL', KEYS[4])
-  if browserTtl <= 0 or channelTtl <= 0 then return 0 end
-  redis.call('SET', KEYS[3], '1', 'EX', math.min(browserTtl, channelTtl))
+  local browserTtlMs = redis.call('PTTL', KEYS[2])
+  local channelTtlMs = redis.call('PTTL', KEYS[4])
+  if browserTtlMs <= 0 or channelTtlMs <= 0 then return 0 end
+  redis.call('SET', KEYS[3], '1', 'PX', math.min(browserTtlMs, channelTtlMs))
   return 1
 end
 redis.call('EXPIRE', KEYS[2], ARGV[2])
