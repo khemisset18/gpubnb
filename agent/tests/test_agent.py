@@ -246,6 +246,7 @@ class HeartbeatTests(unittest.TestCase):
                 events.append("challenge" if path.startswith("/agent/challenge/") else "heartbeat")
                 return {"challenge": "challenge-value-long-enough"} if method == "GET" else {"ok": True}
 
+        accepted = []
         with (
             patch("gpubnb_agent.client.gpu_inventory", side_effect=lambda: events.append("gpu") or [gpu]),
             patch("gpubnb_agent.client.system_inventory", side_effect=lambda: events.append("system") or {"machineFingerprint": "abc"}),
@@ -255,9 +256,16 @@ class HeartbeatTests(unittest.TestCase):
             patch("gpubnb_agent.client.load_counter", return_value=0),
             patch("gpubnb_agent.client.save_counter"),
         ):
-            self.assertEqual(heartbeat(Client(), SigningKey.generate(), "machine-id"), {"ok": True})
+            self.assertEqual(
+                heartbeat(
+                    Client(), SigningKey.generate(), "machine-id",
+                    lambda counter, response: accepted.append((counter, response)),
+                ),
+                {"ok": True},
+            )
 
         self.assertEqual(events, ["gpu", "system", "telemetry", "challenge", "heartbeat"])
+        self.assertEqual(accepted, [(1, {"ok": True})])
 
     def test_retry_after_a_transient_failure_uses_a_fresh_challenge_and_signature(self):
         # C9: request_with_retry used to sign headers once outside its own retry loop,

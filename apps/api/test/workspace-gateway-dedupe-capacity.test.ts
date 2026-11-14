@@ -11,7 +11,7 @@ test('an already accepted websocket frame is deduped before queue capacity rejec
   const script = match[1];
   const dedupeCheck = script.indexOf("redis.call('EXISTS', KEYS[1])");
   const capacityCheck = script.indexOf("local count = redis.call('LLEN', KEYS[2])");
-  const dedupeInsert = script.indexOf("redis.call('SET', KEYS[1], '1', 'EX', ARGV[1], 'NX')");
+  const dedupeInsert = script.indexOf("redis.call('SET', KEYS[1], owner, 'EX', ARGV[1], 'NX')");
   const enqueue = script.indexOf("redis.call('LPUSH', KEYS[2], ARGV[3])");
 
   assert.notEqual(dedupeCheck, -1, 'script must check whether frameId was already accepted');

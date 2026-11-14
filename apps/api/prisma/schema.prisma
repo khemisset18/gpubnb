@@ -574,12 +574,26 @@ model WorkspaceSession {
   job Job? @relation(fields: [jobId], references: [id], onDelete: SetNull)
   metrics WorkspaceMetric[]
   events WorkspaceSessionEvent[]
+  gatewayAcceptance WorkspaceGatewayAcceptance?
   @@unique([bookingId, machineWorkspaceId])
   @@index([renterId, createdAt])
   @@index([machineId, status])
   @@index([machineId, runtimeBackend, status])
   @@index([bookingId])
   @@index([status, readyDeadlineAt])
+}
+
+// First Redis acceptance and commercial activation commit together. A queued
+// first frame is not deliverable until this receipt is visible after commit.
+model WorkspaceGatewayAcceptance {
+  id String @id @db.Uuid
+  sessionId String @unique
+  channelId String @db.Uuid
+  bindingSha256 String @db.Char(64)
+  payloadSha256 String @db.Char(64)
+  acceptedAt DateTime
+  expiresAt DateTime
+  session WorkspaceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 model WorkspaceMetric {

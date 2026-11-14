@@ -450,6 +450,7 @@ def heartbeat_loop(
     emit({
         "event": "diagnostic_poll_loop_started",
         "machineId": machine_id,
+        "processId": os.getpid(),
         "processMode": process_mode,
         "intervalSeconds": interval,
         "agentVersion": __version__,
@@ -471,9 +472,24 @@ def heartbeat_loop(
     try:
         while stop_event is None or not stop_event.is_set():
             try:
-                result = heartbeat(client(config), key, machine_id)
+                accepted_proof: dict[str, Any] = {}
+
+                def record_server_accept(counter: int, response: dict[str, Any]) -> None:
+                    accepted_proof.update({
+                        "counter": counter,
+                        "serverAccepted": response.get("ok") is True,
+                    })
+
+                result = heartbeat(client(config), key, machine_id, record_server_accept)
                 emit_native_capability_snapshot()
-                emit({"event": "heartbeat", "result": result})
+                emit({
+                    "event": "heartbeat",
+                    "machineId": machine_id,
+                    "processId": os.getpid(),
+                    "buildCommit": BUILD_COMMIT,
+                    **accepted_proof,
+                    "result": result,
+                })
                 if job_thread is None or not job_thread.is_alive():
                     job_thread = threading.Thread(
                         target=poll_and_run_job,

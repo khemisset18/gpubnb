@@ -163,6 +163,17 @@ def verify(directory, manifest_hash, commit, publisher, status="unsigned"):
             old = [x for x in u["files"] if x.get("name") == f["name"]]
             require(len(old) == 1 and f.get("unsignedSha256") == old[0].get("sha256"),
                     "stage4_unsigned_file_provenance_mismatch")
+    # Rehash after all PE and identity parsing. The Windows swap engine also
+    # verifies each byte-for-byte staging copy immediately before service STOP.
+    require(sha(manifest) == manifest_hash, "stage4_manifest_changed_during_verification")
+    require(sha(identity_path) == m.get("buildIdentitiesSha256"),
+            "stage4_identity_changed_during_verification")
+    for record in records:
+        require(sha(root / record["name"]) == record.get("sha256"),
+                "stage4_component_changed_during_verification:"+record["name"])
+    if status == "private-signed":
+        require(sha(root / "unsigned-stage4.manifest.json") == m["unsignedManifestSha256"],
+                "stage4_unsigned_manifest_changed_during_verification")
     return m
 
 

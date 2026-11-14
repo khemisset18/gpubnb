@@ -1,0 +1,38 @@
+name: Stage 4 four-file transactional rollback fixture only
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stage4-rollback-fixture-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  simulated-four-file-rollback:
+    name: Temporary-only transaction rollback Windows PS 5.1 and 7
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Simulate successful installation and injected partial rollbacks with PS 5.1
+        shell: powershell
+        run: |
+          & ./scripts/tests/stage4-private-four-file-transaction-fixture.tests.ps1
+          if (-not $?) { throw 'stage4_fixture_ps51_failed' }
+          & ./scripts/tests/stage4-private-four-file-transaction-core.tests.ps1
+          if (-not $?) { throw 'stage4_core_ps51_failed' }
+          & ./scripts/tests/stage4-private-crash-recovery.tests.ps1
+          if (-not $?) { throw 'stage4_crash_ps51_failed' }
+      - name: Simulate successful installation and injected partial rollbacks with PowerShell 7
+        shell: pwsh
+        run: |
+          & ./scripts/tests/stage4-private-four-file-transaction-fixture.tests.ps1
+          if (-not $?) { throw 'stage4_fixture_ps7_failed' }
+          & ./scripts/tests/stage4-private-four-file-transaction-core.tests.ps1
+          if (-not $?) { throw 'stage4_core_ps7_failed' }
+          & ./scripts/tests/stage4-private-crash-recovery.tests.ps1
+          if (-not $?) { throw 'stage4_crash_ps7_failed' }
+      # Never stop a real Windows service, access Program Files or deploy anything.

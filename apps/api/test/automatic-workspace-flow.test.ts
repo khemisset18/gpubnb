@@ -189,7 +189,20 @@ test('the workspace-gateway route filters and the executable-slug gate all agree
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
   assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile','security-lab','cloud-desktop','creator','cad','gaming'\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
-  assert.equal(matches.length,6,'browser admission plus all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
+  assert.ok(matches.length>=6,'browser admission and the agent-facing gateway paths must use the shared slug list; native transaction fences add repeated checks');
+  const routeBlock=(marker:string)=>{
+    const start=gateway.indexOf(marker);
+    assert.ok(start>=0,`expected gateway route ${marker}`);
+    const end=gateway.indexOf('\n  });',start);
+    assert.ok(end>start,`expected complete gateway route ${marker}`);
+    return gateway.slice(start,end);
+  };
+  assert.match(gateway,/async function activeGatewaySession[\s\S]*machineWorkspace:\{workspace:\{slug:\{in:GATEWAY_WORKSPACE_SLUGS\}\}\}/);
+  assert.match(routeBlock("app.get('/agent/workspace-gateway/:machineId/desired'"),/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/);
+  assert.match(routeBlock("app.get('/agent/workspace-gateway/:machineId/sessions/:sessionId/data-plane-host'"),/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/);
+  assert.match(routeBlock("app.post('/agent/workspace-gateway/:sessionId/register'"),/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/);
+  assert.match(routeBlock("app.post('/agent/workspace-gateway/:sessionId/usage'"),/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/);
+  assert.match(routeBlock("app.get('/workspace-gateway/:sessionId'"),/activeGatewaySession\(db,sessionId\)/);
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');
   assert.ok(executableWorkspaceSlugs.includes('data'));
   assert.ok(executableWorkspaceSlugs.includes('developer'));

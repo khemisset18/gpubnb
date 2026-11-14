@@ -190,6 +190,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self.native_runtimes: dict[str, NativeGatewayRuntime] = {}
         self._native_desired_sessions: list[dict[str, Any]] = []
         self._native_blocked: set[str] = set()
+        self._native_start_tokens: dict[str, object] = {}
+        self._native_start_backends: dict[str, str] = {}
+        self._native_revocation_pending: set[str] = set()
+        self._native_revocation_inflight: set[str] = set()
         self._native_lock = threading.RLock()
         self._native_resume_locks: dict[str, threading.Lock] = {}
         self._native_channel_sessions: dict[str, str] = {}
@@ -214,7 +218,14 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 session_id for session_id, runtime in self.native_runtimes.items()
                 if getattr(runtime.handle, "capture_backend", "iddcx") == CONSOLE_BACKEND
             ]
+            affected.extend(
+                session_id for session_id, backend in self._native_start_backends.items()
+                if backend == CONSOLE_BACKEND and session_id not in affected
+            )
             self._native_blocked.update(affected)
+            for session_id in affected:
+                self._native_start_tokens.pop(session_id, None)
+                self._native_start_backends.pop(session_id, None)
         # Disconnect buffered media/input first; physical STOP and API reporting
         # follow, outside the lock. The worker separately checks WTS before
         # publishing frames and injecting input.
@@ -463,6 +474,76 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         *,
         private_console_qualification: bool = False,
     ) -> NativeGatewayRuntime:
+        if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
+            raise RuntimeError("windows_native_workspace_not_promoted")
+        backend = CONSOLE_BACKEND if private_console_qualification else "iddcx"
+        if private_console_qualification and console_session_change_fenced():
+            raise RuntimeError("native_console_session_change_fenced")
+        token = object()
+        with self._native_lock:
+            if session_id in self._native_blocked or session_id in self._native_start_tokens:
+                raise RuntimeError("windows_native_start_revoked_or_in_progress")
+            self._native_start_tokens[session_id] = token
+            self._native_start_backends[session_id] = backend
+        try:
+            return self._start_native_runtime_attempt(
+                session_id, workspace_slug, token,
+                private_console_qualification=private_console_qualification,
+            )
+        finally:
+            with self._native_lock:
+                if self._native_start_tokens.get(session_id) is token:
+                    self._native_start_tokens.pop(session_id, None)
+                    self._native_start_backends.pop(session_id, None)
+
+    def _native_start_token_is_current(self, session_id: str, token: object) -> bool:
+        with self._native_lock:
+            current = (
+                self._native_start_tokens.get(session_id) is token
+                and session_id not in self._native_blocked
+            )
+            backend = self._native_start_backends.get(session_id)
+        if not current:
+            return False
+        # The WTS watcher is asynchronous and can observe a transition just
+        # before a start token is published. Recheck here at every startup
+        # boundary so that a missed watcher edge cannot authorize console work.
+        if backend == CONSOLE_BACKEND and console_session_change_fenced():
+            self._native_stop_and_report(session_id)
+            return False
+        with self._native_lock:
+            return (
+                self._native_start_tokens.get(session_id) is token
+                and session_id not in self._native_blocked
+            )
+
+    def _publish_native_runtime_if_current(
+        self, session_id: str, token: object, runtime: NativeGatewayRuntime,
+    ) -> bool:
+        if not self._native_start_token_is_current(session_id, token):
+            return False
+        with self._native_lock:
+            if (self._native_start_tokens.get(session_id) is not token
+                    or session_id in self._native_blocked):
+                return False
+            self.native_runtimes[session_id] = runtime
+            return True
+
+    def _native_runtime_is_current(self, runtime: NativeGatewayRuntime) -> bool:
+        with self._native_lock:
+            return (
+                self.native_runtimes.get(runtime.session_id) is runtime
+                and runtime.session_id not in self._native_blocked
+            )
+
+    def _start_native_runtime_attempt(
+        self,
+        session_id: str,
+        workspace_slug: str,
+        token: object,
+        *,
+        private_console_qualification: bool = False,
+    ) -> NativeGatewayRuntime:
         self._trace("native_start_begin", session_id=session_id)
         if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
             raise RuntimeError("windows_native_workspace_not_promoted")
@@ -473,12 +554,16 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             detail=f"resources={len(specs)}",
         )
         for spec in specs:
+            if not self._native_start_token_is_current(session_id, token):
+                raise RuntimeError("windows_native_start_revoked")
             self._trace(
                 "native_preempt_begin",
                 session_id=session_id,
                 detail=f"generation={spec.runtime_generation}",
             )
             self._preempt_native_spec(spec)
+            if not self._native_start_token_is_current(session_id, token):
+                raise RuntimeError("windows_native_start_revoked")
             self._trace(
                 "native_preempt_quiescent",
                 session_id=session_id,
@@ -487,12 +572,16 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
 
         self._trace("native_helper_start_begin", session_id=session_id)
         try:
+            if not self._native_start_token_is_current(session_id, token):
+                raise RuntimeError("windows_native_start_revoked")
             handle = launch_windows_native_workspace(
                 session_id,
                 workspace_slug,
                 str(specs[0].hardware_uuid),
                 **({'private_console_qualification': True} if private_console_qualification else {}),
             )
+            if not self._native_start_token_is_current(session_id, token):
+                raise RuntimeError("windows_native_start_revoked")
         except Exception as exc:
             code = _native_error_code(exc)
             self._trace(
@@ -506,8 +595,19 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             if str(exc).endswith("_cleanup_unverified"):
                 with self._native_lock:
                     self._native_blocked.add(session_id)
-            else:
-                self._release_native_claims(session_id)
+                    self._native_start_tokens.pop(session_id, None)
+                    self._native_start_backends.pop(session_id, None)
+                raise RuntimeError("windows_native_start_cleanup_unverified") from None
+            if not self._native_start_token_is_current(session_id, token):
+                try:
+                    stop_windows_native_workspace(session_id)
+                except Exception:
+                    with self._native_lock:
+                        self._native_blocked.add(session_id)
+                        self._native_start_tokens.pop(session_id, None)
+                        self._native_start_backends.pop(session_id, None)
+                    raise RuntimeError("windows_native_start_cleanup_unverified") from None
+            self._release_native_claims(session_id)
             raise
         self._trace("native_helper_start_ready", session_id=session_id)
 
@@ -531,7 +631,11 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                     session_id=session_id,
                     detail=f"generation={spec.runtime_generation}",
                 )
+                if not self._native_start_token_is_current(session_id, token):
+                    raise RuntimeError("windows_native_start_revoked")
                 self.rental_preemption.mark_rental_active(spec)
+                if not self._native_start_token_is_current(session_id, token):
+                    raise RuntimeError("windows_native_start_revoked")
                 self._trace(
                     "native_mark_active_done",
                     session_id=session_id,
@@ -553,9 +657,17 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             self._release_native_claims(session_id)
             raise
 
-        with self._native_lock:
-            self.native_runtimes[session_id] = runtime
-            self._native_blocked.discard(session_id)
+        if not self._publish_native_runtime_if_current(session_id, token, runtime):
+            try:
+                stop_windows_native_workspace(session_id)
+            except Exception:
+                with self._native_lock:
+                    self._native_blocked.add(session_id)
+                    self._native_start_tokens.pop(session_id, None)
+                    self._native_start_backends.pop(session_id, None)
+                raise RuntimeError("windows_native_start_cleanup_unverified") from None
+            self._release_native_claims(session_id)
+            raise RuntimeError("windows_native_start_revoked")
         self.usage_last_report[session_id] = time.monotonic()
         self._trace("native_runtime_ready", session_id=session_id)
         return runtime
@@ -571,6 +683,35 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             raise RuntimeError("native_console_session_change_fenced")
         return runtime
 
+    def _announce_native_revocation_started(self, session_id: str) -> bool:
+        with self._native_lock:
+            self._native_revocation_pending.add(session_id)
+            if session_id in self._native_revocation_inflight:
+                return False
+            self._native_revocation_inflight.add(session_id)
+        accepted = False
+        try:
+            result = self._request(
+                f"/agent/workspace-gateway/{session_id}/revocation-started",
+                "POST",
+                {"machineId": self.machine_id},
+            )
+            if not isinstance(result, dict) or result.get("revoked") is not True:
+                self._report_error(RuntimeError("native_revocation_server_ack_missing"))
+            else:
+                accepted = True
+        except Exception as exc:
+            # Local channel/helper STOP still proceeds fail-closed. If the API
+            # is unreachable, the outstanding network request cannot be recalled;
+            # keep a local retry marker for the next reconciliation pass.
+            self._report_error(RuntimeError(f"native_revocation_server_unreachable:{_native_error_code(exc)}"))
+        finally:
+            with self._native_lock:
+                self._native_revocation_inflight.discard(session_id)
+                if accepted:
+                    self._native_revocation_pending.discard(session_id)
+        return accepted
+
     def _stop_native_runtime(self, session_id: str) -> bool | None:
         # Block reconnect callbacks before closing sockets; a reader thread may
         # observe the close concurrently and must not suspend/resume a runtime
@@ -578,8 +719,13 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         with self._native_lock:
             runtime = self.native_runtimes.get(session_id)
             self._native_blocked.add(session_id)
+            self._native_start_tokens.pop(session_id, None)
+            self._native_start_backends.pop(session_id, None)
         self._close_session_channels(session_id)
         self.usage_last_report.pop(session_id, None)
+        # Revoke API delivery before potentially slow helper/GPU cleanup. The
+        # server serializes this transition with every native send/input fence.
+        self._announce_native_revocation_started(session_id)
 
         if runtime is None:
             # A lost/restarted Agent supervisor has no in-memory handle, but the
@@ -596,9 +742,10 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 )
                 return False
             released = self._release_native_claims(session_id)
-            if released:
-                with self._native_lock:
-                    self._native_blocked.discard(session_id)
+            # Keep a process-lifetime tombstone after a successful STOP. A
+            # delayed, already-authorized OPEN can still arrive after cleanup;
+            # without this fence it would fall through to the legacy gateway
+            # once native_runtimes no longer contains the session.
             return released
 
         try:
@@ -616,7 +763,8 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             return released
         with self._native_lock:
             self.native_runtimes.pop(session_id, None)
-            self._native_blocked.discard(session_id)
+            # The session ID is terminal and never reusable. Retain the block
+            # so late OPENs cannot take the non-native fallback path.
         return True
 
     def _native_stop_and_report(self, session_id: str) -> bool:
@@ -732,6 +880,9 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
     def _reconcile_native_sessions(self) -> None:
         with self._native_lock:
             desired = list(self._native_desired_sessions)
+            pending_revocations = list(self._native_revocation_pending)
+        for session_id in pending_revocations:
+            self._announce_native_revocation_started(session_id)
         desired_ids: set[str] = set()
 
         for session in desired:
@@ -816,7 +967,15 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 self.start_failures.pop(session_id, None)
                 self.start_retry_at.pop(session_id, None)
 
+            # STOP/WTS may win immediately after native startup publishes. Do
+            # not continue an obsolete reconciliation pass with registration or
+            # usage work. The API independently serializes these writes with
+            # STOP so an HTTP request already in flight is rejected there too.
+            if not self._native_runtime_is_current(runtime):
+                continue
             self._native_register_if_needed(runtime, metadata)
+            if not self._native_runtime_is_current(runtime):
+                continue
             self._report_native_usage(runtime)
 
         with self._native_lock:
@@ -938,15 +1097,21 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             channel_id = str(item.get("channelId") or "")
             with self._native_lock:
                 session_id = self._native_channel_sessions.get(channel_id)
-            # Never trust the browser-supplied sessionId for a media/input
-            # decision: the mapping comes from the original authorized OPEN.
-            # A dead channel's mapping is deliberately retained as a
-            # fail-closed tombstone, even after the reader has exited.
-            if session_id is not None and (
-                channel_id not in self.channels or self._console_channel_fenced(session_id)
-            ):
-                self._close_session_channels(session_id)
-                return
+                # Never trust the browser-supplied sessionId for a media/input
+                # decision: the mapping comes from the original authorized OPEN.
+                # A dead channel's mapping is deliberately retained as a
+                # fail-closed tombstone, even after the reader has exited.
+                # Hold the same lock through the actual local ws.send. STOP
+                # first publishes its tombstone under this lock, so an input
+                # send either commits before STOP or is refused after it.
+                if session_id is not None:
+                    if channel_id not in self.channels or self._console_channel_fenced(session_id):
+                        self._close_session_channels(session_id)
+                        return
+                    return super()._handle(item)
+                advertised_session = str(item.get("sessionId") or "")
+                if advertised_session in self.native_runtimes or advertised_session in self._native_blocked:
+                    return
         return super()._handle(item)
 
     def _ws_forward_allowed(self, session_id: str, channel_id: str) -> bool:
@@ -984,14 +1149,28 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
 
     def _ws_open(self, item: dict[str, Any]) -> None:
         session_id = str(item.get("sessionId") or "")
+        channel_id = str(item.get("channelId") or "")
+        path = str(item.get("path") or "")
         with self._native_lock:
             is_native = session_id in self.native_runtimes
+            # Reserve channel identities once for the lifetime of this process.
+            # A delayed OPEN must not resurrect a closed socket, including after
+            # a failed handshake or after the native runtime has disappeared.
+            replay = channel_id in self._native_channel_sessions
+            revoked = session_id in self._native_blocked
+        if replay or revoked:
+            self._reject_open(item, "windows_native_channel_authorization_consumed")
+            return
         if not is_native:
+            # A native relay can arrive after a process restart has discarded
+            # its in-memory tombstone. Never let its path fall through to a
+            # stale/legacy container runtime during that recovery window.
+            if path == "/native-stream":
+                self._reject_open(item, "windows_native_runtime_not_ready")
+                return
             return super()._ws_open(item)
 
         request_id = str(item.get("id") or "")
-        channel_id = str(item.get("channelId") or "")
-        path = str(item.get("path") or "")
         ws: websocket.WebSocket | None = None
 
         if path != "/native-stream" or not channel_id:
@@ -1002,6 +1181,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 self._reject_open(item, "workspace_reconnect_not_ready")
                 return
             runtime = self._native_runtime(session_id)
+            with self._native_lock:
+                if channel_id in self._native_channel_sessions:
+                    self._reject_open(item, "windows_native_channel_authorization_consumed")
+                    return
+                self._native_channel_sessions[channel_id] = session_id
+                opened_handle = runtime.handle
             # No browser header, cookie, subprotocol or authorization value is
             # forwarded to the privileged helper. Its capability is injected
             # exclusively by the Agent over a kernel-direct loopback socket.
@@ -1014,7 +1199,9 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             if callable(set_timeout):
                 set_timeout(None)
             with self._native_lock:
-                if self._console_channel_fenced(session_id):
+                if (self._console_channel_fenced(session_id)
+                        or self.native_runtimes.get(session_id) is not runtime
+                        or runtime.handle is not opened_handle):
                     raise RuntimeError("native_console_session_change_fenced")
                 self.channels[channel_id] = ws
                 self.session_channels.setdefault(session_id, set()).add(channel_id)
@@ -1033,7 +1220,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 detail=f"code={_native_websocket_error_code(exc)}",
             )
             with self._native_lock:
-                self._native_channel_sessions.pop(channel_id, None)
+                # Keep the consumed authorization tombstone even on failure.
                 self.channels.pop(channel_id, None)
                 self.session_channels.get(session_id, set()).discard(channel_id)
             if ws is not None:

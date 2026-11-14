@@ -154,59 +154,77 @@ impl QualificationMediaServer {
         }
 
         let mut stream = self.accept_upgraded(runtime)?;
-        let mut input_fence = BrowserInputFence::new(self.stream_epoch)
+        let stream_epoch = runtime
+            .begin_browser_connection()
+            .map_err(|_| QualificationMediaServerError::Upgrade)?;
+        let mut input_fence = BrowserInputFence::new(stream_epoch)
             .map_err(|_| QualificationMediaServerError::Input)?;
         let started = Instant::now();
         let mut sent = 0u32;
         let mut accepted_input = 0u32;
         let mut input_pending_since = None;
 
-        while sent < max_frames {
-            if started.elapsed() > STREAM_TIMEOUT {
-                return Err(QualificationMediaServerError::Media);
-            }
+        let result = (|| {
+            while sent < max_frames {
+                if started.elapsed() > STREAM_TIMEOUT {
+                    return Err(QualificationMediaServerError::Media);
+                }
 
-            loop {
-                match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
-                    None => break,
-                    Some(ClientWebSocketFrame::Input(payload)) => {
-                        let event = input_fence
-                            .accept(&payload)
-                            .map_err(|_| QualificationMediaServerError::Input)?;
-                        runtime
-                            .inject_input(event)
-                            .map_err(|_| QualificationMediaServerError::Input)?;
-                        accepted_input = accepted_input
-                            .checked_add(1)
-                            .ok_or(QualificationMediaServerError::Protocol)?;
-                    }
-                    Some(ClientWebSocketFrame::Ping(payload)) => {
-                        write_websocket_control(&mut stream, 0x0A, &payload)?;
-                    }
-                    Some(ClientWebSocketFrame::Close(payload)) => {
-                        write_websocket_control(&mut stream, 0x08, &payload)?;
-                        return Ok((sent, accepted_input));
+                loop {
+                    match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
+                        None => break,
+                        Some(ClientWebSocketFrame::Input(payload)) => {
+                            let event = input_fence
+                                .accept(&payload)
+                                .map_err(|_| QualificationMediaServerError::Input)?;
+                            runtime
+                                .inject_input(event)
+                                .map_err(|_| QualificationMediaServerError::Input)?;
+                            accepted_input = accepted_input
+                                .checked_add(1)
+                                .ok_or(QualificationMediaServerError::Protocol)?;
+                        }
+                        Some(ClientWebSocketFrame::Ping(payload)) => {
+                            write_websocket_control(&mut stream, 0x0A, &payload)?;
+                        }
+                        Some(ClientWebSocketFrame::Close(payload)) => {
+                            write_websocket_control(&mut stream, 0x08, &payload)?;
+                            return Ok((sent, accepted_input));
+                        }
                     }
                 }
+
+                let frame = match runtime
+                    .read_media_frame()
+                    .map_err(|_| QualificationMediaServerError::Media)?
+                {
+                    Some(frame) => frame,
+                    None => {
+                        thread::sleep(Duration::from_millis(1));
+                        continue;
+                    }
+                };
+                write_browser_media_frame(&mut stream, stream_epoch, &frame)?;
+                sent = sent
+                    .checked_add(1)
+                    .ok_or(QualificationMediaServerError::Protocol)?;
             }
 
-            let frame = match runtime
-                .read_media_frame()
-                .map_err(|_| QualificationMediaServerError::Media)?
-            {
-                Some(frame) => frame,
-                None => {
-                    thread::sleep(Duration::from_millis(1));
-                    continue;
-                }
-            };
-            write_browser_media_frame(&mut stream, self.stream_epoch, &frame)?;
-            sent = sent
-                .checked_add(1)
-                .ok_or(QualificationMediaServerError::Protocol)?;
+            Ok((sent, accepted_input))
+        })();
+        let cleanup = runtime
+            .release_browser_input_for_epoch(stream_epoch)
+            .map_err(|_| QualificationMediaServerError::Input);
+        match result {
+            Ok(value) => {
+                cleanup?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = cleanup;
+                Err(error)
+            }
         }
-
-        Ok((sent, accepted_input))
     }
 
     /// Long-lived authority transport. The runtime remains owned by the authority
@@ -225,59 +243,84 @@ impl QualificationMediaServer {
         let mut accepted_input = 0u64;
         let mut input_pending_since = None;
 
-        loop {
+        let result = (|| {
             loop {
-                match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
-                    None => break,
-                    Some(ClientWebSocketFrame::Input(payload)) => {
-                        let event = input_fence
-                            .accept(&payload)
-                            .map_err(|_| QualificationMediaServerError::Input)?;
-                        let mut guard = runtime
-                            .lock()
-                            .map_err(|_| QualificationMediaServerError::Input)?;
-                        let active = guard.as_mut().ok_or(QualificationMediaServerError::Input)?;
-                        require_connection_epoch(stream_epoch, active.stream_epoch())?;
-                        active
-                            .inject_input(event)
-                            .map_err(|_| QualificationMediaServerError::Input)?;
-                        accepted_input = accepted_input
+                if !running.load(Ordering::SeqCst) {
+                    return Ok((sent, accepted_input));
+                }
+                loop {
+                    match try_read_websocket_client_frame(&mut stream, &mut input_pending_since)? {
+                        None => break,
+                        Some(ClientWebSocketFrame::Input(payload)) => {
+                            let event = input_fence
+                                .accept(&payload)
+                                .map_err(|_| QualificationMediaServerError::Input)?;
+                            let mut guard = runtime
+                                .lock()
+                                .map_err(|_| QualificationMediaServerError::Input)?;
+                            let active =
+                                guard.as_mut().ok_or(QualificationMediaServerError::Input)?;
+                            require_connection_epoch(stream_epoch, active.stream_epoch())?;
+                            active
+                                .inject_input(event)
+                                .map_err(|_| QualificationMediaServerError::Input)?;
+                            accepted_input = accepted_input
+                                .checked_add(1)
+                                .ok_or(QualificationMediaServerError::Protocol)?;
+                        }
+                        Some(ClientWebSocketFrame::Ping(payload)) => {
+                            write_websocket_control(&mut stream, 0x0A, &payload)?;
+                        }
+                        Some(ClientWebSocketFrame::Close(payload)) => {
+                            write_websocket_control(&mut stream, 0x08, &payload)?;
+                            return Ok((sent, accepted_input));
+                        }
+                    }
+                }
+
+                let mut guard = runtime
+                    .lock()
+                    .map_err(|_| QualificationMediaServerError::Media)?;
+                let active = guard.as_mut().ok_or(QualificationMediaServerError::Media)?;
+                require_connection_epoch(stream_epoch, active.stream_epoch())?;
+                match active
+                    .read_media_frame()
+                    .map_err(|_| QualificationMediaServerError::Media)?
+                {
+                    Some(frame) => {
+                        // Keep the runtime lock through the socket write. SUSPEND
+                        // uses the same lock, so it cannot confirm capability
+                        // revocation while a pre-suspend frame is still being
+                        // delivered on an authenticated connection.
+                        write_browser_media_frame(&mut stream, stream_epoch, &frame)?;
+                        sent = sent
                             .checked_add(1)
                             .ok_or(QualificationMediaServerError::Protocol)?;
                     }
-                    Some(ClientWebSocketFrame::Ping(payload)) => {
-                        write_websocket_control(&mut stream, 0x0A, &payload)?;
-                    }
-                    Some(ClientWebSocketFrame::Close(payload)) => {
-                        write_websocket_control(&mut stream, 0x08, &payload)?;
-                        return Ok((sent, accepted_input));
+                    None => {
+                        drop(guard);
+                        thread::sleep(Duration::from_millis(1));
                     }
                 }
             }
-
-            let mut guard = runtime
-                .lock()
-                .map_err(|_| QualificationMediaServerError::Media)?;
-            let active = guard.as_mut().ok_or(QualificationMediaServerError::Media)?;
-            require_connection_epoch(stream_epoch, active.stream_epoch())?;
-            match active
-                .read_media_frame()
-                .map_err(|_| QualificationMediaServerError::Media)?
-            {
-                Some(frame) => {
-                    // Keep the runtime lock through the socket write. SUSPEND
-                    // uses the same lock, so it cannot confirm capability
-                    // revocation while a pre-suspend frame is still being
-                    // delivered on an authenticated connection.
-                    write_browser_media_frame(&mut stream, stream_epoch, &frame)?;
-                    sent = sent
-                        .checked_add(1)
-                        .ok_or(QualificationMediaServerError::Protocol)?;
-                }
-                None => {
-                    drop(guard);
-                    thread::sleep(Duration::from_millis(1));
-                }
+        })();
+        let cleanup = runtime
+            .lock()
+            .map_err(|_| QualificationMediaServerError::Input)
+            .and_then(|mut guard| match guard.as_mut() {
+                Some(active) => active
+                    .release_browser_input_for_epoch(stream_epoch)
+                    .map_err(|_| QualificationMediaServerError::Input),
+                None => Ok(()),
+            });
+        match result {
+            Ok(value) => {
+                cleanup?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = cleanup;
+                Err(error)
             }
         }
     }
@@ -356,18 +399,17 @@ impl QualificationMediaServer {
         // Fetch the capability only after the connection arrives. A SUSPEND
         // revokes the previous token and RESUME creates a fresh token, so a
         // listener that was already waiting must never authenticate stale bytes.
-        let (media_token, stream_epoch) = {
+        let media_token = {
             let guard = runtime
                 .lock()
                 .map_err(|_| QualificationMediaServerError::Upgrade)?;
             let active = guard
                 .as_ref()
                 .ok_or(QualificationMediaServerError::Upgrade)?;
-            let media_token = active
+            active
                 .media_token()
                 .map(str::to_owned)
-                .ok_or(QualificationMediaServerError::Upgrade)?;
-            (media_token, active.stream_epoch())
+                .ok_or(QualificationMediaServerError::Upgrade)?
         };
         let upgrade =
             match authenticate_local_media_upgrade(&request, &self.session_id, &media_token) {
@@ -380,6 +422,28 @@ impl QualificationMediaServer {
                     return Err(QualificationMediaServerError::Upgrade);
                 }
             };
+        let stream_epoch = {
+            let mut guard = runtime
+                .lock()
+                .map_err(|_| QualificationMediaServerError::Upgrade)?;
+            let active = guard
+                .as_mut()
+                .ok_or(QualificationMediaServerError::Upgrade)?;
+            // SUSPEND/RESUME may have rotated the token while authentication
+            // was in flight. Reauthenticate the current capability under the
+            // same runtime lock as allocation of the connection's fresh epoch.
+            authenticate_local_media_upgrade(
+                &request,
+                &self.session_id,
+                active
+                    .media_token()
+                    .ok_or(QualificationMediaServerError::Upgrade)?,
+            )
+            .map_err(|_| QualificationMediaServerError::Upgrade)?;
+            active
+                .begin_browser_connection()
+                .map_err(|_| QualificationMediaServerError::Upgrade)?
+        };
         let accept = websocket_accept_value(&upgrade.websocket_key);
         let response = format!(
             "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
