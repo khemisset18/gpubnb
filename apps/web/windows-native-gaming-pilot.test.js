@@ -114,3 +114,10 @@ test('Gaming page remains only a manual pilot, with no standalone Gaming or Stea
   assert.doesNotMatch(source, /method:\s*['"]POST['"]/);
   assert.doesNotMatch(source, /\/workspace\/gaming/);
 });
+
+test('the private action stays CSS-hidden until a positive authorization', () => {
+  const css = readFileSync(new URL('./portal.css', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('./stage4-gaming-visual-pilot.html', import.meta.url), 'utf8');
+  assert.match(html, /id="gamingPilotContinue"[^>]*hidden/);
+  assert.match(css, /\.button\[hidden\]\s*\{\s*display:\s*none\s*\}/);
+});
