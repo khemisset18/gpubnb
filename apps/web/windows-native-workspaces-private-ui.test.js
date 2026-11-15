@@ -25,9 +25,12 @@ function element(tag) {
   };
 }
 
-async function openCatalogue({ authorized = true, preflight, httpStatus = 200, workspaces = fixture } = {}) {
+async function openCatalogue({ authorized = true, ownerAuthorized = true, machineContext = true, preflight, httpStatus = 200, workspaces = fixture } = {}) {
   const grid = element('section');
   const panel = { hidden: true };
+  const ownerTools = { hidden: true, style: {} };
+  const ownerMessage = element('span');
+  const analyzeButton = { addEventListener() {} };
   const count = element('p');
   const calls = [];
   const document = {
@@ -35,6 +38,9 @@ async function openCatalogue({ authorized = true, preflight, httpStatus = 200, w
       if (selector === '#workspaceGrid') return grid;
       if (selector === '#resultCount') return count;
       if (selector === '#privateWindowsQualification') return panel;
+      if (selector === '#ownerTools') return ownerTools;
+      if (selector === '#ownerMessage') return ownerMessage;
+      if (selector === '#analyzeButton') return analyzeButton;
       throw new Error('Unexpected selector: ' + selector);
     },
     querySelectorAll(selector) {
@@ -48,8 +54,11 @@ async function openCatalogue({ authorized = true, preflight, httpStatus = 200, w
     const path = new URL(url).pathname;
     calls.push({ path, method: options.method || 'GET', credentials: options.credentials });
     if (path === '/workspaces') return { ok: true, status: 200, json: async () => ({ workspaces }) };
+    if (path.startsWith('/machines/') && path.endsWith('/workspaces/manage')) return authorized && ownerAuthorized
+      ? { ok: true, status: 200, json: async () => ({ workspaces: [] }) }
+      : { ok: false, status: 404, json: async () => ({ error: 'machine_not_found' }) };
     if (path === '/auth/me') return authorized
-      ? { ok: true, status: 200, json: async () => ({ user: {} }) }
+      ? { ok: true, status: 200, json: async () => ({ user: { id: 'authorized-owner' } }) }
       : { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) };
     if (path === '/qualification/windows-native/preflight') return {
       ok: httpStatus === 200,
@@ -63,7 +72,7 @@ async function openCatalogue({ authorized = true, preflight, httpStatus = 200, w
     document,
     fetch,
     window: { GPUBNB_CONFIG: { apiBase: 'https://private.example.invalid' } },
-    location: { search: '' },
+    location: { search: machineContext ? '?machine=cmsiggruy0004df0tn669f6bn' : '' },
     URLSearchParams,
   }, { filename: 'workspaces.js' });
   await new Promise(resolve => setTimeout(resolve, 20));
@@ -87,7 +96,7 @@ test('Cloud Desktop receives a private link only after authenticated positive re
     assert.equal(card.children[0].disabled, true);
   }
   assert.deepEqual(view.calls.map(call => call.path), [
-    '/workspaces', '/auth/me', '/qualification/windows-native/preflight',
+    '/workspaces', '/machines/cmsiggruy0004df0tn669f6bn/workspaces/manage', '/auth/me', '/qualification/windows-native/preflight',
   ]);
   assert.ok(view.calls.every(call => call.credentials === 'include' && call.method === 'GET'));
 });
@@ -125,4 +134,16 @@ test('workspace manifest HTML is escaped rather than interpreted as markup', asy
   assert.equal(html.includes('<script>'), false);
   assert.equal(html.includes('<img '), false);
   assert.equal(html.includes('<svg '), false);
+});
+
+test('public catalogue and foreign machine cannot expose a private test', async () => {
+  const noMachine = await openCatalogue({ preflight: allowed, machineContext: false });
+  assert.equal(noMachine.panel.hidden, true);
+  assert.equal(noMachine.calls.some(call => call.path.endsWith('/preflight')), false);
+  assert.equal(noMachine.grid.children[0].children[0].tagName, 'BUTTON');
+
+  const foreignOwner = await openCatalogue({ preflight: allowed, ownerAuthorized: false });
+  assert.equal(foreignOwner.panel.hidden, true);
+  assert.equal(foreignOwner.calls.some(call => call.path.endsWith('/preflight')), false);
+  assert.equal(foreignOwner.grid.children[0].children[0].tagName, 'BUTTON');
 });
