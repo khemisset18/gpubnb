@@ -14,8 +14,8 @@ import { evaluateWorkspaceAccess } from './workspace-access-policy.js';
 import { issueWorkspaceAccessGrant } from './workspace-access.js';
 import { isWorkspaceGatewayLive } from './workspace-gateway-liveness.js';
 
-const ACTIVE_BOOKINGS = [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE];
-const RETRYABLE = [WorkspaceSessionStatus.FAILED, WorkspaceSessionStatus.CANCELLED, WorkspaceSessionStatus.TIMED_OUT];
+const ACTIVE_BOOKINGS: BookingStatus[] = [BookingStatus.FUNDED, BookingStatus.STARTING, BookingStatus.ACTIVE];
+const RETRYABLE: WorkspaceSessionStatus[] = [WorkspaceSessionStatus.FAILED, WorkspaceSessionStatus.CANCELLED, WorkspaceSessionStatus.TIMED_OUT];
 const TERMINAL_JOBS = [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.TIMED_OUT, JobStatus.REJECTED, JobStatus.QUARANTINED];
 class BookingIneligible extends Error {}
 class DesktopAlreadySelected extends Error {}
