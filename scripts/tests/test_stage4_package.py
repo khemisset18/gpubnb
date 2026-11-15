@@ -70,6 +70,18 @@ class PackageTests(unittest.TestCase):
         copied = set(re.findall(r"'([^']+\.ps1)'", support_block))
         self.assertIn('stage4-windows-path-policy.ps1', copied)
         self.assertIn('stage4-private-test-sign-copies.ps1', copied)
+        # An offline signer candidate requires its own policy and verifier.
+        # Shipping the generator without either dependency would fail again
+        # on PC1, just like the previously omitted path-policy module.
+        for required in (
+            'new-stage4-private-qualification-package.ps1',
+            'stage4-private-qualification-policy.ps1',
+            'verify-stage4-private-qualification.ps1',
+        ):
+            self.assertIn(required, copied)
+        # The unsigned CI bundle is preparation-only: do NOT distribute a
+        # service mutation script as though it were required for signing.
+        self.assertNotIn('stage4-private-four-file-maintenance.ps1', copied)
         self.assertIn('stage4-package-common.ps1', copied)
         self.assertIn('verify-stage4-package.ps1', copied)
         for name in copied:
