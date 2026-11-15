@@ -67,5 +67,19 @@ class RpcConsistencyTests(unittest.TestCase):
             recovery.rebroadcast(self.bundle,rpc)
         self.assertFalse(any(method=='sendrawtransaction' for method,_ in calls))
 
+    def test_native_header_lead_keeps_priority_when_funding_is_also_unconfirmed(self):
+        underlying,calls=self.rpc(['PENDING'],funding_confirmed=False)
+        def rpc(method,*params,**kwargs):
+            value=underlying(method,*params,**kwargs)
+            if method=='getblockchaininfo':value={**value,'headers':value['blocks']+1}
+            return value
+        status=recovery.observe(self.bundle,rpc)
+        self.assertEqual(status['state'],'PENDING')
+        self.assertFalse(status['nodeSynchronized'])
+        self.assertFalse(status['fundingConfirmed'])
+        with self.assertRaisesRegex(ValueError,'node has an unresolved header lead; no broadcast'):
+            recovery.rebroadcast(self.bundle,rpc)
+        self.assertFalse(any(method=='sendrawtransaction' for method,_ in calls))
+
 
 if __name__=='__main__':unittest.main()
