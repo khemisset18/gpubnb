@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Essai graphique privé Gaming GPUbnb via Cloud Desktop Windows, sans publication ni paiement.">
+  <title>Gaming — essai graphique privé — GPUbnb</title>
+  <link rel="stylesheet" href="portal.css">
+  <script defer src="config.js"></script>
+  <script defer src="stage4-gaming-visual-pilot.js"></script>
+</head>
+<body>
+  <main class="portal-main">
+    <section class="panel" style="max-width:830px;margin:40px auto">
+      <span class="badge warn">Stage 4 · essai privé uniquement</span>
+      <h1>Gaming : vérifier un jeu sur le bureau Windows distant</h1>
+      <p class="muted">Le streaming Cloud Desktop de PC1 vers PC2 a été observé avec image, souris et clavier.
+        Cet essai permet de mesurer manuellement l'affichage et les entrées d'un jeu <strong>déjà installé
+        dans le compte Windows locataire</strong>. Il n'active pas le workspace Gaming officiel.</p>
+      <h2>État des capacités</h2>
+      <ul class="checklist">
+        <li><strong>Vidéo H.264, souris et clavier :</strong> testés dans Cloud Desktop ; à revérifier avec un jeu.</li>
+        <li><strong>Audio du jeu :</strong> non qualifié, aucun son distant garanti.</li>
+        <li><strong>Manette :</strong> non qualifiée, aucune manette distante garantie.</li>
+        <li><strong>Steam :</strong> pas de démarrage automatique ; le Helper bloque encore le workspace Gaming autonome.</li>
+      </ul>
+      <h2>Précautions obligatoires</h2>
+      <p class="muted">Utiliser uniquement le bureau standard <code>gpubnb-renter-qual</code> de PC1.
+        Ne jamais ouvrir la session personnelle du propriétaire, saisir ses mots de passe,
+        partager un compte Steam personnel, ni accéder à ses fichiers.
+        Ne pas installer de pilote, désactiver de protection Windows ni modifier le service GPUbnb.</p>
+      <p class="muted">L'essai reste dans une réservation privée sans paiement. Le navigateur PC2
+        utilisera le même parcours sécurisé que Cloud Desktop. L'arrêt du bureau distant ne
+        raccourcit pas automatiquement le créneau de réservation.</p>
+      <p id="gamingPilotStatus" role="status" aria-live="polite">Vérification de l'accès privé…</p>
+      <div class="actions">
+        <a id="gamingPilotContinue" class="button button-primary" href="stage3-windows-native.html" hidden>
+          Continuer vers Cloud Desktop — essai manuel de jeu
+        </a>
+        <a class="button" href="workspaces.html">Retour aux workspaces</a>
+      </div>
+      <p class="muted">Si la vidéo montre le bureau personnel du propriétaire, arrêter immédiatement la session.
+        Ce pilote n'établit pas la sécurité de Gaming ni sa disponibilité publique.</p>
+    </section>
+  </main>
+</body>
+</html>
