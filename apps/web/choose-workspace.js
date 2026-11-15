@@ -4,6 +4,10 @@ const listingId=new URLSearchParams(location.search).get('listing');
 const selectedSlug=new URLSearchParams(location.search).get('workspace');
 const choices=document.querySelector('#workspaceChoices');
 const status=document.querySelector('#workspaceStatus');
+const HTML_ESCAPE={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>HTML_ESCAPE[c]);
+const safeScore=value=>Number.isFinite(Number(value))?Math.max(0,Math.min(100,Math.round(Number(value)))):0;
+const GRAPHICAL_WORKSPACES=new Set(['cloud-desktop','creator','cad','gaming']);
 async function request(path,options={}){const response=await fetch(`${API}${path}`,{credentials:'include',...options,headers:{accept:'application/json',...(options.body!==undefined?{'content-type':'application/json'}:{}),...(options.headers||{})}});const data=await response.json().catch(()=>({}));if(!response.ok)throw Object.assign(new Error(data.error||`HTTP ${response.status}`),{code:data.error,status:response.status});return data}
 async function authenticate(){return request('/auth/me')}
 const pendingBookingKey='gpubnb.workspace.pending-booking';
@@ -65,7 +69,7 @@ async function prepareSelected(listing,workspace,button){
     status.textContent=`Impossible de préparer automatiquement : ${error.message}`;
   }
 }
-function renderWorkspace(listing,workspace){const card=document.createElement('article');card.className='card';const compatibility=workspace.compatibility;card.innerHTML=`<span class="eyebrow">${workspace.icon} ${workspace.release}</span><h3>${workspace.name}</h3><p>${workspace.summary}</p><div class="meta"><span>Compatibilité ${compatibility.score} %</span><span>${workspace.technologies.join(' · ')}</span></div>`;const button=document.createElement('button');button.type='button';button.className='button button-primary';button.textContent=workspace.slug===selectedSlug?'Continuer avec cet espace sélectionné':'Choisir cet espace';if(workspace.slug===selectedSlug)button.setAttribute('aria-label',`Continuer avec ${workspace.name}, espace sélectionné`);button.addEventListener('click',()=>prepareSelected(listing,workspace,button));card.append(button);return card}
+function renderWorkspace(listing,workspace){const card=document.createElement('article');card.className='card';const compatibility=workspace.compatibility;card.innerHTML=`<span class="eyebrow">${escapeHTML(workspace.icon)} ${escapeHTML(workspace.release)}</span><h3>${escapeHTML(workspace.name)}</h3><p>${escapeHTML(workspace.summary)}</p><div class="meta"><span>Compatibilité ${safeScore(compatibility?.score)} %</span><span>${escapeHTML(Array.isArray(workspace.technologies)?workspace.technologies.join(' · '):'')}</span></div>`;const button=document.createElement('button');button.type='button';button.className='button button-primary';button.textContent=workspace.slug===selectedSlug?'Continuer avec cet espace sélectionné':'Choisir cet espace';if(workspace.slug===selectedSlug)button.setAttribute('aria-label',`Continuer avec ${workspace.name}, espace sélectionné`);button.addEventListener('click',()=>prepareSelected(listing,workspace,button));card.append(button);return card}
 (async()=>{if(!listingId){status.textContent='Aucun GPU sélectionné.';return}try{const listing=await request(`/rental/listings/${encodeURIComponent(listingId)}/workspace-catalogue`);document.querySelector('#selectedGpu').textContent=`${listing.title} · ${listing.gpu.vendor?`${listing.gpu.vendor} `:''}${listing.gpu.model} · ${listing.gpu.vramMiB} MiB VRAM`;const compatible=listing.workspaces.filter(workspace=>workspace.compatible&&workspace.bookable);choices.replaceChildren(...compatible.map(workspace=>renderWorkspace(listing,workspace)));status.textContent=compatible.length?`${compatible.length} espace(s) compatible(s) et réservable(s). Choisissez celui que vous voulez utiliser.`:'Aucun Workspace exécutable n’est compatible avec ce GPU.'}catch(error){status.textContent=`Impossible de charger les espaces : ${error.message}`}})();
 
 // Legacy private-beta contract markers kept for source-level compatibility tests only.
@@ -80,14 +84,38 @@ function renderWorkspace(listing,workspace){const card=document.createElement('a
 const catalogueList=document.querySelector('#workspaceCatalogue');
 const catalogueStatus=document.querySelector('#workspaceCatalogueStatus');
 const CATALOGUE_STATE_LABEL={READY:'Compatible',LIMITED:'Compatible (mode limité)',INSTALL_REQUIRED:'Compatible — installation requise',INCOMPATIBLE:'Non compatible'};
+const diagnosticPanel=document.querySelector('#workspaceDiagnostic');
+function selectGraphicalWorkspace(workspace){
+  if(!GRAPHICAL_WORKSPACES.has(workspace.slug)||!diagnosticPanel)return;
+  document.querySelector('#workspaceDiagnosticTitle').textContent=String(workspace.name||workspace.slug);
+  document.querySelector('#workspaceDiagnosticStatus').textContent=workspace.compatible&&workspace.bookable
+    ? 'Ce workspace est éligible à une réservation sur cette machine selon le serveur. Pour l’essayer, utilisez son bouton dans les espaces compatibles ci-dessus.'
+    : 'Workspace sélectionné pour inspection. Lancement réel indisponible : aucun environnement graphique GPU isolé n’est autorisé pour cette machine.';
+  const reasons=Array.isArray(workspace.compatibility?.missing)
+    ?workspace.compatibility.missing.filter(x=>typeof x==='string').slice(0,4):[];
+  document.querySelector('#workspaceDiagnosticRequirements').textContent=reasons.length
+    ?'Prérequis manquants : '+reasons.join(' · ')
+    :'Cloud Desktop, Creator, CAD et Gaming nécessitent un bureau virtuel GPU distinct de tous les comptes Windows de PC1. Le test de streaming de la console Windows ne suffit pas à établir cette isolation.';
+  diagnosticPanel.hidden=false;
+  diagnosticPanel.scrollIntoView?.({behavior:'smooth',block:'nearest'});
+}
 function renderCatalogueCard(workspace){
   const card=document.createElement('article');
-  card.className=`card catalogue-card ${workspace.compatibility.state.toLowerCase()}`;
-  const stateLabel=CATALOGUE_STATE_LABEL[workspace.compatibility.state]||'À analyser';
-  const missing=workspace.compatibility.missing;
-  const missingList=missing.length?`<ul class="catalogue-missing">${missing.map(item=>`<li>${item}</li>`).join('')}</ul>`:'';
-  const availability=workspace.bookable?'<span class="catalogue-badge bookable">Réservable</span>':'<span class="catalogue-badge upcoming">Bientôt disponible</span>';
-  card.innerHTML=`<span class="eyebrow">${workspace.icon} ${workspace.name}</span><h3>${stateLabel}</h3><p>${workspace.summary}</p><div class="meta"><span>Score de compatibilité : ${workspace.compatibility.score}%</span><span>${workspace.technologies.join(' · ')}</span></div>${missingList}${availability}`;
+  const state=String(workspace.compatibility?.state||'INCOMPATIBLE');
+  card.className=`card catalogue-card ${['READY','LIMITED','INSTALL_REQUIRED','INCOMPATIBLE'].includes(state)?state.toLowerCase():'incompatible'}`;
+  const stateLabel=CATALOGUE_STATE_LABEL[state]||'À analyser';
+  const missing=Array.isArray(workspace.compatibility?.missing)?workspace.compatibility.missing:[];
+  const missingList=missing.length?`<ul class="catalogue-missing">${missing.map(item=>`<li>${escapeHTML(item)}</li>`).join('')}</ul>`:'';
+  const availability=workspace.bookable&&workspace.compatible?'<span class="catalogue-badge bookable">Réservable</span>':'<span class="catalogue-badge upcoming">Non réservable actuellement</span>';
+  card.innerHTML=`<span class="eyebrow">${escapeHTML(workspace.icon)} ${escapeHTML(workspace.name)}</span><h3>${escapeHTML(stateLabel)}</h3><p>${escapeHTML(workspace.summary)}</p><div class="meta"><span>Score de compatibilité : ${safeScore(workspace.compatibility?.score)}%</span><span>${escapeHTML(Array.isArray(workspace.technologies)?workspace.technologies.join(' · '):'')}</span></div>${missingList}${availability}`;
+  if(GRAPHICAL_WORKSPACES.has(workspace.slug)){
+    const select=document.createElement('button');
+    select.type='button';
+    select.className='button button-secondary';
+    select.textContent='Sélectionner pour test';
+    select.addEventListener('click',()=>selectGraphicalWorkspace(workspace));
+    card.append(select);
+  }
   return card;
 }
-(async()=>{if(!listingId)return;try{const catalogue=await request(`/rental/listings/${encodeURIComponent(listingId)}/workspace-catalogue`);catalogueList.replaceChildren(...catalogue.workspaces.map(renderCatalogueCard));const bookableCount=catalogue.workspaces.filter(workspace=>workspace.bookable).length;catalogueStatus.textContent=`${bookableCount} espace(s) réservable(s) sur ${catalogue.workspaces.length} au catalogue, pour ce GPU précis.`}catch(error){catalogueStatus.textContent=`Impossible de charger le catalogue complet : ${error.message}`}})();
+(async()=>{if(!listingId)return;try{const catalogue=await request(`/rental/listings/${encodeURIComponent(listingId)}/workspace-catalogue`);catalogueList.replaceChildren(...catalogue.workspaces.map(renderCatalogueCard));const bookableCount=catalogue.workspaces.filter(workspace=>workspace.bookable).length;catalogueStatus.textContent=`${bookableCount} espace(s) réservable(s) sur ${catalogue.workspaces.length} au catalogue, pour ce GPU précis.`;const selected=catalogue.workspaces.find(workspace=>workspace.slug===selectedSlug&&GRAPHICAL_WORKSPACES.has(workspace.slug));if(selected)selectGraphicalWorkspace(selected)}catch(error){catalogueStatus.textContent=`Impossible de charger le catalogue complet : ${error.message}`}})();
