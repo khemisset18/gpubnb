@@ -26,6 +26,18 @@ At PR #333 SHA `23a7a2950ecf365866f3531ddbf76920d9fcb295`:
 
 **C. No trusted signer yet:** software CI, synthetic fault testing, provenance and offline scratch audit can proceed, but **physical PC1 installation remains NO-GO**.
 
+## Verified external provider options (research only; no order)
+
+Public documentation consulted on 2026-11-15:
+
+1. **Certum Standard Code Signing**: Certum explicitly says Standard is available to an **individual or a company** and the signer displays personal name or business name; published entry pricing from **EUR 139** (electronic code/activation only, may require existing crypto card/reader), physical set from **EUR 169**, and cloud service from **EUR 209**. These are advertised starting prices, **not all-in quotes**. Confirm eligibility for a French resident, currently supported issuance path, identity-verification prerequisites and full cloud/key-storage fees *before any order*. Sources: https://www.certum.eu/en/code-signing-certificates/ and https://shop.certum.eu/code-signing.html
+2. **SSL.com Individual Validation (IV) Code Signing**: expressly designed for individuals without a registered business; advertised entry price **USD 129/year**, with a separate HSM/token or eSigner subscription, and government-ID identity verification. Signer displays the verified **personal** name. Verify France eligibility and the full price before placing any order. Source: https://www.ssl.com/products/software-integrity/code-signing/iv/
+3. **Microsoft Azure Artifact Signing Public Trust**: **not currently accessible for France-based individuals**. Microsoft lists Public Trust organizations in the EU but limits **individuals** to USA and Canada. Azure **Private Trust** does not meet the trust objective. Source: https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart
+4. **SignPath Foundation free OSS signing**: only for projects meeting its requirements: OSI-approved license for all components, no proprietary components or commercial dual licensing, existing released project, maintained and documented. The public `khemisset18/gpubnb` GitHub repository does **not** list a top-level `LICENSE` at the observed PR source commit, and the project is a GPU rental marketplace. **Eligibility has not been demonstrated**. Do not silently add an OSS license or promise signing approval. Source: https://signpath.org/terms
+5. **Certum Open Source Code Signing**: offered specifically for qualifying individual open-source developers, **not commercial software**; Certum states commercial distribution can cause revocation. Do not select for GPUbnb's planned paid/rental model without written confirmation of eligibility. Source: https://support.certum.eu/en/code-signing-required-documents/
+
+**Practical provisional preference:** Certum Standard for a French individual intending commercial Windows code signing; SSL.com IV as an alternative. Neither has been ordered or issued; no actual PC1 trust is attested. Public CA signature alone does not complete Stage 4: pinned signer/build identities, independently qualified recovery release, runtime LocalSystem verification, backend compatibility, quarantine and physical testing remain separate gates.
+
 ## Design changes required before signing the last Stage 4 release
 
 1. Add a **separately named signed-release policy** instead of weakening the private `LOCAL PHYSICAL TEST ONLY` verifier. Explicitly define approved public CA trust, certificate EKU, revocation/timestamp semantics, identities, and subject matching. A pinned certificate fingerprint can change upon public-signing credential rotation; independently specify approved issuer/publisher binding and release-specific pins; no runtime weakening.
