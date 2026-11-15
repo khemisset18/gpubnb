@@ -41,7 +41,7 @@ test('preview off: none of four desktop slugs is executable or bookable', () => 
 test('preview on: four slugs are offered only for qualified GPU rendering', () => {
   withPreview('test', 'true', () => {
     const list = compatibleWorkspaceChoices(capable);
-    assert.deepEqual(list.map(row => row.slug), ['compute', 'cloud-desktop', 'creator', 'cad', 'gaming'].sort((a,b) => 0));
+    assert.deepEqual(list.map(row => row.slug).sort(), ['compute', 'cloud-desktop', 'creator', 'cad', 'gaming'].sort());
     for (const slug of desktopWorkspaceSlugs) {
       const item = allWorkspaceCompatibility(capable).find(row => row.slug === slug);
       assert.equal(item?.bookable, true, slug);
