@@ -24,6 +24,8 @@ def desktop_workspace_preview_enabled(
     return (
         values.get("NODE_ENV") in {"development", "test"}
         and values.get("GPUBNB_DESKTOP_WORKSPACE_PREVIEW") == "true"
+        and not values.get("RENDER")
+        and not values.get("RENDER_SERVICE_ID")
         and system.startswith("linux")
         and "microsoft" not in release.casefold()
         and "wsl" not in release.casefold()
