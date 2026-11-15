@@ -2,6 +2,7 @@ import { MachineWorkspaceState, WorkspaceRelease, type PrismaClient } from '@pri
 
 import { analyzeWorkspace, type MachineCapabilities } from './workspace-compatibility.js';
 import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from './workspace-manifests.js';
+import { desktopWorkspacePreviewEnabled, isDesktopWorkspaceSlug, type DesktopWorkspaceSlug } from './desktop-workspace-preview.js';
 
 // 'data', 'ai', 'video', 'audio', 'api', 'mobile' and 'security-lab' joined
 // this list once a real runtime existed behind each: agent-side container
@@ -23,10 +24,11 @@ import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from '.
 // workspace container), not just an isolated healthcheck container. Never
 // add a slug here on the strength of its manifest/catalogue entry alone.
 export const executableWorkspaceSlugs = ['compute', 'developer', 'data', 'ai', 'video', 'audio', 'api', 'mobile', 'security-lab'] as const;
-export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number];
+export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number] | DesktopWorkspaceSlug;
 
 export function isExecutableWorkspaceSlug(value: string): value is ExecutableWorkspaceSlug {
-  return executableWorkspaceSlugs.includes(value as ExecutableWorkspaceSlug);
+  return executableWorkspaceSlugs.includes(value as typeof executableWorkspaceSlugs[number])
+    || (desktopWorkspacePreviewEnabled() && isDesktopWorkspaceSlug(value));
 }
 
 export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
@@ -41,7 +43,8 @@ export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
   // agent requests) and by test/workspace-developer-phase.test.ts, so this filter
   // is a deliberate information-architecture choice, not a placeholder.
   return workspaceManifests
-    .filter((manifest) => manifest.release === 'BETA' && manifest.slug === 'compute')
+    .filter((manifest) => (manifest.release === 'BETA' && manifest.slug === 'compute')
+      || (desktopWorkspacePreviewEnabled() && isDesktopWorkspaceSlug(manifest.slug)))
     .map((manifest) => {
       const compatibility = analyzeWorkspace(machine, manifest);
       return {
@@ -78,6 +81,8 @@ export async function ensureCompatibleMachineWorkspace(
   machineId: string,
   slug: ExecutableWorkspaceSlug,
 ) {
+  // A direct caller must not bypass the preview gate by skipping the catalogue.
+  if (!isExecutableWorkspaceSlug(slug)) throw new Error('workspace_not_executable');
   const manifest = workspaceManifest(slug) as WorkspaceManifest;
   const machine = await db.machine.findUnique({
     where: { id: machineId },
