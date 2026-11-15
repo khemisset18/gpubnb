@@ -26,6 +26,17 @@ The transactional engine already retains original `.old` files after a successfu
 3. `scripts/stage4-private-offline-rollback-drill.ps1` requires **all six** readiness checks to pass before exercising a scratch restore. Its existing strict behavior must not be weakened just to make this historic test pass.
 4. `scripts/stage4-private-four-file-transaction-core.ps1` demands the six verified checks before any physical service stop. The physical recovery wrapper also validates Authenticode post-start. Do not weaken either check.
 
+## Follow-up: code-signing key inventory (operator-provided, 2026-11-15)
+
+The operator ran a read-only inventory of code-signing certificates with accessible private keys in `CurrentUser\\My` and `LocalMachine\\My`. Two certificates were returned, **both with `X509Chain(true).Build(...)=false`** under the inspected machine-context/offline chain policy:
+
+- `WDKTestCert` personal development/test certificate, expires 2036-09-22 — **not** an approved production/private qualification publisher merely because it has a future expiration date.
+- `GPUbnb LOCAL PHYSICAL TEST ONLY 2026-11-14` certificate, expires 2026-12-14 — the already pinned private candidate signer, similarly machine-untrusted.
+
+No machine-chain-valid candidate was identified by this inventory; this is not proof that no trusted CA-signed identity could be acquired or supplied separately. **Do not substitute WDKTestCert, self-sign a new root, import into LocalMachine, export a private key, weaken Authenticode checks, or run the physical installer.** Resolve the project's approved signing authority and full compatibility/re-signing/pinning process independently. The `X509Chain(true)` result is only a proxy, never a LocalSystem runtime attestation.
+
+This is an additional prerequisite for the recovery lane, separate from the old backup signature expiry: an authorized trusted signer must cover the newly qualified **four-component release and the recovery artifact** with exact independent provenance, manifest and embedded signer pins.
+
 ## Proposed requalification path (requires a reviewed implementation and physical evidence)
 
 ### R1 — Preserve and identify the actual last-known-good release
