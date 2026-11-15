@@ -47,6 +47,10 @@ function sessionPolicy(authenticatedUserId: string, row: {
 
 /** Called after the ordinary routes; only explicitly enabled test environments get these endpoints. */
 export function registerDesktopWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaClient, redis: Redis): void {
+  app.get('/workspaces/desktop-preview-availability', async () => ({
+    enabled: desktopWorkspacePreviewEnabled(),
+    slugs: desktopWorkspacePreviewEnabled() ? [...desktopWorkspaceSlugs] : [],
+  }));
   if (!desktopWorkspacePreviewEnabled()) return;
 
   for (const slug of desktopWorkspaceSlugs) {
