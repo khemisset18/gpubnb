@@ -1,6 +1,6 @@
 # DOGE — stabilisation du 15 novembre 2026
 
-Qualification complète **BLOCKED**. Aucun nouveau résultat natif n'est déclaré.
+Qualification complète **BLOCKED**. Régression native ciblée : **2 PASS / 0 FAIL / 0 SKIP**.
 
 ## PR #364 : diagnostic du refus natif
 
@@ -31,21 +31,34 @@ laboratoire D6 **45/0/0**, signataire logiciel **12/0/0**, watchers **24/0/0**
 contient les empreintes de sources et journaux, ainsi que la plateforme.
 Le test de priorité utilise des RPC simulés et ne remplace pas une preuve native.
 
-## Exécution native encore nécessaire
+## Exécution native obtenue après authentification
 
-Le connecteur permet lecture et publication de code, mais n'expose pas le
-lancement d'un nouveau workflow. La CLI GitHub et le navigateur de cette session
-ne sont pas authentifiés. Aucun contournement du routage manuel n'est ajouté.
+Le connecteur ne permet pas de lancer un nouveau workflow. Après connexion
+sécurisée, l'entrée manuelle existante a été lancée dans GitHub ; aucun
+contournement du routage manuel n'a été ajouté. Le reçu logiciel précédent
+reste un instantané antérieur à cette connexion, sans réécrire son statut.
 
-Après authentification, lancer l'entrée existante `workspace-reliability`,
-branche exacte `asset-exchange/doge-recovery-consistency-20261112`, choix
-`recovery-consistency`, avec le harnais correspondant au nouveau code.
-Vérifier les deux cas natifs, les quatre étapes watcher, l'absence de clés et
-de nouvelles signatures, zéro diffusion pendant le refus, puis les octets
-identiques et les confirmations après restauration. Deux blocs maximum,
-400 RPC et huit invocations autonomes restent les plafonds existants.
+Le run [43760009110](https://github.com/khemisset18/gpubnb/actions/runs/43760009110)
+exécute `e3fbbe6339d2eaecc6bd999daf2d9fe7fb6a1816`, avec le harnais
+`d551db512b070dfa85bc72b068df07ca99127d3f`, sur Ubuntu 24.04.
+Les deux cas passent : refus pendant le rollback, puis retransmission des
+octets identiques après restauration et confirmation sur les deux nœuds.
+Le JSON retenu atteste le refus exact du garde d'en-têtes. Aucun appel de
+diffusion n'a lieu pendant ce refus ; aucune clé ni signature n'est créée.
+Le test natif n'isole pas le nouveau garde de financement : il est isolé par
+le test logiciel, tandis que le garde d'en-têtes préexistant refuse en premier.
 
-La réussite future de cette expérience ne qualifiera pas à elle seule D2–D9.
+Les quatre étapes watcher restent sans progression ni règlement, avec état
+UNCERTAIN pendant la partition. Consommation : deux blocs, 173 RPC et six
+invocations autonomes, sous les limites inchangées de 2 / 400 / 8.
+L'artefact `14179763049` a été téléchargé et vérifié : SHA256
+`1771c3b4f504949bbe615891703ed03289d9449c1702430720d080325cd5ef3d`.
+Les contrôles logiciels du job donnent 45 + 12 + 30 + 24 PASS, sans échec
+ni skip. Les autres jobs natifs non sélectionnés sont SKIP, pas PASS.
+Le [reçu natif](research/2026-11-15/recovery-diagnostics/native-result.json)
+conserve les identités, empreintes et limites.
+
+La réussite de cette expérience ne qualifie pas à elle seule D2–D9.
 Les preuves historiques gardent leurs propres SHA ; le matériel, le reboot
 physique, le profil final, l'intégration financière et l'audit externe restent
 des critères distincts. Aucun merge `main`/`dev`, déploiement ou activation.
