@@ -64,6 +64,13 @@ jobs:
       - name: Offline Dogecoin D2 diagnostics and completion preparation (no native execution)
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d2 -p 'test_*.py' -v
 
+      - name: Offline Dogecoin recovery and integrated manual-route regressions (no native execution)
+        run: |
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d6 -p 'test_*.py' -v
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/policy -p 'test_*.py' -v
+          python3 -m unittest discover -s asset-exchange/wallet-agent/dogecoin -p 'test_*.py' -v
+          python3 -m unittest discover -s asset-exchange/recovery/dogecoin -p 'test_*.py' -v
+
       - name: Linux network isolation preflight (no Dogecoin execution)
         shell: bash
         run: |

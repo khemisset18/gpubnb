@@ -1,0 +1,14 @@
+{
+  "package": "borsh",
+  "version": "0.10.4",
+  "source": "https://static.crates.io/crates/borsh/borsh-0.10.4.crate",
+  "sha256": "115e54d64eb62cdebad391c19efc9dce4981c690c85a33a12199d99bb9546fee",
+  "cargoLockChecksumMatch": true,
+  "inspectedMember": "borsh-0.10.4/src/de/mod.rs",
+  "runtimeRegressionStatus": "PASS",
+  "securityGateChanged": false,
+  "ciRun": 42543552791,
+  "contractJob": 128923579045,
+  "existingContractTestsPassed": 7,
+  "newRegressionTestsPassed": 2
+}

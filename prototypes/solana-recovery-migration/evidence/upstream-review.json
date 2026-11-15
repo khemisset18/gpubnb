@@ -1,0 +1,83 @@
+{
+  "checkedDate": "2026-11-12",
+  "borsh": {
+    "rustSec": {
+      "url": "https://github.com/rustsec/advisory-db/blob/main/crates/borsh/RUSTSEC-2023-0033.md",
+      "gitBlob": "6c6af1a16ed96e3d12afcb6f9699ac5bbd95f8c9",
+      "patched": [
+        ">=1.0.0-alpha.1",
+        "^0.10.4"
+      ]
+    },
+    "github": {
+      "url": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+      "gitBlob": "8e7ebf2c5369926afc46c5ac7c40aa73c136263b",
+      "events": [
+        {
+          "introduced": "0"
+        },
+        {
+          "fixed": "1.0.0-alpha.1"
+        }
+      ],
+      "lastKnownAffected": "<=0.10.3"
+    },
+    "disposition": "Unchanged primary-data discrepancy; no exemption or advisory data override; original0.10.4 decoder probe is not repeated."
+  },
+  "glib": {
+    "publishedCompatibleRelease": "0.18.5",
+    "publishedMaintainedGtk": "0.19.0",
+    "maintainedGtkGlibRequirement": "^0.22",
+    "coordinatedMigration": [
+      {
+        "url": "https://github.com/tauri-apps/tauri/pull/16170",
+        "head": "899ca2105ffd06293013b6d2bff4416987d99010",
+        "state": "open",
+        "merged": false
+      },
+      {
+        "url": "https://github.com/tauri-apps/wry/pull/1843",
+        "head": "327242ae73301c5e34dcc158e31ae453e8afe837",
+        "state": "open",
+        "merged": false
+      },
+      {
+        "url": "https://github.com/tauri-apps/tao/pull/1332",
+        "head": "08660027c723e09a45b10badf60a73a661c94a95",
+        "state": "open",
+        "merged": false
+      }
+    ],
+    "additionalDependencies": [
+      "webkit2gtk-rs#167",
+      "javascriptcore-rs#90",
+      "muda#403",
+      "tray-icon#369",
+      "libappindicator-rs#53"
+    ],
+    "disposition": "Published Tauri/Wry/Tao still select GTK0.18; coordinator remains open. No unqualified coordinated GUI migration or repeat of validated native probes."
+  },
+  "recovery": {
+    "upstreamK256Migration": {
+      "url": "https://github.com/anza-xyz/solana-sdk/commit/1dd727d4754b22157ce2b890b0f6dfe5237bc0d1",
+      "sourceGitBlob": "ac0ce42bcac09ef11dd3467bae0440d70b955c64"
+    },
+    "libsecpUnmaintained": "https://rustsec.org/advisories/RUSTSEC-2025-0161",
+    "highS": "Retain exact Solana2.2.1 semantics; current upstream explicit high-S rejection is not backported; actual public-oracle coverage proves acceptance matches baseline.",
+    "ctutils": {
+      "advisory": "https://rustsec.org/advisories/RUSTSEC-2026-0385",
+      "advisoryGitBlob": "de5b32c48a7b55430fbf7c4b36332a5004b87411",
+      "patched": ">=0.4.4",
+      "selected": "0.4.8"
+    },
+    "cryptoBigint": {
+      "advisory": "https://rustsec.org/advisories/RUSTSEC-2026-0387",
+      "advisoryGitBlob": "a642322bd704a5acfd221e1a61203512b33402cc",
+      "patched": ">=0.7.6",
+      "selected": "0.7.11"
+    },
+    "minimumSelectedCryptoRust": "1.87",
+    "actualCompiler": "1.97.1",
+    "SbfRuntime": "NOT_TESTED"
+  }
+}

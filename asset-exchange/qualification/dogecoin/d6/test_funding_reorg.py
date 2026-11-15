@@ -33,19 +33,22 @@ class FundingReorgBoundaries(unittest.TestCase):
         root=Path(__file__).resolve().parents[4]
         text=(root/'.github/workflows/workspace-reliability.yml').read_text()
         jobs=['doge-d3-private-manual','doge-recovery-multinode-private-manual',
-              'doge-source-audit-manual','doge-recovery-consistency-private-manual']
+              'doge-source-audit-manual','doge-recovery-consistency-private-manual',
+              'doge-rbf-boundaries-private-manual']
         expressions={job:job_condition(text,job) for job in jobs}
         branches={'base':'asset-exchange/doge-independent-recovery-20261111',
             'fee':'asset-exchange/doge-fee-pinning-20261111','vm':'asset-exchange/doge-vm-recovery-20261111',
             'aux':'asset-exchange/doge-auxpow-boundaries-20261111','audit':'asset-exchange/doge-audit-candidate-20261112',
-            'funding':'asset-exchange/doge-recovery-consistency-20261112','main':'main','dev':'dev'}
+            'funding':'asset-exchange/doge-recovery-consistency-20261112',
+            'rbf':'asset-exchange/doge-rbf-boundaries-20261112','main':'main','dev':'dev'}
         expected={('base','both'):{jobs[0],jobs[1]},('base','d3'):{jobs[0]},('base','multinode'):{jobs[1]},
             ('fee','fee-pinning'):{jobs[1]},('vm','vm-recovery'):{jobs[1]},('aux','auxpow-expanded'):{jobs[1]},
-            ('audit','source-audit'):{jobs[2]},('funding','recovery-consistency'):{jobs[3]}}
+            ('audit','source-audit'):{jobs[2]},('funding','recovery-consistency'):{jobs[3]},
+            ('rbf','rbf-boundaries'):{jobs[4]}}
         for event in ['workflow_dispatch','push','pull_request','schedule']:
             for repo,repo_id in [('khemisset18/gpubnb','1305325878'),('other/gpubnb','1305325878'),('khemisset18/gpubnb','1')]:
                 for branch,ref in branches.items():
-                    for suite in ['both','d3','multinode','fee-pinning','vm-recovery','auxpow-expanded','source-audit','recovery-consistency']:
+                    for suite in ['both','d3','multinode','fee-pinning','vm-recovery','auxpow-expanded','source-audit','recovery-consistency','rbf-boundaries']:
                         got={job for job,expression in expressions.items() if route(expression,event=event,repo=repo,
                             repo_id=repo_id,ref='refs/heads/'+ref,suite=suite)}
                         want=expected.get((branch,suite),set()) if event=='workflow_dispatch' and repo=='khemisset18/gpubnb' and repo_id=='1305325878' else set()

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "runId": 43326020199,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43326020199",
+  "executionCommit": "66dadc73cd2beffb90d153dec72c280850ea0b2b",
+  "harnessCommit": "7bf25e7bac071aee0af220d049c7ce4440404012",
+  "artifactId": 13993656516,
+  "artifactZipSha256": "dd8c1cc2115f9a072f7c76dd60fc638e7f214da265e3746b90ef3952c9dbc336",
+  "binarySha256": "23d8febdcd958f2af8ed3c788f71f8ea416f9e4fe1830c2ff9870a4ad4bdb784",
+  "buildKind": "SOURCE_DIAGNOSTIC_NOT_D0",
+  "nativeOverallStatus": "FAIL",
+  "passedCase": {
+    "id": "replacement-count-100-101",
+    "assertions": 2853,
+    "fail": 0,
+    "rejected": 101,
+    "accepted": 100,
+    "nativeRejectReason": "too many potential replacements",
+    "nativeRejectCode": 64,
+    "chainHeight": 240,
+    "signedFixtures": 103,
+    "signatures": 302,
+    "nativeAdmissions": 103,
+    "poolAfterRejection": 101,
+    "poolAfterAcceptance": 2
+  },
+  "failedCase": {
+    "id": "new-input-unconfirmed-then-confirmed",
+    "passedAssertions": 57,
+    "failedAssertions": 1,
+    "observation": "expected native chain height241; actual240",
+    "causeFromSourceReview": "TestChain240Setup first assembles coinbase reward from the whole global mempool, then replaces the selected transaction list. Leaving the original in that pool credits an unselected fee and rejects the resulting curated block."
+  },
+  "checksAfterDownload": [
+    "ZIP and all native internal checksums",
+    "all recorded upstream implementation digests",
+    "all three source test digests against exact initial source",
+    "native detailed per-case result",
+    "only UP loopback before and after"
+  ],
+  "retrySelection": "only gpubnb_rbf/new_input_unconfirmed_then_confirmed; passing count case is retained without repeating it",
+  "retainedCountSourcePrefixSha256": "f0c79724a29c3dd9e90365f833450a1d8164c1106972584f32b342230705db9a",
+  "retainedCountCodeUnchanged": true,
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false
+}

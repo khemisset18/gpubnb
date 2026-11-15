@@ -1,0 +1,42 @@
+{
+  "archiveSha256": "72ffa5da37da24e998887b849f6ebd02ebd3e8e50fd659f6c1697022c88f966f",
+  "findingCount": 3,
+  "findings": [
+    {
+      "VulnerabilityID": "GHSA-fjx5-qpf4-xjf2",
+      "PkgName": "borsh",
+      "InstalledVersion": "0.10.4",
+      "FixedVersion": "1.0.0-alpha.1",
+      "Severity": "MEDIUM",
+      "DataSource": {
+        "ID": "ghsa",
+        "Name": "GitHub Security Advisory Rust",
+        "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Arust"
+      }
+    },
+    {
+      "VulnerabilityID": "GHSA-wrw7-89jp-8q8g",
+      "PkgName": "glib",
+      "InstalledVersion": "0.18.5",
+      "FixedVersion": "0.20.0",
+      "Severity": "MEDIUM",
+      "DataSource": {
+        "ID": "ghsa",
+        "Name": "GitHub Security Advisory Rust",
+        "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Arust"
+      }
+    },
+    {
+      "VulnerabilityID": "GHSA-cq8v-f236-94qc",
+      "PkgName": "rand",
+      "InstalledVersion": "0.7.3",
+      "FixedVersion": "0.9.3, 0.10.1, 0.8.6",
+      "Severity": "LOW",
+      "DataSource": {
+        "ID": "ghsa",
+        "Name": "GitHub Security Advisory Rust",
+        "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Arust"
+      }
+    }
+  ]
+}

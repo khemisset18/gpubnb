@@ -1,5 +1,7 @@
 # Plan de migration Rust — contraintes vérifiées, migration non exécutée
 
+**Correction du 9 novembre 2026 :** la ligne historique borsh ci-dessous est incomplète. RustSec indique aussi `^0.10.4` comme corrigé pour RUSTSEC-2023-0033. Le paquet 0.10.4 correspondant au checksum du lockfile contient le rejet des vecteurs ZST. Voir `docs/security/BORSH_ADVISORY_2026-11-09.md` et les régressions ajoutées ; le contrôle Trivy demeure inchangé.
+
 État : **BLOQUÉ** pour correction complète. Les upgrades compatibles PyNaCl et
 Rustls sont validés séparément ; aucune modification Anchor/Solana/GTK n'est
 appliquée. Une suppression du graphe optionnel du scan ne serait pas un fix.
