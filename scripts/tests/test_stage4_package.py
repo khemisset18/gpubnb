@@ -67,7 +67,7 @@ class PackageTests(unittest.TestCase):
         start = build.index("$support=Join-Path $output 'support'")
         end = build.index("Copy-Item -LiteralPath (Join-Path $repo 'docs", start)
         support_block = build[start:end]
-        copied = set(re.findall(r"'([^']+\\.ps1)'", support_block))
+        copied = set(re.findall(r"'([^']+\.ps1)'", support_block))
         self.assertIn('stage4-windows-path-policy.ps1', copied)
         self.assertIn('stage4-private-test-sign-copies.ps1', copied)
         self.assertIn('stage4-package-common.ps1', copied)
@@ -78,7 +78,7 @@ class PackageTests(unittest.TestCase):
                 self.assertTrue(source.is_file(), f'missing tracked source {name}')
                 content = source.read_text(encoding='utf-8')
                 references = set(re.findall(
-                    r"Join-Path\\s+\\$PSScriptRoot\\s+'([^']+\\.ps1)'", content
+                    r"Join-Path\s+\$PSScriptRoot\s+'([^']+\.ps1)'", content
                 ))
                 self.assertTrue(
                     references <= copied,
