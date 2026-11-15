@@ -10,6 +10,7 @@
     '[data-open-api]',
     '[data-open-mobile]',
     '[data-open-security-lab]',
+    '[data-open-desktop]',
   ].join(',');
   const openInFlight = new Set();
 
@@ -22,6 +23,11 @@
     if (button.hasAttribute('data-open-api')) return `/bookings/${encodeURIComponent(bookingId)}/workspace/api/access`;
     if (button.hasAttribute('data-open-mobile')) return `/bookings/${encodeURIComponent(bookingId)}/workspace/mobile/access`;
     if (button.hasAttribute('data-open-security-lab')) return `/bookings/${encodeURIComponent(bookingId)}/workspace/security-lab/access`;
+    if (button.hasAttribute('data-open-desktop')) {
+      const slug = button.dataset.desktopSlug;
+      if (!['creator', 'cloud-desktop', 'cad', 'gaming'].includes(slug)) return null;
+      return `/bookings/${encodeURIComponent(bookingId)}/workspace/${slug}/access`;
+    }
     return null;
   }
 
@@ -34,6 +40,7 @@
       || button.dataset.openApi
       || button.dataset.openMobile
       || button.dataset.openSecurityLab
+      || button.dataset.openDesktop
       || '';
   }
 
@@ -67,7 +74,7 @@
 
     const bookingId = bookingIdFor(button);
     const path = accessPath(button, bookingId);
-    if (!bookingId || !path || openInFlight.has(bookingId)) return;
+    if (!bookingId || !path || openInFlight.has(path)) return;
 
     const reserved = window.open('about:blank', '_blank');
     if (!reserved) {
@@ -78,7 +85,7 @@
     try { reserved.opener = null; } catch {}
 
     const originalText = button.textContent;
-    openInFlight.add(bookingId);
+    openInFlight.add(path);
     button.dataset.workspaceOpening = '1';
     button.disabled = true;
     button.textContent = 'Ouverture…';
@@ -100,7 +107,7 @@
         const message = error instanceof Error ? error.message : 'Ouverture impossible.';
         window.alert(`Ouverture de l’espace impossible : ${message}`);
       } finally {
-        openInFlight.delete(bookingId);
+        openInFlight.delete(path);
         delete button.dataset.workspaceOpening;
       }
     })();
