@@ -71,7 +71,7 @@ class DesktopWorkspaceSecurityGates(unittest.TestCase):
             with self.subTest(slug=slug):
                 script = (ROOT / "workspaces" / slug / "healthcheck.sh").read_text(encoding="utf-8")
                 self.assertIn("127.0.0.1:3000", script)
-                self.assertIn("Does NOT", script)
+                self.assertRegex(script, r"(?i)\bdoes\s+not\b")
                 self.assertNotIn("exit 0 # GPU", script)
 
     def test_preflight_remains_explicitly_non_authorizing(self):
@@ -80,6 +80,35 @@ class DesktopWorkspaceSecurityGates(unittest.TestCase):
         self.assertIn("llvmpipe", script)
         self.assertIn("NVIDIA_DRIVER_CAPABILITIES", script)
 
+
+    def test_unqualified_desktop_release_states_are_never_beta(self):
+        for slug in SLUGS:
+            with self.subTest(slug=slug):
+                entry = next((line for line in self.manifests.splitlines()
+                              if "slug:'" + slug + "'" in line), "")
+                self.assertRegex(entry, r"release:'(?:UPCOMING|EXPERIMENTAL)'")
+
+    def test_webtop_docker_profile_does_not_expose_host_or_privileged_runtime(self):
+        marker = 'if workspace_slug in ("cloud-desktop", "creator", "cad", "gaming"):'
+        self.assertIn(marker, self.gateway, "Fail closed if desktop branch disappears")
+        section = self.gateway.split(marker, 1)[1].split("\n            return", 1)[0]
+        # These launch arguments are safety invariants, not a claim that
+        # linuxserver/webtop is adequately hardened or GPU-qualified.
+        self.assertIn('"--network", internal_network', section)
+        self.assertIn('"--security-opt=no-new-privileges"', section)
+        self.assertIn('"--pids-limit=1024"', section)
+        self.assertIn('target=/config', section)
+        self.assertIn('*gpu_passthrough_flags("graphics,display,utility,compute")', section)
+        for forbidden in ('"--privileged"', '"--pid=host"', '"--network=host"',
+                          '"--ipc=host"', '"-p"', '"--publish"'):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, section)
+
+    def test_browser_proxy_is_bound_to_loopback(self):
+        # The container is on an internal Docker network. The only published
+        # port belongs to a separate loopback-only gateway proxy.
+        self.assertIn('"127.0.0.1::3000"', self.gateway)
+        self.assertIn('"--network", internal_network', self.gateway)
 
 if __name__ == "__main__":
     unittest.main()

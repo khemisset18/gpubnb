@@ -190,6 +190,17 @@ class WorkspaceGatewayV5Tests(unittest.TestCase):
                 self.assertIn(
                     "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute", command,
                 )
+                # Real command-line safety assertions. Mocks only: NOT a
+                # Linux GPU / NVENC / Windows streaming qualification.
+                self.assertIn("--security-opt=no-new-privileges", command)
+                self.assertIn("--network", command)
+                self.assertEqual(command[command.index("--network") + 1], "gpubnb-internal-test")
+                self.assertIn("--pids-limit=1024", command)
+                self.assertNotIn("--privileged", command)
+                self.assertNotIn("--network=host", command)
+                self.assertNotIn("--pid=host", command)
+                self.assertNotIn("-p", command)
+                self.assertNotIn("--publish", command)
                 self.assertNotIn("--read-only", command)
                 self.assertNotIn("--cap-drop=ALL", command)
                 mount_arg = command[command.index("--mount") + 1]

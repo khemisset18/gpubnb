@@ -45,3 +45,10 @@ Ces tests **statiques** vérifient des invariants de sécurité du dépôt. Ils 
 5. Aucun changement de réservation publique ou de quarantaine sur la seule base d'un test réussi.
 
 **NO-GO tant que ces conditions ne sont pas attestées.** Cette PR n'autorise pas de streaming Windows.
+
+## Résultats CI à conserver sans les masquer (15 novembre 2026)
+
+- Premier HEAD de cette PR : les tests du Gateway sont exécutés en CI, mais un test de lecture ajoutait un faux échec à cause de la casse `Does NOT` / `does NOT`. Il est corrigé dans la révision suivante.
+- La branche `main` échoue déjà sur des audits de dépendances et de vulnérabilités. Les rapports CI indiquent notamment des alertes npm HIGH et des détections Trivy HIGH. **Ne pas désactiver, ignorer ou requalifier ces contrôles pour afficher un feu vert.** Leur traitement est un chantier de sécurité séparé avant toute mise en service.
+- La PR #333 est une autre branche/PR (streaming Windows natif) : ses tests API, Windows, Python et Rust n'attestent pas de la confidentialité des pixels lors d'une vraie session PC1 → PC2. La présence de validations GitHub ne remplace pas une revue indépendante de sécurité qualifiée.
+- Les tests source-contract et les tests mockés de lancement de cette PR sont **préparatoires** ; ils ne prouvent pas le rendu GPU matériel, l'absence d'évasion conteneur ni l'arrêt physique du flux Windows.
