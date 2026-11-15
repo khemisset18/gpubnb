@@ -1,0 +1,125 @@
+{
+  "checkedDate": "2026-11-15",
+  "qualificationStatus": "BLOCKED",
+  "originalHead": "61120168eddf2f39e9874f28406f78b905c7edde",
+  "originalExecution": "db710cd933ac7670b3237e8d3f01f2c8a0351333",
+  "originalRecovery": {
+    "run": 43484094455,
+    "linux": {
+      "job": 132087831958,
+      "status": "success",
+      "artifact": 14066203101,
+      "sha256": "0797fe4634aa46a25d82cc2680ccbfcfec536133d3860fb625b021ba37571d70"
+    },
+    "windows": {
+      "job": 132087832056,
+      "status": "success",
+      "artifact": 14065594106,
+      "sha256": "08f2c018d9fd9da8b74b42f2c187987ee4f1bd6723d8fd0d909e0670903d81ee"
+    },
+    "macos": {
+      "job": 132087831666,
+      "status": "cancelled"
+    }
+  },
+  "originalScanner": {
+    "run": 43484094122,
+    "job": 132087831181,
+    "artifact": 14066881570,
+    "zipSha256": "3d1ea97a28d45c5af271586ac997e44ac7ec63ff4d4e1da5b3709eeacb4785a9",
+    "jsonSha256": "777c1d9804a890469099867e5814051cf760c66f4eeb31697e998509ea4c3142",
+    "findings": [
+      {
+        "package": "borsh",
+        "version": "0.10.4",
+        "id": "GHSA-fjx5-qpf4-xjf2",
+        "severity": "MEDIUM",
+        "target": "Cargo.lock"
+      },
+      {
+        "package": "glib",
+        "version": "0.18.5",
+        "id": "GHSA-wrw7-89jp-8q8g",
+        "severity": "MEDIUM",
+        "target": "Cargo.lock"
+      }
+    ]
+  },
+  "borsh": {
+    "rustsec": {
+      "sha": "6c6af1a16ed96e3d12afcb6f9699ac5bbd95f8c9",
+      "display_url": "https://github.com/rustsec/advisory-db/blob/main/crates/borsh/RUSTSEC-2023-0033.md",
+      "display_title": "RUSTSEC-2023-0033.md",
+      "patched": [
+        ">=1.0.0-alpha.1",
+        "^0.10.4"
+      ]
+    },
+    "github": {
+      "sha": "8e7ebf2c5369926afc46c5ac7c40aa73c136263b",
+      "display_url": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+      "display_title": "GHSA-fjx5-qpf4-xjf2.json",
+      "events": [
+        {
+          "introduced": "0"
+        },
+        {
+          "fixed": "1.0.0-alpha.1"
+        }
+      ],
+      "lastKnownAffected": "<=0.10.3"
+    }
+  },
+  "tauri": {
+    "url": "https://github.com/tauri-apps/tauri/blob/tauri-v2.12.5/crates/tauri/Cargo.toml",
+    "gitBlob": "c4b8dc857e08db389b0ceb9e4c8c620780f89e6f",
+    "version": "2.12.5",
+    "linuxGtkRequirement": "^0.18"
+  },
+  "anchor": [
+    {
+      "url": "https://github.com/otter-sec/anchor/blob/v0.31.1/lang/Cargo.toml",
+      "gitBlob": "1a6e38a58dc855e37533a7aa5272754a491f1752",
+      "borshRequirement": "^0.10.3"
+    },
+    {
+      "url": "https://github.com/otter-sec/anchor/blob/v0.32.2/lang/Cargo.toml",
+      "gitBlob": "902e26881d118adb944e06e4e164cb7dc0b9b228",
+      "borshRequirement": "^0.10.3"
+    }
+  ],
+  "coordinatedMigration": [
+    {
+      "url": "https://github.com/tauri-apps/tauri/pull/16170",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "899ca2105ffd06293013b6d2bff4416987d99010",
+      "base": "64bfdd909c5c3f0828371e4995b69ad5ed685126"
+    },
+    {
+      "url": "https://github.com/tauri-apps/wry/pull/1843",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "327242ae73301c5e34dcc158e31ae453e8afe837",
+      "base": "d8fe88dc7be2f6ff00c671f823e985335a14f7ad"
+    },
+    {
+      "url": "https://github.com/tauri-apps/tao/pull/1332",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": "08660027c723e09a45b10badf60a73a661c94a95",
+      "base": "27fe28c73ace307eb0b1d1abf457508410f1340e"
+    }
+  ],
+  "fixedGlib": {
+    "url": "https://github.com/gtk-rs/gtk-rs-core/commit/b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+    "file": "glib/src/variant_iter.rs",
+    "sha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc",
+    "completeFixedFileCompared": true
+  },
+  "scannerChanged": false,
+  "newFinancialFrameworkMigration": false
+}

@@ -1,0 +1,41 @@
+{
+  "activeSourceChanges": true,
+  "baseCommit": "61120168eddf2f39e9874f28406f78b905c7edde",
+  "borsh": {
+    "advisory": "GHSA-fjx5-qpf4-xjf2",
+    "archiveSha256": "115e54d64eb62cdebad391c19efc9dce4981c690c85a33a12199d99bb9546fee",
+    "disposition": "Published decoder already contains ZST fix; discrepancy stays blocking; no repeated vulnerable execution or scanner exemption.",
+    "previousVerifiedProbe": "https://github.com/khemisset18/gpubnb/pull/319",
+    "rustSecPatched": [
+      "^0.10.4",
+      ">=1.0.0-alpha.1"
+    ],
+    "version": "0.10.4"
+  },
+  "optionalProgramTestCommit": "d9bad54a3d6f737f81ded0de9605f33308213e25",
+  "optionalVerifiedProgramTests": {
+    "programs/gpu_escrow/tests/borsh_zst_regression.rs": "579075e7f7c609db126d29a1cead68b03962f3313b593d11de53471372c8a44f"
+  },
+  "patches": [
+    {
+      "adaptation": "Exact complete fixed file; two mutability corrections. Version retained.",
+      "advisory": "GHSA-wrw7-89jp-8q8g",
+      "afterSha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc",
+      "archiveGitCommit": "42b9caf98e03ded086362d9653ca58fe94dc8658",
+      "archiveSha256": "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5",
+      "beforeSha256": "1fd02859333761c45321b32f28b24233446b97d0022a90d3a937ed162585b90e",
+      "file": "src/variant_iter.rs",
+      "name": "glib",
+      "patch": "patches/glib-variant-out-parameter.patch",
+      "upstreamFix": "https://github.com/gtk-rs/gtk-rs-core/pull/1343",
+      "upstreamFixCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+      "vendorPath": "vendor/security/glib-0.18.5",
+      "version": "0.18.5"
+    }
+  ],
+  "previousPrototype": "35fb07cbc1487d05f5f38d0450e9dbdb0a63301e",
+  "qualificationStatus": "BLOCKED",
+  "reusedGlibBackportCommit": "d09996050e5aebc1be8db8698c38d7ea991929fa",
+  "scannerExemptions": false,
+  "schemaVersion": 1
+}
