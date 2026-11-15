@@ -52,6 +52,7 @@ def validate_committed(repo, pins):
     base = pins['baseCommit']
     original_manifest = git(repo, 'show', base+':Cargo.toml').decode()
     expected = original_manifest+'\n[patch.crates-io]\nsolana-secp256k1-recover = { path = "'+pins['vendorPath']+'" }\n'
+    expected += 'glib = { path = "'+pins['glibBackport']['vendorPath']+'" }\n'
     assert (repo/'Cargo.toml').read_text(encoding='utf-8') == expected, 'unrelated workspace manifest change'
     original_program = git(repo, 'show', base+':programs/gpu_escrow/Cargo.toml').decode()
     assert (repo/'programs/gpu_escrow/Cargo.toml').read_text(encoding='utf-8') == original_program+'\n[dev-dependencies]\nserde_json = "=1.0.151"\n', 'unrelated program dependency change'
@@ -60,8 +61,11 @@ def validate_committed(repo, pins):
     assert lock_delta(original_lock, candidate_lock) == pins['lockDelta'], 'unreviewed lock graph change'
     old = {(p['name'], p['version']): p for p in original_lock['package']}
     new = {(p['name'], p['version']): p for p in candidate_lock['package']}
-    for key in [('anchor-lang', '0.31.1'), ('borsh', '0.10.4'), ('glib', '0.18.5')]:
-        assert old[key] == new[key], 'unreviewed Anchor/Borsh/GLib migration'
+    for key in [('anchor-lang', '0.31.1'), ('borsh', '0.10.4')]:
+        assert old[key] == new[key], 'unreviewed Anchor/Borsh migration'
+    expected_glib = {k: v for k, v in old[('glib', '0.18.5')].items() if k not in ('source', 'checksum')}
+    assert new[('glib', '0.18.5')] == expected_glib, 'unreviewed GLib version or dependency migration'
+    assert hashes(repo/pins['glibBackport']['vendorPath']) == pins['glibBackport']['vendorFiles'], 'committed GLib backport source mismatch'
     assert not any(n.startswith('libsecp256k1') or (n == 'rand' and v.startswith('0.7.')) for n, v in new), 'old recovery/Rand package still active'
     for name, minimum in [('crypto-bigint', (0, 7, 6)), ('ctutils', (0, 4, 4))]:
         selected = [v for n, v in new if n == name]

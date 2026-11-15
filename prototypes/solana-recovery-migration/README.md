@@ -1,8 +1,9 @@
 # Solana host recovery migration candidate
 
 This separate draft builds on PR354 at
-`a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed`. PR358 and its verified GLib/Rand
-source backports remain unchanged. Here the actual product dependency graph
+`a5eb4d065ec8443c6cf13fdc8c18cec97a64e6ed`. The combined candidate also
+selects PR358's exact GLib source fix; its obsolete Rand0.7 backport is not imported.
+Here the actual product dependency graph
 replaces the old libsecp256k1/Rand0.7 chain through one vendored
 solana-secp256k1-recover2.2.1 compatibility backport. This is a review candidate;
 overall qualification remains **BLOCKED**.
@@ -49,7 +50,9 @@ Cargo execution. It independently downloads the pinned original crate, official
 license and upstream source, reproduces the exact bounded patch, checks the
 unchanged syscall region, and regenerates every committed public fixture.
 Actual --locked --all-features metadata must select this vendor source and
-contain no libsecp256k1 or Rand0.7. It then runs the added public integration
+contain no libsecp256k1 or Rand0.7. The full GLib source hashes and its sole
+source-origin lock change are explicitly pinned alongside the recovery migration.
+It then runs the added public integration
 tests through Anchor's actual Solana reexport on the frozen base and candidate.
 Eight Python boundary/oracle checks guard changed sources, public inputs,
 archive links, DER conversion and the independent arithmetic constants.
