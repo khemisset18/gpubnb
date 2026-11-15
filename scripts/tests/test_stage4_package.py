@@ -56,6 +56,35 @@ class PackageTests(unittest.TestCase):
         m = json.loads(p.read_text()); fn(m); p.write_text(json.dumps(m))
         self.proof['manifestSha256'] = s.sha(p)
 
+    def test_signed_copy_support_bundle_dependency_closure(self):
+        # Regression: support/stage4-package-common.ps1 dot-sources a path
+        # policy script; the 2026-11-15 CI ZIP omitted it and failed on PC1.
+        # This tests every packaged script's relative dot-source/invoke
+        # dependencies, not just the one file that originally failed.
+        import re
+        scripts = Path(__file__).parents[1]
+        build = (scripts / 'build-stage4-unsigned-package.ps1').read_text(encoding='utf-8')
+        start = build.index("$support=Join-Path $output 'support'")
+        end = build.index("Copy-Item -LiteralPath (Join-Path $repo 'docs", start)
+        support_block = build[start:end]
+        copied = set(re.findall(r"'([^']+\\.ps1)'", support_block))
+        self.assertIn('stage4-windows-path-policy.ps1', copied)
+        self.assertIn('stage4-private-test-sign-copies.ps1', copied)
+        self.assertIn('stage4-package-common.ps1', copied)
+        self.assertIn('verify-stage4-package.ps1', copied)
+        for name in copied:
+            with self.subTest(script=name):
+                source = scripts / name
+                self.assertTrue(source.is_file(), f'missing tracked source {name}')
+                content = source.read_text(encoding='utf-8')
+                references = set(re.findall(
+                    r"Join-Path\\s+\\$PSScriptRoot\\s+'([^']+\\.ps1)'", content
+                ))
+                self.assertTrue(
+                    references <= copied,
+                    f'{name} refers to scripts not bundled: {sorted(references - copied)}'
+                )
+
     def test_positive_four_components_exact_identity_imports(self):
         m = self.verify()
         self.assertEqual(len(m['files']), 4)
