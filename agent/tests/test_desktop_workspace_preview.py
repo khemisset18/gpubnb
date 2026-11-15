@@ -30,6 +30,10 @@ class DesktopWorkspacePreviewTests(unittest.TestCase):
         env = {"NODE_ENV": "test", "GPUBNB_DESKTOP_WORKSPACE_PREVIEW": "true"}
         self.assertTrue(desktop_workspace_preview_enabled(env, platform_name="linux", kernel_release="6.8.0-generic"))
         self.assertFalse(desktop_workspace_preview_enabled(
+            {"NODE_ENV": "test", "GPUBNB_DESKTOP_WORKSPACE_PREVIEW": "true", "RENDER_SERVICE_ID": "srv-prod"},
+            platform_name="linux", kernel_release="6.8.0-generic",
+        ))
+        self.assertFalse(desktop_workspace_preview_enabled(
             {"NODE_ENV": "test", "GPUBNB_DESKTOP_WORKSPACE_PREVIEW": "TRUE"},
             platform_name="linux", kernel_release="6.8.0-generic",
         ))
