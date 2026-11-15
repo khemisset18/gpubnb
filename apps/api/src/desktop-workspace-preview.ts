@@ -13,6 +13,9 @@ export function isDesktopWorkspaceSlug(value: string): value is DesktopWorkspace
 export type PreviewEnvironment = Readonly<{
   NODE_ENV?: string;
   GPUBNB_DESKTOP_WORKSPACE_PREVIEW?: string;
+  RENDER?: string;
+  RENDER_SERVICE_ID?: string;
+  RENDER_EXTERNAL_URL?: string;
 }>;
 
 export function desktopWorkspacePreviewEnabled(env: PreviewEnvironment = process.env): boolean {
