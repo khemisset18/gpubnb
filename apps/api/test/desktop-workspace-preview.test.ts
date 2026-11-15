@@ -21,6 +21,8 @@ test('preview is fail-closed unless explicitly opted in outside production', () 
     { NODE_ENV: 'development' },
     { NODE_ENV: 'test', GPUBNB_DESKTOP_WORKSPACE_PREVIEW: 'TRUE' },
     { NODE_ENV: 'staging', GPUBNB_DESKTOP_WORKSPACE_PREVIEW: 'true' },
+    { NODE_ENV: 'development', GPUBNB_DESKTOP_WORKSPACE_PREVIEW: 'true', RENDER: 'true' },
+    { NODE_ENV: 'test', GPUBNB_DESKTOP_WORKSPACE_PREVIEW: 'true', RENDER_SERVICE_ID: 'srv-123' },
   ]) assert.equal(desktopWorkspacePreviewEnabled(env), false);
   for (const env of [
     { NODE_ENV: 'test', GPUBNB_DESKTOP_WORKSPACE_PREVIEW: 'true' },
