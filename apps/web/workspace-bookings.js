@@ -1,5 +1,6 @@
 'use strict';
 import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspaceOpenUrl, remainingRentalSeconds, formatRemainingRentalTime } from './workspace-developer-flow.js';
+import { DESKTOP_STREAMING_SLUGS, desktopWorkspacePhase, validDesktopSlug } from './desktop-workspace-flow.js';
 
 (() => {
   const API=(window.GPUBNB_API_URL||'').replace(/\/$/,'');
@@ -283,6 +284,30 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     return `<article class="list-row" data-security-lab-row="${escapeHTML(booking.id)}"><div><strong>Security Lab · ${title}</strong>${errorHTML}</div><div class="actions">${action}${badge}</div></article>`;
   }
 
+  // The four Linux/Selkies desktop surfaces reuse the existing one-time grant guard.
+  // Only sessions that really exist on the API are displayed, never fake 'ready' cards.
+  function desktopStreamingBlockHTML(booking, slug, detail) {
+    if (!validDesktopSlug(slug)) return '';
+    const phase=desktopWorkspacePhase(booking.status,detail);
+    if (phase==='HIDDEN') return '';
+    const names={creator:'Creator', 'cloud-desktop':'Cloud Desktop',cad:'CAD',gaming:'Gaming'};
+    const bookingId=escapeHTML(booking.id);
+    const safeSlug=escapeHTML(slug);
+    const title=escapeHTML(booking.listing?.title||'Réservation GPU');
+    let action='',badge='';
+    if (phase==='OPEN') {
+      action='<button class="button button-primary" type="button" data-open-desktop="'+bookingId+'" data-desktop-slug="'+safeSlug+'">Ouvrir le bureau distant</button>';
+      badge='<span class="badge ok">PASSERELLE PRÊTE</span>';
+    } else if (phase==='RETRY') {
+      action='<button class="button" type="button" data-retry-desktop="'+bookingId+'" data-desktop-slug="'+safeSlug+'">Réessayer</button>';
+      badge='<span class="badge warn">Échec de préparation</span>';
+    } else if (phase==='PREPARING') {
+      action='<span class="muted">'+escapeHTML(preparationLabel(detail))+'</span>';
+    } else {
+      badge='<span class="badge">'+escapeHTML(detail.status||'TERMINÉ')+'</span>';
+    }
+    return '<article class="list-row" data-desktop-row="'+bookingId+'"><div><strong>'+names[slug]+' · '+title+'</strong><div class="muted">Streaming WebSocket privé, sous réserve du rendu GPU réel</div></div><div class="actions">'+action+badge+'</div></article>';
+  }
   function rowHTML(booking,job,history=false){
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
     if(!job){
@@ -449,8 +474,46 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
         row.booking,row.job,securityLabDetailByBooking.get(row.booking.id)||null,securityLabErrors.get(row.booking.id),
       )).join('');
 
-      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
+      // Preview only: never show the Linux desktop controls if the API has
+      // not explicitly enabled their laboratory routes and compatibility gates.
+      let desktopHTML='';
+      try {
+        const preview=await request('/workspaces/desktop-preview-availability');
+        if (preview.enabled === true && Array.isArray(preview.slugs)) {
+          const slugs=preview.slugs.filter(validDesktopSlug);
+          const candidates=active.filter(row=>preparableBookingStatuses.has(row.booking.status));
+          const results=await Promise.all(candidates.flatMap(row=>slugs.map(async slug=>{
+            try {
+              const detail=await request('/bookings/'+encodeURIComponent(row.booking.id)+'/workspace/'+slug+'/status');
+              return desktopStreamingBlockHTML(row.booking,slug,detail);
+            } catch {
+              // Fail closed: no guessed state or access on 404/5xx/network failure.
+              return '';
+            }
+          })));
+          desktopHTML=results.join('');
+        }
+      } catch {
+        // No enabled preview endpoint: unchanged production page.
+      }
+      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${desktopHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
 
+      root.querySelectorAll('[data-retry-desktop]').forEach(button=>button.addEventListener('click',async()=>{
+        const slug=button.dataset.desktopSlug;
+        const bookingId=button.dataset.retryDesktop;
+        if (!validDesktopSlug(slug)||!bookingId) return;
+        button.disabled=true;
+        const originalText=button.textContent;
+        button.textContent='Nouvelle tentative…';
+        try {
+          await request('/bookings/'+encodeURIComponent(bookingId)+'/workspace/'+slug+'/retry',{method:'POST'});
+          await render();
+        } catch (error) {
+          button.disabled=false;
+          button.textContent=originalText;
+          window.alert('Nouvelle tentative impossible : '+(error.message||'Erreur inconnue'));
+        }
+      }));
       root.querySelectorAll('[data-prepare-compute]').forEach(button=>button.addEventListener('click',async()=>{
         button.disabled=true;button.textContent='Préparation Compute…';
         try{

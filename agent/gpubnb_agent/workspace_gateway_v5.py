@@ -11,6 +11,7 @@ import json
 from typing import Any
 
 from . import workspace_gateway as legacy
+from .desktop_workspace_preview import DESKTOP_WORKSPACE_SLUGS
 from . import workspace_gateway_v4 as strict_http
 from .execution_control import ExecutionControlError
 from .gpu_rental_preemption import (
@@ -83,6 +84,9 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
         workspace_slug: str = "developer",
     ) -> None:
         specs = self._resource_start_context
+        if workspace_slug in DESKTOP_WORKSPACE_SLUGS and not specs:
+            # Never fall back to device=0 for rented desktops on multi-GPU hosts.
+            raise RuntimeError("desktop_workspace_requires_signed_gpu_authority")
         # Data Workspace never attaches --gpus, even when a GPU is nominally
         # reserved for this session's exclusivity/billing (see
         # rental-resource-authority.ts: every executable workspace routes
@@ -182,6 +186,12 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
 
     def _start_runtime(self, session_id: str, workspace_slug: str = "developer") -> legacy.Runtime:
         specs = self._session_specs(session_id)
+        if workspace_slug in DESKTOP_WORKSPACE_SLUGS:
+            if workspace_slug not in legacy.GATEWAY_WORKSPACE_SLUGS:
+                raise RuntimeError("desktop_workspace_preview_not_enabled")
+            if not specs:
+                # Signed resource authority is mandatory for this preview.
+                raise RuntimeError("desktop_workspace_requires_signed_gpu_authority")
         if specs is None:
             return super()._start_runtime(session_id, workspace_slug)
         for spec in specs:
@@ -211,6 +221,13 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
 
     def _adopt_or_start_runtime(self, session_id: str, workspace_slug: str = "developer") -> legacy.Runtime:
         specs = self._session_specs(session_id)
+        if workspace_slug in DESKTOP_WORKSPACE_SLUGS:
+            # Adoption after a crash must not bypass the signed authority
+            # gate in _start_runtime, even if an old container still exists.
+            if workspace_slug not in legacy.GATEWAY_WORKSPACE_SLUGS:
+                raise RuntimeError("desktop_workspace_preview_not_enabled")
+            if not specs:
+                raise RuntimeError("desktop_workspace_requires_signed_gpu_authority")
         if specs is None:
             return super()._adopt_or_start_runtime(session_id, workspace_slug)
         container, volume = legacy.names_for_session(session_id)

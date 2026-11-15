@@ -10,6 +10,7 @@ import uuid
 from typing import Any, Callable
 
 from .platform_info import gpu_inventory
+from .desktop_workspace_preview import DESKTOP_WORKSPACE_SLUGS, desktop_workspace_preview_enabled
 
 PINNED_IMAGE = re.compile(r"^[a-z0-9._/-]+@sha256:[a-f0-9]{64}$")
 OFFICIAL_DIAGNOSTIC_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpu-diagnostic@sha256:[a-f0-9]{64}$")
@@ -541,7 +542,39 @@ def run_gpu_proof_workspace(
     return final
 
 
+# Desktop preview requires real NVIDIA device binding *and* a hardware EGL
+# renderer. An image that merely boots or a CUDA-only diagnostic is NOT proof
+# of GPU desktop rendering. Do not silently fall back to CPU swrast/llvmpipe.
+# If the image lacks eglinfo or the host lacks DRM render nodes this will fail
+# closed until a qualified test Linux image/host is available.
+DESKTOP_EGL_HEALTHCHECK_SCRIPT = (
+    'set -eu; '
+    'test -d /dev/dri || { echo missing_drm_render_nodes >&2; exit 12; }; '
+    'ls /dev/dri/renderD* >/dev/null 2>&1 || { echo missing_drm_render_nodes >&2; exit 12; }; '
+    'command -v nvidia-smi >/dev/null || { echo missing_nvidia_smi >&2; exit 12; }; '
+    'nvidia-smi --query-gpu=uuid --format=csv,noheader | grep -Fx -- "$GPUBNB_TARGET_GPU_UUID" >/dev/null || '
+    '{ echo wrong_or_missing_leased_gpu >&2; exit 12; }; '
+    'command -v eglinfo >/dev/null || { echo missing_eglinfo >&2; exit 12; }; '
+    'eglinfo -B > /tmp/egl_check.txt 2>&1 || { echo egl_check_failed >&2; exit 12; }; '
+    'grep -i NVIDIA /tmp/egl_check.txt >/dev/null || { echo no_nvidia_egl_renderer >&2; exit 12; }; '
+    'if grep -Eiq "llvmpipe|softpipe|swrast|software rasterizer" /tmp/egl_check.txt; '
+    'then echo software_renderer_denied >&2; exit 12; fi'
+)
 def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | None = None) -> list[str]:
+    if workspace_slug in DESKTOP_WORKSPACE_SLUGS:
+        if not desktop_workspace_preview_enabled():
+            raise RuntimeError('desktop_workspace_preview_not_enabled')
+        if not SAFE_GPU_ID.fullmatch(gpu_uuid or ''):
+            raise RuntimeError('desktop_workspace_invalid_target_gpu')
+        return [
+            'docker', 'run', '--rm', '--network=none',
+            '--security-opt=no-new-privileges', '--pids-limit=128',
+            '--memory=2g', '--cpus=1', '--tmpfs=/tmp:rw,noexec,nosuid,size=128m',
+            f'--gpus=device={gpu_uuid}',
+            '--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute,video',
+            f'--env=GPUBNB_TARGET_GPU_UUID={gpu_uuid}',
+            '--entrypoint', '/bin/sh', image, '-ec', DESKTOP_EGL_HEALTHCHECK_SCRIPT,
+        ]
     if workspace_slug == "developer":
         # Renter-billed, like GPU_PROOF: must attach the exact hardwareUuid the
         # rental resource authority leased for this session (resolved by the
@@ -705,7 +738,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab", *DESKTOP_WORKSPACE_SLUGS} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()

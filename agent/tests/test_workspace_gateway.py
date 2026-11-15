@@ -733,76 +733,44 @@ class DesktopWorkspaceFamilyLaunchTests(unittest.TestCase):
             },
         })
 
-    def test_each_desktop_slug_launches_its_own_image_with_the_shared_reduced_hardening_profile(self) -> None:
-        for slug, image in (
-            ("cloud-desktop", CLOUD_DESKTOP_IMAGE),
-            ("creator", CREATOR_IMAGE),
-            ("cad", CAD_IMAGE),
-            ("gaming", GAMING_IMAGE),
-        ):
+    def test_each_desktop_slug_refuses_launch_without_signed_gpu_authority(self) -> None:
+        # Preview is fail-closed: the Docker image existing is not a signed
+        # rental allocation and must never trigger device=0 fallback.
+        for slug in ('cloud-desktop', 'creator', 'cad', 'gaming'):
             with self.subTest(slug=slug):
                 docker, api = FakeDocker(), FakeApi()
                 supervisor = self._supervisor(docker, api)
-
-                supervisor._start_runtime(f"sess-{slug}-1", slug)
-
-                workspace = names_for_session(f"sess-{slug}-1")[0]
-                run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
-                self.assertIn(image, run)
-                # Confirmed live this exact base image tolerates neither flag
-                # (self-configures nginx/SSL/web assets at startup; s6-overlay
-                # needs real capabilities to remap PUID/PGID) - see
-                # workspaces/cloud-desktop/NOT_YET_WORKING.md.
-                self.assertNotIn("--read-only", run)
-                self.assertNotIn("--cap-drop=ALL", run)
-                self.assertIn("--security-opt=no-new-privileges", run)
-                mount_arg = run[run.index("--mount") + 1]
-                self.assertIn("target=/config", mount_arg)
-                self.assertIn("PUID=1000", run)
-                self.assertIn("PGID=1000", run)
-                self.assertIn("--gpus=device=0", run)
-                self.assertIn(
-                    "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute", run,
-                )
+                with self.assertRaisesRegex(RuntimeError, 'desktop_workspace_'):
+                    supervisor._start_runtime(f'sess-{slug}-1', slug)
+                self.assertFalse(any(call[0] == 'run' for call in docker.calls))
 
     def test_desktop_workspace_proxy_still_uses_the_trusted_developer_image(self) -> None:
+        # Exercise the shared proxy directly; starting a desktop rental now
+        # correctly demands signed GPU authority, not just a fake Docker image.
         docker, api = FakeDocker(), FakeApi()
         supervisor = self._supervisor(docker, api)
-
-        supervisor._start_runtime("sess-creator-1", "creator")
-
-        proxy = proxy_name_for_session("sess-creator-1")
-        run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == proxy)
+        proxy = proxy_name_for_session('sess-creator-1')
+        workspace = names_for_session('sess-creator-1')[0]
+        supervisor._launch_proxy_container(proxy, workspace, network_name_for_session('sess-creator-1'), OFFICIAL_IMAGE)
+        run = next(call for call in docker.calls if call[0] == 'run' and call[call.index('--name') + 1] == proxy)
         self.assertIn(OFFICIAL_IMAGE, run)
         self.assertNotIn(CREATOR_IMAGE, run)
 
-    def test_reconcile_does_not_yet_launch_any_desktop_workspace_slug(self) -> None:
-        # The deliberate, current-session "prepare but don't enable" gate:
-        # none of these four slugs is in GATEWAY_WORKSPACE_SLUGS yet, so a
-        # session claiming one must silently fall back to "developer" via
-        # the exact same unrecognized-slug path every other unknown slug
-        # takes - not be launched with its own image. This is what actually
-        # keeps these four workspaces non-bookable in production right now.
-        for slug, image in (
-            ("cloud-desktop", CLOUD_DESKTOP_IMAGE),
-            ("creator", CREATOR_IMAGE),
-            ("cad", CAD_IMAGE),
-            ("gaming", GAMING_IMAGE),
-        ):
+    def test_reconcile_denies_unapproved_desktop_without_developer_fallback(self) -> None:
+        # A disabled desktop slug must never be launched as Developer, nor
+        # should it stop a subsequent legitimate session's reconciliation.
+        for slug in ('cloud-desktop', 'creator', 'cad', 'gaming'):
             with self.subTest(slug=slug):
                 docker, api = FakeDocker(), FakeApi()
                 api.sessions = [{
-                    "id": f"sess-{slug}-2", "status": "READY", "expiresAt": _future(),
-                    "connectionMetadata": {}, "workspaceSlug": slug,
+                    'id': f'sess-{slug}-2', 'status': 'READY', 'expiresAt': _future(),
+                    'connectionMetadata': {}, 'workspaceSlug': slug,
                 }]
                 supervisor = self._supervisor(docker, api)
-
                 supervisor._reconcile_sessions()
-
-                workspace = names_for_session(f"sess-{slug}-2")[0]
-                run = next(call for call in docker.calls if call[0] == "run" and call[call.index("--name") + 1] == workspace)
-                self.assertIn(OFFICIAL_IMAGE, run)
-                self.assertNotIn(image, run)
+                workspace = names_for_session(f'sess-{slug}-2')[0]
+                self.assertNotIn(workspace, docker.containers)
+                self.assertFalse(any(call[0] == 'run' for call in docker.calls))
 
 
 class ProxyCrashTests(unittest.TestCase):

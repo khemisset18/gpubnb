@@ -7,7 +7,7 @@ type SqlClient = Pick<PrismaClient, '$executeRaw' | '$queryRaw'>;
 
 export type RentalEventType = 'booking.created'|'booking.funded'|'rental.preparation_requested'|'rental.start_requested'|'rental.stop_requested'|'rental.completed'|'payment.settlement_requested'|'payment.settled'|'payment.refunded';
 export type MachineRentalCommandType = 'prepare_rental'|'start_rental'|'stop_rental'|'cleanup_rental';
-export type ExecutableRentalWorkspace = 'compute' | 'developer';
+export type ExecutableRentalWorkspace = 'compute' | 'developer' | 'creator' | 'cloud-desktop' | 'cad' | 'gaming';
 
 export interface RentalDeliveryContext { bookingId:string; machineId:string; renterId:string; listingId?:string; sessionId?:string; paymentId?:string; workspaceSlug?:ExecutableRentalWorkspace | undefined; startsAt?:Date; endsAt?:Date }
 export interface DeliveryWriteResult { eventId:string; commandId?:string; sequence?:bigint }

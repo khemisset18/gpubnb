@@ -53,7 +53,9 @@ test('marketplace routes the renter through GPU then the registered Compute prep
   assert.match(marketplace,/choose-workspace\.html\?listing=/);
   assert.doesNotMatch(marketplace,/Réserver un Developer Workspace/);
   assert.match(chooserHtml,/Étape 2 sur 2/);
-  assert.match(chooser,/workspaces\.filter\(workspace=>workspace\.compatible&&workspace\.slug==='compute'\)/);
+  assert.match(chooser,/workspaces\.filter\(workspace=>workspace\.compatible&&\['compute','creator','cloud-desktop','cad','gaming'\]\.includes\(workspace\.slug\)\)/);
+  assert.match(chooser,/if\(workspace\.slug==='compute'\)/);
+  assert.match(chooser,/workspace\/\$\{encodeURIComponent\(workspace\.slug\)\}/);
   assert.match(chooser,/workspace\.slug!=='compute'/);
   assert.match(chooser,/workspace-sessions/);
   assert.match(chooser,/workspaceSlug:'compute'/);
@@ -186,7 +188,8 @@ test('retry is not scoped to a single workspace slug, and re-enqueues using the 
 
 test('the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway',async()=>{
   const gateway=await readFile(path.join(sourceRoot,'workspace-gateway.ts'),'utf8');
-  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS.*=.*\['developer','data','ai','video','audio','api','mobile','security-lab'\]/);
+  assert.match(gateway,/GATEWAY_WORKSPACE_SLUGS:string\[\]=\[\s*'developer','data','ai','video','audio','api','mobile','security-lab',/);
+  assert.match(gateway,/desktopWorkspacePreviewEnabled\(\) \? desktopWorkspaceSlugs : \[\]/);
   const matches=gateway.match(/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/g)??[];
   assert.equal(matches.length,5,'all five agent-facing gateway routes (activate, desired, data-plane-host, register, usage) must use the shared slug list');
   const { executableWorkspaceSlugs }=await import('../src/machine-workspace-catalog.js');

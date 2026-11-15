@@ -10,6 +10,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import { requestPreparation, requestRentalStop, type ExecutableRentalWorkspace } from './rental-delivery-service.js';
+import { desktopWorkspacePreviewEnabled, isDesktopWorkspaceSlug } from './desktop-workspace-preview.js';
 
 export type TransactionClient = Prisma.TransactionClient;
 
@@ -49,7 +50,9 @@ export interface PreparationResult {
 }
 
 function executableWorkspace(value: string): ExecutableRentalWorkspace | undefined {
-  return value === 'compute' || value === 'developer' ? value : undefined;
+  if (value === 'compute' || value === 'developer') return value;
+  if (desktopWorkspacePreviewEnabled() && isDesktopWorkspaceSlug(value)) return value;
+  return undefined;
 }
 
 export async function prepareComputeRental(

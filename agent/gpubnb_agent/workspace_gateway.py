@@ -33,6 +33,7 @@ from .mining_guard import ProcessInspector, WindowsProcessInspector, miner_insta
 from .runner import DATA_HOME_TMPFS, DEVELOPER_HOME_TMPFS, MOBILE_HOME_TMPFS, gpu_passthrough_flags
 from .storage import load_config, load_key
 from .runtime_images import workspace_image
+from .desktop_workspace_preview import DESKTOP_WORKSPACE_SLUGS, desktop_workspace_preview_enabled
 
 PINNED_DEVELOPER_IMAGE = re.compile(r"^ghcr\.io/(?:khemisset18|gpubnb)/gpubnb-developer@sha256:[a-f0-9]{64}$")
 # Official upstream images, not GPUbnb-built ones - see runtime_images.DEFAULT_DATA_IMAGE / DEFAULT_AI_IMAGE / DEFAULT_VIDEO_IMAGE / DEFAULT_AUDIO_IMAGE.
@@ -73,7 +74,7 @@ PINNED_GAMING_IMAGE = re.compile(r"^gpubnb-gaming-workspace@sha256:[a-f0-9]{64}$
 # unmodified for every slug) forwards to exactly this port, so a new workspace
 # surface must be configured to bind here rather than its tool's own default.
 WORKSPACE_ENTRY_PORT = 3000
-GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab"})
+GATEWAY_WORKSPACE_SLUGS = frozenset({"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab"}) | (DESKTOP_WORKSPACE_SLUGS if desktop_workspace_preview_enabled() else frozenset())
 # Workspaces whose container genuinely needs the GPU attached (--gpus), scoped
 # to the exact hardware UUID the rental resource authority leased for that
 # session - never a fixed device index. Data, Audio, API, Mobile and
@@ -777,6 +778,14 @@ class GatewaySupervisor:
             # only ever returns slugs this gateway actually knows how to run.
             workspace_slug = str(session.get("workspaceSlug") or "developer")
             if workspace_slug not in GATEWAY_WORKSPACE_SLUGS:
+                # Never misroute a disabled desktop rental into an unrelated Developer session.
+                if workspace_slug in DESKTOP_WORKSPACE_SLUGS:
+                    # An unauthorized desktop slug is never relabeled as
+                    # Developer. Stop any leftovers before skipping safely.
+                    cleaned = self._stop_runtime(session_id)
+                    if not cleaned:
+                        raise RuntimeError("desktop_workspace_preview_cleanup_failed")
+                    continue
                 workspace_slug = "developer"
             metadata = session.get("connectionMetadata") if isinstance(session.get("connectionMetadata"), dict) else {}
             if status in {"STOP_REQUESTED", "STOPPING"} or self._expired(session.get("expiresAt")):
