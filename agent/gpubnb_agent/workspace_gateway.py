@@ -780,7 +780,12 @@ class GatewaySupervisor:
             if workspace_slug not in GATEWAY_WORKSPACE_SLUGS:
                 # Never misroute a disabled desktop rental into an unrelated Developer session.
                 if workspace_slug in DESKTOP_WORKSPACE_SLUGS:
-                    raise RuntimeError("desktop_workspace_preview_not_enabled")
+                    # An unauthorized desktop slug is never relabeled as
+                    # Developer. Stop any leftovers before skipping safely.
+                    cleaned = self._stop_runtime(session_id)
+                    if not cleaned:
+                        raise RuntimeError("desktop_workspace_preview_cleanup_failed")
+                    continue
                 workspace_slug = "developer"
             metadata = session.get("connectionMetadata") if isinstance(session.get("connectionMetadata"), dict) else {}
             if status in {"STOP_REQUESTED", "STOPPING"} or self._expired(session.get("expiresAt")):
