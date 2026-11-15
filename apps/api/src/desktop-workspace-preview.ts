@@ -20,5 +20,6 @@ export type PreviewEnvironment = Readonly<{
 
 export function desktopWorkspacePreviewEnabled(env: PreviewEnvironment = process.env): boolean {
   return (env.NODE_ENV === 'development' || env.NODE_ENV === 'test')
-    && env.GPUBNB_DESKTOP_WORKSPACE_PREVIEW === 'true';
+    && env.GPUBNB_DESKTOP_WORKSPACE_PREVIEW === 'true'
+    && !env.RENDER && !env.RENDER_SERVICE_ID && !env.RENDER_EXTERNAL_URL;
 }
