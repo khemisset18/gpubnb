@@ -56,6 +56,24 @@ class PackageTests(unittest.TestCase):
         m = json.loads(p.read_text()); fn(m); p.write_text(json.dumps(m))
         self.proof['manifestSha256'] = s.sha(p)
 
+    def test_workflow_publisher_pin_is_current_and_consistent(self):
+        import re
+        workflow = (
+            Path(__file__).parents[2] / '.github' / 'workflows'
+            / 'stage4-complete-windows-package.yml'
+        ).read_text(encoding='utf-8')
+        defaults = re.findall(r"default: '([0-9a-f]{64})'", workflow)
+        fallbacks = re.findall(
+            r"inputs\.publisher_sha256 \|\| '([0-9a-f]{64})'", workflow
+        )
+        self.assertEqual(len(defaults), 1, 'exactly one dispatch publisher default')
+        self.assertEqual(fallbacks, defaults, 'PR build and dispatch must use the same pin')
+        self.assertNotEqual(
+            defaults[0],
+            '3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619',
+            'expired 2026-11-13 publisher must not be a CI default',
+        )
+
     def test_signed_copy_support_bundle_dependency_closure(self):
         # Regression: support/stage4-package-common.ps1 dot-sources a path
         # policy script; the 2026-11-15 CI ZIP omitted it and failed on PC1.
