@@ -101,12 +101,37 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
             / ".github/workflows/stage4-private-backend-source-delta.yml"
         ).read_text(encoding="utf-8")
         pins = re.findall(r"--private-render-commit\s+([^\s\\]+)", workflow)
-        self.assertEqual(pins, ["26af83d8e8ef87b1f218a5b08671047594e645dc"])
+        self.assertEqual(pins, ["6c39804c68e9aef632475b14fa17fc86225a1fef"])
         self.assertIn("REVIEWED_SHA: " + "$"+"{{ github.event.pull_request.head.sha || github.sha }}", workflow)
         self.assertIn('--pc1-candidate-commit "$REVIEWED_SHA"', workflow)
         self.assertIn("--expect-api-source-changed", workflow)
+        self.assertIn("--expect-web-source-unchanged", workflow)
+        self.assertNotIn("--expect-web-source-changed", workflow)
         self.assertNotIn("32ffdc72ec7041310c4b07e286ac4c4c2818906c", workflow)
         self.assertEqual(len(pins[0]), 40)
+
+    def test_cli_rejects_changed_browser_when_source_is_expected_unchanged(self) -> None:
+        self._write("apps/web/index.js", "console.log('different')\n")
+        head = self._commit("browser changed")
+        script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--repo",
+                str(self.repo),
+                "--private-render-commit",
+                self.base,
+                "--pc1-candidate-commit",
+                head,
+                "--expect-web-source-unchanged",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("stage4_delta_web_source_changed_review_required", result.stderr)
 
     def test_wrong_pins_and_non_ancestor_fail_closed(self) -> None:
         self._write("apps/web/index.js", "changed\n")
