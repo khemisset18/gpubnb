@@ -221,6 +221,13 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
 
     def _adopt_or_start_runtime(self, session_id: str, workspace_slug: str = "developer") -> legacy.Runtime:
         specs = self._session_specs(session_id)
+        if workspace_slug in DESKTOP_WORKSPACE_SLUGS:
+            # Adoption after a crash must not bypass the signed authority
+            # gate in _start_runtime, even if an old container still exists.
+            if workspace_slug not in legacy.GATEWAY_WORKSPACE_SLUGS:
+                raise RuntimeError("desktop_workspace_preview_not_enabled")
+            if not specs:
+                raise RuntimeError("desktop_workspace_requires_signed_gpu_authority")
         if specs is None:
             return super()._adopt_or_start_runtime(session_id, workspace_slug)
         container, volume = legacy.names_for_session(session_id)
