@@ -68,7 +68,7 @@ const diagnosticResultSchema = z.object({
   gpuUuid: z.string().max(200).nullable().optional(),
   driverVersion: z.string().max(80).nullable().optional(),
   summary: z.string().max(2000),
-  metrics: z.record(z.unknown()).optional(),
+  metrics: z.record(z.string(), z.unknown()).optional(),
   runtimeCleanliness: z.object({
     unexpectedContainers: z.array(z.string().min(1).max(200)).max(64),
     unexpectedVolumes: z.array(z.string().min(1).max(200)).max(64),
