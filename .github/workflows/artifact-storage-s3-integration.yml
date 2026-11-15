@@ -38,13 +38,14 @@ jobs:
       - name: Install locked API dependencies
         working-directory: apps/api
         run: npm ci
-      - name: Start S3-compatible MinIO
+      - name: Start S3-compatible SILO (maintained MinIO fork)
         run: |
+          # Pinned CI-only S3 fixture. Docker Hub removed minio/minio; no production service is changed.
           docker run -d --rm --name gpubnb-minio \
-            -p 9000:9000 \
+            -p 127.0.0.1:9000:9000 \
             -e MINIO_ROOT_USER=gpubnb-ci-access \
             -e MINIO_ROOT_PASSWORD=gpubnb-ci-secret-key \
-            minio/minio:latest server /data --address :9000
+            docker.io/pgsty/silo:RELEASE.2026-11-12T00-00-00Z server /data --address :9000
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
               exit 0
