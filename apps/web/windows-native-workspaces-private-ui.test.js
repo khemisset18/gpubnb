@@ -91,6 +91,9 @@ test('Cloud Desktop receives a private link only after authenticated positive re
   assert.equal(view.grid.children.length, 4);
   assert.equal(view.grid.children[0].children[0].tagName, 'A');
   assert.equal(view.grid.children[0].children[0].href, 'stage3-windows-native.html');
+  assert.equal(view.grid.children[3].children.length, 2);
+  assert.equal(view.grid.children[3].children[1].tagName, 'A');
+  assert.equal(view.grid.children[3].children[1].href, 'stage4-gaming-visual-pilot.html?machine=cmsiggruy0004df0tn669f6bn');
   for (const card of view.grid.children.slice(1)) {
     assert.equal(card.children[0].tagName, 'BUTTON');
     assert.equal(card.children[0].disabled, true);
@@ -112,6 +115,7 @@ test('fail closed on denied, incomplete, wrong-mode or wrong-code preflight', as
     assert.equal(view.panel.hidden, true);
     assert.equal(view.grid.children[0].children[0].tagName, 'BUTTON');
     assert.equal(view.grid.children[0].children[0].disabled, true);
+    assert.equal(view.grid.children[3].children.length, 1);
   }
   const unavailable = await openCatalogue({ httpStatus: 404 });
   assert.equal(unavailable.panel.hidden, true);
@@ -146,4 +150,14 @@ test('public catalogue and foreign machine cannot expose a private test', async 
   assert.equal(foreignOwner.panel.hidden, true);
   assert.equal(foreignOwner.calls.some(call => call.path.endsWith('/preflight')), false);
   assert.equal(foreignOwner.grid.children[0].children[0].tagName, 'BUTTON');
+});
+
+test('Gaming stays nonbookable: a private graphics pilot link does not replace the disabled workspace button', async () => {
+  const view = await openCatalogue({ preflight: allowed });
+  const gaming = view.grid.children[3];
+  assert.equal(gaming.children[0].tagName, 'BUTTON');
+  assert.equal(gaming.children[0].disabled, true);
+  assert.equal(gaming.children[1].tagName, 'A');
+  assert.equal(gaming.children[1].textContent, 'Essai graphique de jeu (via Cloud Desktop)');
+  assert.equal(view.calls.every(call => call.method === 'GET'), true);
 });
