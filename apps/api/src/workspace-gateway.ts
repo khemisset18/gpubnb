@@ -1026,8 +1026,14 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
       const release=machineUpdate.count===1;
       return {ok:true,activated:!neverActivated,machineReleased:release,alreadyApplied:false} as const;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,maxWait:5_000,timeout:10_000});
-    if('error' in result)return reply.code(409).send({error:result.error});
+    // Even a failed cleanup is a committed terminal transition: the session
+    // is QUARANTINED in PostgreSQL. Publish its Redis tombstone before
+    // returning the 409, just as for a successful stop. Otherwise a short
+    // native authority lease could survive the failure acknowledgement.
+    if('error' in result && result.error!=='workspace_cleanup_unverified')
+      return reply.code(409).send({error:result.error});
     await revokeGatewayAuthority(redis,sessionId);
+    if('error' in result)return reply.code(409).send({error:result.error});
     return result;
   });
 

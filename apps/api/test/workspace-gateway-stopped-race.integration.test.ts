@@ -25,6 +25,10 @@ integration('signed Agent stopped ACKs preserve terminal state and perform clean
   ] as const){
     await t.test(name,async()=>{
       const fixture=await seedReadySession(db,crypto.randomBytes(8).toString('hex'),{bookingStatus:BookingStatus.ACTIVE,expectedSeconds:900,workspaceActivatedAt:new Date()});
+      // Seed a live native generation. A failed-cleanup ACK must replace it
+      // with a tombstone, not only quarantine the PostgreSQL row.
+      const authorityKey=`workspace-gateway:ws-session-activated:${fixture.session.id}`;
+      await redis.set(authorityKey,crypto.randomUUID(),'EX',120);
       const pair=nacl.sign.keyPair();
       await db.machine.update({where:{id:fixture.machine.id},data:{agentPublicKey:bs58.encode(pair.publicKey)}});
       await db.workspaceSession.update({where:{id:fixture.session.id},data:{status:WorkspaceSessionStatus.RUNNING,startedAt:new Date()}});
@@ -58,6 +62,8 @@ integration('signed Agent stopped ACKs preserve terminal state and perform clean
         pending=send(delayedCleaned);await entered.promise;
         const winner=await send(winnerCleaned);
         assert.equal(winner.statusCode,winnerCleaned?200:409);
+        assert.match((await redis.get(authorityKey))??'',/^revoked:/,
+          'successful STOP and failed-cleanup quarantine must both revoke the Redis authority');
         const before=await db.workspaceSession.findUniqueOrThrow({where:{id:fixture.session.id}});
         const historyBefore=await db.machineQuarantineEvent.count({where:{machineId:fixture.machine.id}});
         release.resolve();const loser=await pending;
@@ -70,6 +76,7 @@ integration('signed Agent stopped ACKs preserve terminal state and perform clean
         assert.equal((await db.machine.findUniqueOrThrow({where:{id:fixture.machine.id}})).moderationStatus,winnerCleaned?ModerationStatus.CLEAR:ModerationStatus.QUARANTINED);
       }finally{
         release.resolve();await pending?.catch(()=>undefined);await app.close();
+        await redis.del(authorityKey);
         await db.machineQuarantineEvent.deleteMany({where:{machineId:fixture.machine.id}});await fixture.cleanup();
       }
     });
