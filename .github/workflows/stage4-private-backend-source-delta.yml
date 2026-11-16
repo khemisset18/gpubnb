@@ -26,10 +26,12 @@ jobs:
           python-version: '3.13.7'
       - name: Offline adversarial tests of source evidence (no Docker, deploy or network)
         run: python -m unittest discover -s scripts/tests -p test_stage4_private_backend_delta.py -v
-      # Source commit observed as live via Render read-only on 2026-11-16.
-      # Pinned source comparison only: NOT continuous attestation of the running image.
-      # Re-check Render's deployed commit at the time of each physical test.
-      - name: Compare observed Render source to review HEAD (source only)
+      # Baseline observed live in Render on 2026-11-16: 23a7a295...
+      # New native cleanup logic modifies apps/api/src on the review HEAD.
+      # A changed API source is EXPECTED here; this read-only report does not
+      # attest that Render runs the candidate. Recheck live deployment identity
+      # before any physical test, and never confuse source drift with parity.
+      - name: Record candidate API drift from observed Render source (read-only)
         env:
           REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
@@ -37,6 +39,6 @@ jobs:
             --repo . \
             --private-render-commit 23a7a2950ecf365866f3531ddbf76920d9fcb295 \
             --pc1-candidate-commit "$REVIEWED_SHA" \
-            --expect-api-source-unchanged \
+            --expect-api-source-changed \
             --expect-web-source-unchanged
       # No secrets, deploy, PC1 service, quarantine, booking, signed evidence, or hardware use.

@@ -104,7 +104,8 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
         self.assertEqual(pins, ["23a7a2950ecf365866f3531ddbf76920d9fcb295"])
         self.assertIn("REVIEWED_SHA: " + "$"+"{{ github.event.pull_request.head.sha || github.sha }}", workflow)
         self.assertIn('--pc1-candidate-commit "$REVIEWED_SHA"', workflow)
-        self.assertIn("--expect-api-source-unchanged", workflow)
+        self.assertIn("--expect-api-source-changed", workflow)
+        self.assertNotIn("--expect-api-source-unchanged", workflow)
         self.assertIn("--expect-web-source-unchanged", workflow)
         self.assertNotIn("--expect-web-source-changed", workflow)
         self.assertNotIn("32ffdc72ec7041310c4b07e286ac4c4c2818906c", workflow)
@@ -171,6 +172,25 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(expected, result.stderr)
+
+    def test_cli_reports_expected_api_drift_with_unchanged_browser(self) -> None:
+        self._write("apps/api/src/server.ts", "export const protocol = 2;\\n")
+        head = self._commit("candidate API changed but browser did not")
+        script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
+        result = subprocess.run(
+            [
+                sys.executable, str(script), "--repo", str(self.repo),
+                "--private-render-commit", self.base,
+                "--pc1-candidate-commit", head,
+                "--expect-api-source-changed",
+                "--expect-web-source-unchanged",
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('"apiRuntimeInputsIdenticalAtSource": false', result.stdout)
+        self.assertIn('"webAssetsIdenticalAtSource": true', result.stdout)
+        self.assertIn('"renderRunningImageCommitIndependentlyAttested": false', result.stdout)
 
     def test_wrong_pins_and_non_ancestor_fail_closed(self) -> None:
         self._write("apps/web/index.js", "changed\n")
