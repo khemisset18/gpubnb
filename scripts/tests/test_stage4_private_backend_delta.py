@@ -101,12 +101,76 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
             / ".github/workflows/stage4-private-backend-source-delta.yml"
         ).read_text(encoding="utf-8")
         pins = re.findall(r"--private-render-commit\s+([^\s\\]+)", workflow)
-        self.assertEqual(pins, ["26af83d8e8ef87b1f218a5b08671047594e645dc"])
+        self.assertEqual(pins, ["23a7a2950ecf365866f3531ddbf76920d9fcb295"])
         self.assertIn("REVIEWED_SHA: " + "$"+"{{ github.event.pull_request.head.sha || github.sha }}", workflow)
         self.assertIn('--pc1-candidate-commit "$REVIEWED_SHA"', workflow)
-        self.assertIn("--expect-api-source-changed", workflow)
+        self.assertIn("--expect-api-source-unchanged", workflow)
+        self.assertIn("--expect-web-source-unchanged", workflow)
+        self.assertNotIn("--expect-web-source-changed", workflow)
         self.assertNotIn("32ffdc72ec7041310c4b07e286ac4c4c2818906c", workflow)
         self.assertEqual(len(pins[0]), 40)
+
+    def test_identical_source_pins_are_valid_and_do_not_hide_changes(self) -> None:
+        self.assertEqual(source_delta(self.repo, self.base, self.base), [])
+        report = make_report(self.repo, self.base, self.base)
+        self.assertTrue(report["apiRuntimeInputsIdenticalAtSource"])
+        self.assertTrue(report["webAssetsIdenticalAtSource"])
+        self.assertEqual(report["changedPathCount"], 0)
+
+    def test_cli_accepts_identical_pins_with_unchanged_expectations(self) -> None:
+        script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
+        result = subprocess.run(
+            [
+                sys.executable, str(script), "--repo", str(self.repo),
+                "--private-render-commit", self.base,
+                "--pc1-candidate-commit", self.base,
+                "--expect-api-source-unchanged",
+                "--expect-web-source-unchanged",
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_cli_detects_api_or_browser_changes_against_live_source(self) -> None:
+        script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
+        for changed_path, expected in (
+            ("apps/api/src/server.ts", "stage4_delta_api_runtime_inputs_changed_review_required"),
+            ("apps/web/index.js", "stage4_delta_web_source_changed_review_required"),
+        ):
+            with self.subTest(changed_path=changed_path):
+                self._write(changed_path, "changed source\\n")
+                candidate = self._commit("changed " + changed_path)
+                result = subprocess.run(
+                    [
+                        sys.executable, str(script), "--repo", str(self.repo),
+                        "--private-render-commit", self.base,
+                        "--pc1-candidate-commit", candidate,
+                        "--expect-api-source-unchanged",
+                        "--expect-web-source-unchanged",
+                    ],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stderr)
+                self._git("reset", "--hard", self.base)
+
+    def test_cli_rejects_contradictory_expectations(self) -> None:
+        script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
+        for flags, expected in (
+            (("--expect-api-source-changed", "--expect-api-source-unchanged"), "stage4_delta_conflicting_api_expectations"),
+            (("--expect-web-source-changed", "--expect-web-source-unchanged"), "stage4_delta_conflicting_web_expectations"),
+        ):
+            with self.subTest(flags=flags):
+                result = subprocess.run(
+                    [
+                        sys.executable, str(script), "--repo", str(self.repo),
+                        "--private-render-commit", self.base,
+                        "--pc1-candidate-commit", self.base, *flags,
+                    ],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stderr)
 
     def test_wrong_pins_and_non_ancestor_fail_closed(self) -> None:
         self._write("apps/web/index.js", "changed\n")
@@ -115,7 +179,6 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
             ("f" * 40, head),
             (self.base.upper(), head),
             (self.base, "0" * 40),
-            (self.base, self.base),
             (head, self.base),
         ):
             with self.subTest(base=base, candidate=candidate):

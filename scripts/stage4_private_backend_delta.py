@@ -40,7 +40,7 @@ def _git(repo: Path, *args: str, binary: bool = False) -> bytes | str:
 
 
 def source_delta(repo: Path, base: str, candidate: str) -> list[str]:
-    if not COMMIT.fullmatch(base) or not COMMIT.fullmatch(candidate) or base == candidate:
+    if not COMMIT.fullmatch(base) or not COMMIT.fullmatch(candidate) :
         raise ValueError("stage4_delta_exact_distinct_git_commit_pins_required")
     for sha in (base, candidate):
         if _git(repo, "rev-parse", "--verify", sha + "^{commit}") != sha:
@@ -114,18 +114,25 @@ def main() -> int:
     parser.add_argument("--expect-api-source-unchanged", action="store_true")
     parser.add_argument("--expect-api-source-changed", action="store_true")
     parser.add_argument("--expect-web-source-changed", action="store_true")
+    parser.add_argument("--expect-web-source-unchanged", action="store_true")
     args = parser.parse_args()
     report = make_report(
         Path(args.repo).resolve(),
         args.private_render_commit,
         args.pc1_candidate_commit,
     )
+    if args.expect_api_source_changed and args.expect_api_source_unchanged:
+        raise SystemExit("stage4_delta_conflicting_api_expectations")
+    if args.expect_web_source_changed and args.expect_web_source_unchanged:
+        raise SystemExit("stage4_delta_conflicting_web_expectations")
     if args.expect_api_source_unchanged and not report["apiRuntimeInputsIdenticalAtSource"]:
         raise SystemExit("stage4_delta_api_runtime_inputs_changed_review_required")
     if args.expect_api_source_changed and report["apiRuntimeInputsIdenticalAtSource"]:
         raise SystemExit("stage4_delta_expected_api_runtime_change_missing")
     if args.expect_web_source_changed and report["webAssetsIdenticalAtSource"]:
         raise SystemExit("stage4_delta_web_difference_expectation_failed")
+    if args.expect_web_source_unchanged and not report["webAssetsIdenticalAtSource"]:
+        raise SystemExit("stage4_delta_web_source_changed_review_required")
     print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
     return 0
 
