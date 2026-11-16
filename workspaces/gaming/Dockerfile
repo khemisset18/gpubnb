@@ -13,5 +13,6 @@ FROM linuxserver/webtop@sha256:1bd141d5d7aaf3e98e47b7d9665f50657d1628617b4ef47bc
 # Deliberately no USER switch - see workspaces/creator/Dockerfile's comment.
 RUN dpkg --add-architecture i386 \
  && apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends steam-installer \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends steam-installer mesa-utils \
  && rm -rf /var/lib/apt/lists/*
+COPY --chmod=755 healthcheck.sh /usr/local/bin/gpubnb-desktop-liveness

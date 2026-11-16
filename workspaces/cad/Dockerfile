@@ -12,5 +12,6 @@ FROM linuxserver/webtop@sha256:1bd141d5d7aaf3e98e47b7d9665f50657d1628617b4ef47bc
 # Ubuntu-repo packages - a real decision point before shipping, not hidden.
 # Deliberately no USER switch - see workspaces/creator/Dockerfile's comment.
 RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends freecad \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends freecad mesa-utils \
  && rm -rf /var/lib/apt/lists/*
+COPY --chmod=755 healthcheck.sh /usr/local/bin/gpubnb-desktop-liveness

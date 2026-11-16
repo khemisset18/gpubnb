@@ -11,6 +11,12 @@
 # base - it *is* the base, general-purpose desktop.
 FROM linuxserver/webtop@sha256:1bd141d5d7aaf3e98e47b7d9665f50657d1628617b4ef47bc3bbd43d726fd77e
 
+# eglinfo is required by the agent's fail-closed GPU preflight.
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mesa-utils \
+ && rm -rf /var/lib/apt/lists/*
+COPY --chmod=755 healthcheck.sh /usr/local/bin/gpubnb-desktop-liveness
+
 # What was actually tested live against this exact image on this exact
 # host (no GPU flags - this host has none to pass through):
 #   - real container start, real HTTP 200 + real Selkies HTML on port 3000

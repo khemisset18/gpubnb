@@ -1,0 +1,65 @@
+name: desktop-workspaces
+on:
+  pull_request:
+    paths:
+      - 'workspaces/cloud-desktop/**'
+      - 'workspaces/creator/**'
+      - 'workspaces/cad/**'
+      - 'workspaces/gaming/**'
+      - 'workspaces/desktop-image-smoke-test.sh'
+      - 'apps/web/**'
+      - '.github/workflows/desktop-workspaces.yml'
+permissions:
+  contents: read
+concurrency:
+  group: desktop-workspaces-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  frontend:
+    name: Browser flow tests (simulated)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Run browser flow and opening guard regressions
+        run: node --test apps/web/*.test.js
+  image:
+    name: ${{ matrix.workspace }} image (CPU only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [creator, cloud-desktop, cad, gaming]
+    env:
+      WORKSPACE_SLUG: ${{ matrix.workspace }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build existing digest-pinned image locally
+        run: docker build --tag "gpubnb-desktop:${WORKSPACE_SLUG}" "workspaces/${WORKSPACE_SLUG}"
+      - name: Check tools, CPU HTTP liveness and cleanup without a GPU
+        run: bash workspaces/desktop-image-smoke-test.sh "$WORKSPACE_SLUG" "gpubnb-desktop:${WORKSPACE_SLUG}"
+      - name: Reject fixable HIGH and CRITICAL image vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: gpubnb-desktop:${{ matrix.workspace }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: desktop-image-trivy.json
+          exit-code: '1'
+      - name: Preserve image security evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-image-${{ matrix.workspace }}
+          path: desktop-image-trivy.json
+          if-no-files-found: warn
+          retention-days: 14
