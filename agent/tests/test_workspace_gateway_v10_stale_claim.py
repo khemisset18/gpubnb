@@ -101,6 +101,10 @@ class WindowsNativeStaleClaimRecoveryTests(unittest.TestCase):
 
         self.supervisor = GatewaySupervisor.__new__(GatewaySupervisor)
         self.supervisor.machine_id = "machine_00000001"
+        self.supervisor._native_start_tokens = {}
+        self.supervisor._native_start_backends = {}
+        self.supervisor._native_revocation_pending = set()
+        self.supervisor._native_revocation_inflight = set()
         self.supervisor.rental_preemption = self.preemption
         self.supervisor._trace = lambda *_args, **_kwargs: None
         self.requests: list[tuple[str, str, dict[str, object] | None]] = []
@@ -300,7 +304,10 @@ class WindowsNativeStaleClaimRecoveryTests(unittest.TestCase):
             cleaned = self.supervisor._native_stop_and_report(session)
 
         self.assertFalse(cleaned)
-        self.assertEqual(requests, [])
+        self.assertEqual(
+            [item[0] for item in requests],
+            [f"/agent/workspace-gateway/{session}/revocation-started"],
+        )
         self.assertIn(session, self.supervisor.native_runtimes)
         self.assertIn(session, self.supervisor._native_blocked)
 

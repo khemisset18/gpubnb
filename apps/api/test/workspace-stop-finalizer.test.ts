@@ -13,11 +13,13 @@ const ids = {
   machine: 'cm000000000000000000003',
 };
 
-function fakeRedis(deleted: string[]): Redis {
+function fakeRedis(tombstoned: string[]): Redis {
   return {
-    del: async (...keys: string[]) => {
-      deleted.push(...keys);
-      return keys.length;
+    eval: async (...args: unknown[]) => {
+      assert.equal(args[1], 1);
+      assert.equal(args[3], 'revoked:');
+      tombstoned.push(String(args[2]));
+      return 1;
     },
   } as unknown as Redis;
 }
@@ -44,11 +46,11 @@ test('verified activated Developer cleanup finalizes once and releases an idle m
   const db = {
     $transaction: async (handler: (value: typeof tx) => unknown) => handler(tx),
   };
-  const deleted: string[] = [];
+  const tombstoned: string[] = [];
 
   const result = await finalizeVerifiedDeveloperStop(
     db as never,
-    fakeRedis(deleted),
+    fakeRedis(tombstoned),
     ids.session,
     ids.machine,
     new Date('2026-08-15T02:00:00.000Z'),
@@ -61,7 +63,7 @@ test('verified activated Developer cleanup finalizes once and releases an idle m
     machineReleased: true,
   });
   assert.deepEqual(calls.map((entry) => entry.name), ['lock', 'session.update', 'machine.updateMany']);
-  assert.deepEqual(deleted, [`workspace-gateway:ws-session-activated:${ids.session}`]);
+  assert.deepEqual(tombstoned, [`workspace-gateway:ws-session-activated:${ids.session}`]);
   const sessionWrite = calls.find((entry) => entry.name === 'session.update')?.args as {
     data?: { status?: string; endedAt?: Date };
   };
@@ -87,11 +89,11 @@ test('already terminal session is an idempotent success with no second state mut
     machine: { updateMany: async () => { calls.push('machine.updateMany'); return { count: 0 }; } },
   };
   const db = { $transaction: async (handler: (value: typeof tx) => unknown) => handler(tx) };
-  const deleted: string[] = [];
+  const tombstoned: string[] = [];
 
   const result = await finalizeVerifiedDeveloperStop(
     db as never,
-    fakeRedis(deleted),
+    fakeRedis(tombstoned),
     ids.session,
     ids.machine,
   );
@@ -103,7 +105,7 @@ test('already terminal session is an idempotent success with no second state mut
     machineReleased: false,
   });
   assert.deepEqual(calls, ['lock']);
-  assert.deepEqual(deleted, [`workspace-gateway:ws-session-activated:${ids.session}`]);
+  assert.deepEqual(tombstoned, [`workspace-gateway:ws-session-activated:${ids.session}`]);
 });
 
 test('missing or non-Developer session fails closed', async () => {

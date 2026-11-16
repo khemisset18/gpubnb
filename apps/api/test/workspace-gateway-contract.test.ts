@@ -51,7 +51,8 @@ test('browser websocket consumes an explicit signed agent open acknowledgement',
 test('legacy agents retain first-upstream-frame readiness during rollout',()=>{
   assert.match(api,/workspace_gateway_legacy_upstream_ready/);
   assert.match(api,/const legacyReady=await redis\.get\(wsUpstreamReadyKey\(channelId\)\)/);
-  assert.match(api,/redis\.set\(wsUpstreamReadyKey\(channelId\),'1','EX',ttl\)/);
+  assert.match(api,/redis\.call\('SET', KEYS\[3\], '1', 'EX', ARGV\[2\]\)/);
+  assert.match(api,/MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT/);
   assert.match(api,/ws\.on\('message'/);
 });
 
@@ -95,7 +96,7 @@ test('agent tunnel preserves long-lived websocket handshakes and absorbs startup
 test('batched upstream frames are retry-idempotent before entering browser queue',()=>{
   assert.match(api,/wsFrameSeenKey=\(machineId:string,frameId:string\)/);
   assert.match(api,/ENQUEUE_DEDUPED_WS_FRAME_SCRIPT/);
-  assert.match(api,/redis\.call\('SET', KEYS\[1\], '1', 'EX', ARGV\[1\], 'NX'\)/);
+  assert.match(api,/redis\.call\('SET', KEYS\[1\], owner, 'EX', ARGV\[1\], 'NX'\)/);
   assert.match(api,/redis\.call\('LPUSH', KEYS\[2\], ARGV\[3\]\)/);
   assert.match(api,/frame_id_required/);
   assert.match(transport,/"frameId": str\(uuid\.uuid4\(\)\)/);
@@ -142,7 +143,7 @@ test('redis relay queues are bounded by item count, bytes and ttl',()=>{
 
 test('billing activation remains tied to a real upstream websocket frame',()=>{
   assert.match(api,/app\.post\('\/agent\/workspace-gateway\/ws-frame'/);
-  assert.match(api,/activateGatewaySession\(db,binding\.sessionId,machineId\)/);
+  assert.match(api,/acceptGatewayFrame\(\{db,redis,sessionId:binding\.sessionId/);
   assert.match(api,/A real upstream frame remains the billing activation signal/);
 });
 
@@ -155,14 +156,34 @@ test('concurrent websocket activation accepts the transaction winner',()=>{
   assert.match(api,/winner\?\{activated:false,expiresAt:winner\.expiresAt\}:null/);
 });
 
-test('session activation is cached away from repeated websocket frames',()=>{
+test('durable receipt generations fence lock-free activated frame admission',()=>{
   assert.match(api,/wsSessionActivatedKey=\(sessionId:string\)=>`workspace-gateway:ws-session-activated:\$\{sessionId\}`/);
-  assert.match(api,/const activatedKey=wsSessionActivatedKey\(binding\.sessionId\)/);
-  assert.match(api,/let ttl=await redis\.ttl\(activatedKey\)/);
-  assert.match(api,/if\(ttl<1\)\{\s*const activation=await activateGatewaySession/);
-  assert.match(api,/redis\.set\(activatedKey,'1','EX',ttl\)/);
-  assert.match(api,/redis\.del\(wsSessionActivatedKey\(sessionId\)\)/);
-  assert.match(api,/Channel readiness is intentionally separate from session activation/);
+  assert.doesNotMatch(api,/if\(cachedTtl>0\)return/);
+  assert.match(api,/INSTALL_GATEWAY_AUTHORITY_SCRIPT/);
+  assert.match(api,/REVOKE_GATEWAY_AUTHORITY_SCRIPT/);
+  assert.match(api,/GATEWAY_AUTHORITY_REVOKED_PREFIX='revoked:'/);
+  assert.match(api,/gatewayAcceptance:\{select:\{id:true\}\}/);
+  const acceptance=api.slice(api.indexOf('export async function acceptGatewayFrame'),api.indexOf('export async function committedGatewayFrame'));
+  const activatedStart=acceptance.indexOf('const cachedAuthority=');
+  const activatedEnd=acceptance.indexOf('try{',acceptance.indexOf('const live='));
+  const activated=acceptance.slice(activatedStart,activatedEnd);
+  assert.doesNotMatch(activated,/\$transaction|FOR (?:SHARE|UPDATE)/,
+    'already-activated frames must not hold a PostgreSQL row lock');
+  assert.match(activated,/return \{enqueued:await enqueue\(cachedAuthority\),authorityId:cachedAuthority\}/,
+    'a valid short Redis lease must avoid a PostgreSQL query on the hot path');
+  assert.match(activated,/installGatewayAuthority\(redis,sessionId,live\.gatewayAcceptance\.id,live\.expiresAt\)/,
+    'a fresh authoritative snapshot must CAS-install its durable receipt before enqueue');
+  assert.match(api,/GATEWAY_AUTHORITY_LEASE_SECONDS=2/);
+  assert.match(api,/gateway_authority_db_timeout/);
+  assert.match(api,/gateway_authority_redis_timeout/);
+  assert.match(api,/MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT/);
+  const markScript=api.slice(api.indexOf('const MARK_GATEWAY_FRAME_ACCEPTED_SCRIPT'),api.indexOf('const REVOKE_GATEWAY_AUTHORITY_SCRIPT'));
+  assert.doesNotMatch(markScript,/redis\.call\('SET', KEYS\[1\]/,
+    'per-frame readiness publication must not extend the authority lease');
+  assert.match(api,/SELECT "id" FROM "WorkspaceSession" WHERE "id"=\$\{sessionId\} FOR UPDATE/);
+  assert.doesNotMatch(api,/redis\.set\(wsSessionActivatedKey\(sessionId\),'1'/);
+  assert.doesNotMatch(api,/redis\.del\(wsSessionActivatedKey\(sessionId\)\)/);
+  assert.match(api,/committedGatewayFrame\(db,sessionId,channelId,channelBinding,frame\)/);
 });
 
 test('websocket subprotocol may cross the authenticated gateway',()=>{

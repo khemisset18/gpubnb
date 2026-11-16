@@ -92,6 +92,33 @@ try {
     $positive=Read-Fixture
     if($positive.files.Count -ne 4){throw 'positive_fixture_failed'}
     Write-Host 'PASS exact four-component unsigned package, actual PE/imports and identities'
+    $peInfoOriginal=(Get-Command Get-Stage4PeInfo -CommandType Function).ScriptBlock
+    $script:stage4TestPeInfo=$peInfoOriginal
+    $script:stage4TestMutatedDuringVerify=$false
+    $script:stage4TestSubstitutionAttempted=$false
+    try {
+        Set-Item -Path Function:\Get-Stage4PeInfo -Value {
+            param([string]$Path)
+            $observed=& $script:stage4TestPeInfo $Path
+            if(-not $script:stage4TestMutatedDuringVerify -and
+                [IO.Path]::GetFileName($Path) -ceq 'gpubnb-agent.exe') {
+                $script:stage4TestSubstitutionAttempted=$true
+                try { [IO.File]::WriteAllBytes($Path,[byte[]](1,2,3,4)) }
+                catch { throw 'stage4_substitution_blocked_by_read_fence' }
+                $script:stage4TestMutatedDuringVerify=$true
+            }
+            return $observed
+        }
+        Expect-Failure 'stage4_substitution_blocked_by_read_fence' {Read-Fixture}
+        if(-not $script:stage4TestSubstitutionAttempted -or $script:stage4TestMutatedDuringVerify){
+            throw 'stage4_substitution_attempt_not_blocked'
+        }
+    } finally {
+        Set-Item -Path Function:\Get-Stage4PeInfo -Value $peInfoOriginal
+        [IO.File]::WriteAllBytes((Join-Path $dir 'gpubnb-agent.exe'),$b)
+    }
+    if($null -eq (Read-Fixture)){throw 'stage4_package_not_restored_after_substitution_test'}
+    Write-Host 'PASS block component substitution during package PE inspection'
     $incomplete=Join-Path $dir 'INCOMPLETE-DO-NOT-INSTALL.txt';[IO.File]::WriteAllText($incomplete,'incomplete')
     Expect-Failure 'stage4_incomplete_package_forbidden' {Read-Fixture}
     Remove-Item $incomplete

@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import { runBookingTransaction } from './booking-transaction-retry.js';
+import { revokeGatewayAuthority } from './workspace-gateway.js';
 
 const STOPPABLE = [
   WorkspaceSessionStatus.STOP_REQUESTED,
@@ -63,10 +64,6 @@ export class WorkspaceStopFinalizationError extends Error {
   }
 }
 
-function activatedKey(sessionId: string): string {
-  return `workspace-gateway:ws-session-activated:${sessionId}`;
-}
-
 export async function finalizeVerifiedDeveloperStop(
   db: PrismaClient,
   redis: Redis,
@@ -74,8 +71,8 @@ export async function finalizeVerifiedDeveloperStop(
   machineId: string,
   endedAt = new Date(),
 ): Promise<WorkspaceStopFinalization> {
-  // DB-only callback (advisory lock + reads/writes, no network/Redis inside - the redis.del
-  // cleanup below runs only after the transaction commits), safe to retry as a whole.
+  // DB-only callback (advisory lock + reads/writes, no network/Redis inside - the
+  // authority tombstone below is published only after commit), safe to retry as a whole.
   const result = await runBookingTransaction(db, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${sessionId}, 0))`;
 
@@ -181,6 +178,8 @@ export async function finalizeVerifiedDeveloperStop(
   // burst of callers well before genuine Postgres connection exhaustion.
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
 
-  await redis.del(activatedKey(sessionId));
+  // DELETE would let an old lock-free DB snapshot reinstall its generation.
+  // A tombstone is the externally observable revocation linearization point.
+  await revokeGatewayAuthority(redis,sessionId);
   return result;
 }

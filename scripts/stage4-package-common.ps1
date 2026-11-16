@@ -1,5 +1,6 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'stage4-windows-path-policy.ps1')
 # Preserve ISO-8601 expiry instants across Windows PowerShell 5.1 ConvertFrom-Json
 # (which may return DateTime), regardless of the host's date culture.
 function Convert-Stage4ExpiryToUtc {
@@ -137,11 +138,43 @@ function Get-Stage4PeInfo {
     return @{architecture='AMD64';imports=$sortedImports;certificateTablePresent=($certSize -gt 0)}
 }
 
+function Open-Stage4PackageReadFence {
+    param([string]$Directory,[string]$Status='unsigned',[string]$ManifestName='stage4.manifest.json')
+    $root=Get-Stage4CanonicalWindowsPath -Path $Directory
+    $names=@($ManifestName,'unsigned-stage4.manifest.json','build-identities.json',
+        'gpubnb-agent.exe','gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
+    $opened=[Collections.Generic.List[IO.FileStream]]::new()
+    try {
+        foreach($name in $names) {
+            if($name -ceq 'unsigned-stage4.manifest.json' -and $Status -cne 'private-signed'){continue}
+            $path=Join-Path $root $name
+            if(-not (Test-Path -LiteralPath $path -PathType Leaf)) {throw "stage4_component_missing:$name"}
+            $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+            if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw 'stage4_snapshot_reparse_or_nonfile_forbidden'
+            }
+            # Keep read-only handles open through every hash, PE and signature
+            # check. FileShare.Read denies concurrent write/delete/rename opens.
+            $opened.Add([IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read))
+        }
+        return ,$opened
+    } catch {
+        foreach($stream in $opened){$stream.Dispose()}
+        throw
+    }
+}
+
+function Close-Stage4PackageReadFence($Handles) {
+    foreach($stream in $Handles){if($null -ne $stream){$stream.Dispose()}}
+}
+
 function Read-Stage4Package {
     param([string]$Directory,[string]$ManifestSha256,[string]$Commit,[string]$Publisher,[string]$Status='unsigned')
     if($Commit -cnotmatch '^[0-9a-f]{40}$'){throw 'stage4_exact_commit_required'}
     if($Publisher -cnotmatch '^[0-9a-f]{64}$' -or $Publisher -match '^(.)\1{63}$'){throw 'stage4_real_publisher_pin_required'}
-    $root=(Resolve-Path -LiteralPath $Directory).Path
+    $root=Get-Stage4CanonicalWindowsPath -Path $Directory
+    $snapshot=Open-Stage4PackageReadFence -Directory $root -Status $Status
+    try {
     if(Test-Path -LiteralPath (Join-Path $root 'INCOMPLETE-DO-NOT-INSTALL.txt')){throw 'stage4_incomplete_package_forbidden'}
     $mp=Join-Path $root 'stage4.manifest.json'
     if($ManifestSha256 -cnotmatch '^[0-9a-f]{64}$' -or (Get-FileHash -LiteralPath $mp -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ManifestSha256){throw 'stage4_manifest_hash_mismatch'}
@@ -195,14 +228,33 @@ function Read-Stage4Package {
             if($old.Count -ne 1 -or $f.unsignedSha256 -cne $old[0].sha256){throw 'stage4_unsigned_file_provenance_mismatch'}
         }
     }
+    # Rehash every accepted object after PE/provenance parsing. This detects a
+    # concurrent package-file substitution during inspection; the installation
+    # transaction independently hashes the exact staged bytes before STOP.
+    if((Get-FileHash -LiteralPath $mp -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ManifestSha256){throw 'stage4_manifest_changed_during_verification'}
+    if((Get-FileHash -LiteralPath $ip -Algorithm SHA256).Hash.ToLowerInvariant() -cne $m.buildIdentitiesSha256){throw 'stage4_identity_changed_during_verification'}
+    foreach($f in $m.files){
+        $path=Join-Path $root $f.name
+        if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $f.sha256){throw "stage4_component_changed_during_verification:$($f.name)"}
+    }
+    if($Status -ceq 'private-signed' -and
+        (Get-FileHash -LiteralPath (Join-Path $root 'unsigned-stage4.manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $m.unsignedManifestSha256){
+        throw 'stage4_unsigned_manifest_changed_during_verification'
+    }
+    foreach($p in @(Get-Item -LiteralPath $root -Force)+@(Get-ChildItem -LiteralPath $root -Force -Recurse)){
+        if(($p.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'stage4_link_forbidden'}
+        if(-not $p.PSIsContainer -and $p.Extension -match '(?i)^\.(exe|dll)$' -and
+            ($p.DirectoryName -ine $root -or $names -cnotcontains $p.Name)){throw 'stage4_unexpected_binary'}
+    }
     return $m
+    } finally { Close-Stage4PackageReadFence $snapshot }
 }
 
 function Assert-Stage4NewOutput {
     param([string]$Path, [string]$SourceDirectory)
     if ([string]::IsNullOrWhiteSpace($Path)) { throw 'stage4_private_output_required' }
-    $target=[IO.Path]::GetFullPath($Path).TrimEnd('\')
-    $source=[IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\')
+    $target=Get-Stage4CanonicalWindowsPath -Path $Path -AllowMissingLeaf
+    $source=Get-Stage4CanonicalWindowsPath -Path $SourceDirectory
     if (Test-Path -LiteralPath $target) { throw 'stage4_private_output_must_be_new' }
     if ($target -ieq $source -or $target.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase)) {
         throw 'stage4_private_output_must_be_separate'
