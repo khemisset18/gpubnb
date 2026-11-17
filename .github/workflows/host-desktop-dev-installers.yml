@@ -160,6 +160,7 @@ jobs:
           set -euo pipefail
           mkdir -p apps/host-desktop/dist-evidence
           cargo metadata --locked --format-version 1 \
+            --features gpubnb-host-desktop/desktop-runtime \
             > apps/host-desktop/dist-evidence/CARGO-METADATA.json
           (
             cd apps/host-desktop
