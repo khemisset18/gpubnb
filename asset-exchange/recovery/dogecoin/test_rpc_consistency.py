@@ -81,5 +81,49 @@ class RpcConsistencyTests(unittest.TestCase):
             recovery.rebroadcast(self.bundle,rpc)
         self.assertFalse(any(method=='sendrawtransaction' for method,_ in calls))
 
+    def test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip(self):
+        for target,state in [('funding','UTXO_AVAILABLE'),('refund','CONFIRMED')]:
+            for height in (-1,1357):
+                for operation in (recovery.observe,recovery.rebroadcast):
+                    with self.subTest(target=target,height=height,operation=operation.__name__):
+                        base=fixture_tests.FakeRpc(self.bundle,state)
+                        block=('aa' if target=='funding' else 'bb')*32
+                        def rpc(method,*params,**kwargs):
+                            value=base(method,*params,**kwargs)
+                            if method=='getblockheader' and params[0]==block:
+                                return {'height':height,'confirmations':1}
+                            if method=='getblockhash' and params[0]==height:return block
+                            return value
+                        with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+                            operation(self.bundle,rpc)
+                        self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_transaction_and_header_depths_must_match_the_same_observed_tip(self):
+        mutations=[('transaction',1),('transaction',5),('header',1),('header',5),
+                   ('header',True),('header',4.0),('header','4')]
+        for field,value in mutations:
+            for operation in (recovery.observe,recovery.rebroadcast):
+                with self.subTest(field=field,value=value,operation=operation.__name__):
+                    base=fixture_tests.FakeRpc(self.bundle)
+                    def rpc(method,*params,**kwargs):
+                        result=base(method,*params,**kwargs)
+                        if field=='transaction' and method=='getrawtransaction' and params[0]==self.bundle['funding']['txid']:
+                            return {**result,'confirmations':value}
+                        if field=='header' and method=='getblockheader' and params[0]=='aa'*32:
+                            return {**result,'confirmations':value}
+                        return result
+                    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+                        operation(self.bundle,rpc)
+                    self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_coherent_funding_depths_follow_the_observed_tip(self):
+        for tip in (1353,1354,1356):
+            with self.subTest(tip=tip):
+                rpc=fixture_tests.FakeRpc(self.bundle);rpc.tip=tip
+                result=recovery.observe(self.bundle,rpc)
+                self.assertEqual(result['state'],'UTXO_AVAILABLE')
+                self.assertTrue(result['fundingConfirmed'])
+                self.assertFalse(result['automaticSettlement'])
+
 
 if __name__=='__main__':unittest.main()
