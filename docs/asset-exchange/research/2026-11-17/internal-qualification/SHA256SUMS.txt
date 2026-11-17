@@ -1,0 +1,4 @@
+e599c29dcc4b39df533e9bb63a3e741cdf3e5798a9cf8db63ba9cf5e76b67132  docs/asset-exchange/DOGE_INTERNAL_QUALIFICATION_2026-11-17.md
+49d363090d538dcfe0c6591d31f030423531e51be56643d016c817f8903f53d2  docs/asset-exchange/DOGE_INTEGRATION_2026-11-15.md
+6375a54e2c2be01b8ecd6113c7ac3783e366bb68bdf0e875551605ab91f7a79c  docs/asset-exchange/research/2026-11-17/internal-qualification/assessment.json
+7f7eab71f12889184a2702dd9a3b7dfad9bd8a59f12d8919c10e3dae6113eefa  docs/asset-exchange/research/2026-11-17/internal-qualification/auxpow-source-review.json

@@ -1,6 +1,9 @@
 # DOGE — candidat intégré de validation, 15 novembre 2026
 
-> État courant : finalisation du17 novembre ci-dessous. Les résultats du15 novembre restent historiques.
+> État courant : [qualification technique interne du17 novembre](DOGE_INTERNAL_QUALIFICATION_2026-11-17.md).
+> Décision interne FAIL sur les trois alertes de sécurité. Aucun auditeur externe
+> n'est attendu pour les essais privés ; audit indépendant D9 NON RÉALISÉ hors mission.
+> Les résultats ci-dessous restent des instantanés historiques à leurs SHA.
 
 **Brouillon, qualification complète BLOCKED.** Aucun merge `main`/`dev`,
 déploiement, activation, fonds réels ou opération Mainnet.

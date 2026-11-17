@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "sourceFile": "src/auxpow.cpp",
+  "sourceFileSha256": "b22c836336b15e4902af21631423e98120846948424f277c31ccd04fa0f0e414",
+  "errorExitsInspected": 12,
+  "errorExitsMappedToRetainedNativeObservation": 12,
+  "observations": [
+    {
+      "reason": "AuxPow is not a generate",
+      "runId": 43311713839,
+      "case": "parent-noncoinbase-index",
+      "measurement": "paired native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW parent has our chain ID",
+      "runId": 43074060943,
+      "case": "parent-chain-id",
+      "measurement": "native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW chain merkle branch too long",
+      "runId": 43074060943,
+      "case": "chain-branch-length",
+      "measurement": "native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW merkle root incorrect",
+      "runId": 43074060943,
+      "case": "parent-merkle-root",
+      "measurement": "native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW coinbase has no inputs",
+      "runId": 43311713839,
+      "case": "parent-no-inputs",
+      "measurement": "paired native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW missing chain merkle root in parent coinbase",
+      "runId": 43074060943,
+      "case": "chain-root",
+      "measurement": "native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Multiple merged mining headers in coinbase",
+      "runId": 43311713839,
+      "case": "duplicate-merged-headers",
+      "measurement": "paired native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Merged mining header is not just before chain merkle root",
+      "runId": 43311713839,
+      "case": "displaced-merged-header",
+      "measurement": "paired native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW chain merkle root must start in the first 20 bytes of the parent coinbase",
+      "runId": 43311713839,
+      "case": "legacy-root-offset-21",
+      "measurement": "paired native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW missing chain merkle tree size and nonce in parent coinbase",
+      "runId": 43311713839,
+      "case": "missing-commitment-nonce",
+      "measurement": "paired native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW merkle branch size does not match parent coinbase",
+      "runId": 43074060943,
+      "case": "chain-size",
+      "measurement": "native error log + false admission + unchanged tips"
+    },
+    {
+      "reason": "Aux POW wrong index",
+      "runId": 43074060943,
+      "case": "chain-index",
+      "measurement": "native error log + false admission + unchanged tips"
+    }
+  ],
+  "additionalNativeParentWorkRejection": {
+    "runId": 43074060943,
+    "case": "parent-work",
+    "measurement": "native error log + false admission + unchanged tips"
+  },
+  "parserChecks": [
+    "truncated-parent-header",
+    "noncanonical-parent-branch-count"
+  ],
+  "nativeTestsRepeated": false,
+  "coverageInstrumentationUsed": false,
+  "exhaustiveParserOrConsensusFuzzing": false,
+  "independentExternalReviewPerformed": false,
+  "internalReviewResult": "PASS for the twelve explicit error exits of the pinned function only",
+  "fullD6QualificationStatus": "BLOCKED"
+}

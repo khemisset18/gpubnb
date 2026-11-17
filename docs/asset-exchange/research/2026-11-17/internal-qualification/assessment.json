@@ -1,0 +1,1598 @@
+{
+  "schemaVersion": 1,
+  "assessmentKind": "INTERNAL_TECHNICAL_QUALIFICATION",
+  "preparedAtUtc": "2026-11-17T21:26:54.198364+00:00",
+  "referencePr": 376,
+  "referenceHead": "39189e689c32e8f09ad7e11b899f5d1266f86b26",
+  "runnerFixCommit": "0c0f83caab6a78e575a4e4f4bf00824ccf7ea6a1",
+  "availablePoolCommit": "30b7b65d51445f698b7d363c795b53af8cf2fc23",
+  "sourceTreeBeforeReport": "9d1296f7c74fa032b18a9b15160da7df6bae7bbb",
+  "internalDecision": "FAIL",
+  "decisionReason": "Mandatory strict Rust/Desktop security gates are executed and fail on three reported dependencies. No independent auditor is required or awaited for this internal decision.",
+  "independentAudit": "NON_REALISE_HORS_MISSION",
+  "externalAuditBlocksPrivateTests": false,
+  "fullFinancialQualification": "BLOCKED",
+  "profileId": "DOGE-1.14.9-LEGACY-P2SH-CLTV-REGTEST-CANDIDATE-1",
+  "profileSnapshotSha256": "fbfd1dd561f4c9bbde26124148386f9a3e565e9635ca5efcb0123a89deb98bd3",
+  "scope": "exact retained private Regtest profile; synthetic UTXOs; original financial/crypto code unchanged; no Mainnet/real funds/activation",
+  "codeDeltaThisMission": [
+    "host-desktop-dev-installers.yml: retired macos-14 replaced by supported macOS runner pool; no source/gate/lock change",
+    "installer cargo metadata explicitly enables gpubnb-host-desktop/desktop-runtime; fixes omitted native dependency evidence only"
+  ],
+  "repeatedDogeNativeSuites": 0,
+  "sourceCorrespondence": [
+    {
+      "proof": "recovery",
+      "executionCommit": "e3fbbe6339d2eaecc6bd999daf2d9fe7fb6a1816",
+      "changedSinceExecutedProof": [
+        "asset-exchange/qualification/dogecoin/d6/test_funding_reorg.py"
+      ]
+    },
+    {
+      "proof": "rbf",
+      "executionCommit": "fc2d34c58e0696e48c4490cf758070d861058fc8",
+      "changedSinceExecutedProof": [
+        "asset-exchange/qualification/dogecoin/policy/test_rbf_routes.py"
+      ]
+    },
+    {
+      "proof": "vm",
+      "executionCommit": "6307538265aef8273447891f445a28531043d1b5",
+      "changedSinceExecutedProof": [
+        "asset-exchange/qualification/dogecoin/d6/vm_recovery.py",
+        "asset-exchange/recovery/dogecoin/cleanroom.py",
+        "asset-exchange/recovery/dogecoin/recovery_core.py"
+      ]
+    }
+  ],
+  "vmDeltaReview": "Later core changes are extra fail-closed consistency/funding guards, tested in30 recovery tests and native run43760009110. vm_recovery adds only the MIT copying file; cleanroom retains exact known refusal JSON before comparison. The old full VM run is not attributed to the current core.",
+  "syntheticPrExecution": "a4ed8e5f14e8cc72e59b197508acfc79693d8506",
+  "hostProofsVerifiedAfterDownload": [
+    {
+      "artifactId": 14365183776,
+      "zipSha256": "5f440009a0c588971240ea474679b3d67df263a2b837dd4f2740c131142d7b53",
+      "executionCommit": "a4ed8e5f14e8cc72e59b197508acfc79693d8506",
+      "nativeEffect": false,
+      "result": "PASS",
+      "observedLogs": {
+        "anchor-host.log": [
+          "ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s",
+          "ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "security-regressions.log": [
+          "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "desktop-host.log": [
+          "ok. 108 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.28s",
+          "ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.02s",
+          "ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.02s",
+          "ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+          "ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.02s",
+          "ok. 56 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.03s",
+          "ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ]
+      },
+      "fullLinuxTauriCompile": {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "-p",
+          "gpubnb-host-desktop",
+          "--features",
+          "desktop-runtime",
+          "--all-targets"
+        ],
+        "name": "tauri-native-compile",
+        "result": "PASS"
+      },
+      "rand07AndLibsecpAbsent": true,
+      "actualVendoredGlibSelected": true
+    },
+    {
+      "artifactId": 14366880767,
+      "zipSha256": "535128a06aa3a01c272922530ae30f681ca64fa4302c214cdaeb3a28c29b3413",
+      "executionCommit": "a4ed8e5f14e8cc72e59b197508acfc79693d8506",
+      "nativeEffect": false,
+      "result": "PASS_HOST_RECOVERY_COMPATIBILITY",
+      "observedLogs": {
+        "candidate-recovery.log": [
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s"
+        ],
+        "baseline-recovery.log": [
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s"
+        ]
+      },
+      "baseline": {
+        "pass": 2,
+        "fail": 0,
+        "ignored": 0,
+        "publicRecoveryCases": 1636
+      },
+      "candidate": {
+        "pass": 2,
+        "fail": 0,
+        "ignored": 0,
+        "publicRecoveryCases": 1636
+      },
+      "rand07AndLibsecpAbsent": true,
+      "actualVendoredGlibSelected": true
+    },
+    {
+      "artifactId": 14366135865,
+      "zipSha256": "8c8bd5f984e4e0a33f3589ecc34c419203024f440c6d32280d7b5a010e6b1995",
+      "executionCommit": "a4ed8e5f14e8cc72e59b197508acfc79693d8506",
+      "nativeEffect": false,
+      "result": "PASS_HOST_RECOVERY_COMPATIBILITY",
+      "observedLogs": {
+        "candidate-recovery.log": [
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s"
+        ],
+        "baseline-recovery.log": [
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s"
+        ]
+      },
+      "baseline": {
+        "pass": 2,
+        "fail": 0,
+        "ignored": 0,
+        "publicRecoveryCases": 1636
+      },
+      "candidate": {
+        "pass": 2,
+        "fail": 0,
+        "ignored": 0,
+        "publicRecoveryCases": 1636
+      },
+      "rand07AndLibsecpAbsent": true,
+      "actualVendoredGlibSelected": true
+    },
+    {
+      "artifactId": 14364259547,
+      "zipSha256": "31166ad5d197582f04fe78f059130e17910167cba398bc19195ae3a940275fbb",
+      "executionCommit": "a4ed8e5f14e8cc72e59b197508acfc79693d8506",
+      "nativeEffect": false,
+      "result": "PASS_HOST_RECOVERY_COMPATIBILITY",
+      "observedLogs": {
+        "candidate-recovery.log": [
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s"
+        ],
+        "baseline-recovery.log": [
+          "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s"
+        ]
+      },
+      "baseline": {
+        "pass": 2,
+        "fail": 0,
+        "ignored": 0,
+        "publicRecoveryCases": 1636
+      },
+      "candidate": {
+        "pass": 2,
+        "fail": 0,
+        "ignored": 0,
+        "publicRecoveryCases": 1636
+      },
+      "rand07AndLibsecpAbsent": true,
+      "actualVendoredGlibSelected": true
+    }
+  ],
+  "nativeArchivesReverifiedAfterDownload": [
+    {
+      "runId": 43760009110,
+      "artifactId": 14179763049,
+      "label": "funding-reorg",
+      "zipSha256": "1771c3b4f504949bbe615891703ed03289d9449c1702430720d080325cd5ef3d",
+      "nativeTestsRepeated": false,
+      "zipAndInternalDigestsVerified": true,
+      "internalFiles": 8,
+      "daemonMethodCounters": {
+        "a": 117,
+        "b": 52
+      },
+      "rpcCalls": 173,
+      "generatedBlocks": 2,
+      "passCount": 2,
+      "fail": 0,
+      "skip": 0,
+      "retainedKoinu": "98000000",
+      "refusalBroadcasts": 0,
+      "newSignatures": 0
+    },
+    {
+      "runId": 43108343770,
+      "artifactId": 13894708328,
+      "label": "fee-pinning",
+      "zipSha256": "086129108e4d4e6616357995557218a8a13fb9da0947455584c2233fe4c3a772",
+      "nativeTestsRepeated": false,
+      "zipAndInternalDigestsVerified": true,
+      "internalFiles": 11,
+      "daemonMethodCounters": {
+        "a": 432,
+        "b": 52
+      },
+      "rpcCalls": 488,
+      "generatedBlocks": 1362,
+      "passCount": 15,
+      "fail": 0,
+      "skip": 0
+    }
+  ],
+  "officialFreshReview": [
+    {
+      "name": "borsh-ghsa",
+      "url": "https://api.github.com/advisories/GHSA-fjx5-qpf4-xjf2",
+      "sha256": "5e7492bdad7c17aa5a188e2f95fcb71683e27a5133b1368011965422ea3edecf",
+      "observation": {
+        "vulnerabilities": [
+          {
+            "package": {
+              "ecosystem": "rust",
+              "name": "borsh"
+            },
+            "vulnerable_version_range": "<= 0.10.3",
+            "first_patched_version": "1.0.0-alpha.1",
+            "vulnerable_functions": []
+          }
+        ],
+        "updated_at": "2023-09-29T18:12:12Z"
+      }
+    },
+    {
+      "name": "borsh-osv",
+      "url": "https://api.osv.dev/v1/vulns/RUSTSEC-2023-0033",
+      "sha256": "999cb875d34f2fd4f85045fe18b3aad22c217cb5b3aee7dc6fb80658dd2ef42a",
+      "observation": {
+        "affected": [
+          {
+            "package": {
+              "name": "borsh",
+              "ecosystem": "crates.io",
+              "purl": "pkg:cargo/borsh"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "0.0.0-0"
+                  },
+                  {
+                    "fixed": "0.10.4"
+                  },
+                  {
+                    "introduced": "0.11.0-0"
+                  },
+                  {
+                    "fixed": "1.0.0-alpha.1"
+                  }
+                ]
+              }
+            ],
+            "ecosystem_specific": {
+              "affects": {
+                "arch": [],
+                "functions": [],
+                "os": []
+              },
+              "affected_functions": null
+            },
+            "database_specific": {
+              "categories": [
+                "memory-corruption"
+              ],
+              "cvss": null,
+              "informational": "unsound",
+              "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2023-0033.json"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "borsh-machine",
+      "url": "https://raw.githubusercontent.com/github/advisory-database/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+      "sha256": "4c3aadc6d50891c8915216904db59d7f3cfaef21f0766ab802caf4a539312447",
+      "observation": {
+        "affected": [
+          {
+            "package": {
+              "ecosystem": "crates.io",
+              "name": "borsh"
+            },
+            "ranges": [
+              {
+                "type": "ECOSYSTEM",
+                "events": [
+                  {
+                    "introduced": "0"
+                  },
+                  {
+                    "fixed": "1.0.0-alpha.1"
+                  }
+                ]
+              }
+            ],
+            "database_specific": {
+              "last_known_affected_version_range": "<= 0.10.3"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "glib-registry",
+      "url": "https://crates.io/api/v1/crates/glib",
+      "sha256": "020d7e404436165cb3127c67d521c21cee19804b29a85d98ffb2bbfc0cf47d61",
+      "observation": {
+        "stable": "0.22.11",
+        "lastPublished": "0.22.11",
+        "patch010": [
+          "0.10.3",
+          "0.10.2",
+          "0.10.1",
+          "0.10.0"
+        ],
+        "patch018": [
+          "0.18.5",
+          "0.18.4",
+          "0.18.3",
+          "0.18.2",
+          "0.18.1",
+          "0.18.0"
+        ]
+      }
+    },
+    {
+      "name": "tauri-registry",
+      "url": "https://crates.io/api/v1/crates/tauri",
+      "sha256": "3953a2720ef31b9ea126389349a2b84613f5a4b59eafd607ceb36dd198fb3694",
+      "observation": {
+        "stable": "2.12.6",
+        "lastPublished": "2.12.6",
+        "patch010": [
+          "0.10.0"
+        ],
+        "patch018": []
+      }
+    },
+    {
+      "name": "wry-registry",
+      "url": "https://crates.io/api/v1/crates/wry",
+      "sha256": "83cc8800eec0c1c97837ecb1526d4929b32e2d36b30ee2a1ac786acbbbb1d95b",
+      "observation": {
+        "stable": "0.57.2",
+        "lastPublished": "0.57.2",
+        "patch010": [
+          "0.10.3",
+          "0.10.2",
+          "0.10.1",
+          "0.10.0"
+        ],
+        "patch018": [
+          "0.18.3",
+          "0.18.2",
+          "0.18.1",
+          "0.18.0"
+        ]
+      }
+    },
+    {
+      "name": "tao-registry",
+      "url": "https://crates.io/api/v1/crates/tao",
+      "sha256": "8a30003f5fc243f18aaa0ef7f20553b4cb6eb93b7e1783f60c33976ed2b125d8",
+      "observation": {
+        "stable": "0.37.2",
+        "lastPublished": "0.37.2",
+        "patch010": [
+          "0.10.0"
+        ],
+        "patch018": [
+          "0.18.3",
+          "0.18.2",
+          "0.18.1",
+          "0.18.0"
+        ]
+      }
+    },
+    {
+      "name": "borsh-registry",
+      "url": "https://crates.io/api/v1/crates/borsh",
+      "sha256": "904114331e44307c8b3aeebeb92ffc2d4574ff8e1aa8b5674175fec22f601ab3",
+      "observation": {
+        "stable": "1.8.1",
+        "lastPublished": "1.8.1",
+        "patch010": [
+          "0.10.4",
+          "0.10.3",
+          "0.10.2",
+          "0.10.1",
+          "0.10.0"
+        ],
+        "patch018": []
+      }
+    },
+    {
+      "name": "picomatch-registry",
+      "url": "https://registry.npmjs.org/picomatch",
+      "sha256": "9a8e64f1208fef4d18c27f48267e00c639b65743484cf3f5e788d018195b6fbb",
+      "observation": {
+        "tags": {
+          "latest": "4.0.7"
+        },
+        "lastVersions": [
+          "4.0.4",
+          "4.0.5",
+          "4.0.6",
+          "4.0.7"
+        ]
+      }
+    },
+    {
+      "name": "tauri-migration",
+      "url": "https://api.github.com/repos/tauri-apps/tauri/pulls/16170",
+      "sha256": "38c010b0fe9e6649782f876e7399ce71acf25652bd0516a617c30ffcb725dcca",
+      "observation": {
+        "state": "open",
+        "merged": false,
+        "title": "chore(deps): update gtk crates to 0.19",
+        "updated_at": "2026-10-21T08:25:44Z",
+        "merge_commit_sha": null,
+        "head": "899ca2105ffd06293013b6d2bff4416987d99010"
+      }
+    },
+    {
+      "name": "wry-migration",
+      "url": "https://api.github.com/repos/tauri-apps/wry/pulls/1843",
+      "sha256": "57e1fd01659d025ac91f123050a5fcbd2b1aa5c067c781d8f5e08df666924394",
+      "observation": {
+        "state": "open",
+        "merged": false,
+        "title": "chore(deps): update gtk crates to 0.19",
+        "updated_at": "2026-10-18T20:25:20Z",
+        "merge_commit_sha": null,
+        "head": "327242ae73301c5e34dcc158e31ae453e8afe837"
+      }
+    },
+    {
+      "name": "tao-migration",
+      "url": "https://api.github.com/repos/tauri-apps/tao/pulls/1332",
+      "sha256": "1d2069ff1608e12bbec962431f3f643567efbd0a753d629279388a8c7f6f8730",
+      "observation": {
+        "state": "open",
+        "merged": false,
+        "title": "chore(deps): update gtk crates to 0.19",
+        "updated_at": "2026-09-22T14:41:10Z",
+        "merge_commit_sha": "7fb151ea83c291b424781696101a317d33657837",
+        "head": "08660027c723e09a45b10badf60a73a661c94a95"
+      }
+    },
+    {
+      "name": "picomatch-238",
+      "url": "https://api.github.com/repos/micromatch/picomatch/pulls/238",
+      "sha256": "2ec8d719d134f39ff9b907178c2c1149b2610339f239667a207a8a279bd223d5",
+      "observation": {
+        "state": "open",
+        "merged": false,
+        "title": "fix: literalize single-branch extglobs with a leading bare quantifier (CVE-2026-112366)",
+        "updated_at": "2026-11-17T18:37:00Z",
+        "merge_commit_sha": "0a04524bc1967cf706f0c08cdaa19644e6467041",
+        "head": "44f192261f312ddf236cb7bdc05d8f22663f98f9"
+      }
+    },
+    {
+      "name": "picomatch-246",
+      "url": "https://api.github.com/repos/micromatch/picomatch/pulls/246",
+      "sha256": "301690f37ba5d58eb8059c1d11b33eee64a8f8de472923dcd7b91a01f520f903",
+      "observation": {
+        "state": "open",
+        "merged": false,
+        "title": "[v2] Guard single-branch repeated-star extglobs against ReDoS",
+        "updated_at": "2026-11-05T16:35:53Z",
+        "merge_commit_sha": "a94d0cf76113e8344ad2edb0ef80fafdcb99f54b",
+        "head": "f03bec2c02e46f063fbfdc161aae1d0f854b2565"
+      }
+    }
+  ],
+  "upstreamCandidateReview": {
+    "picomatch238": {
+      "state": "open/unmerged",
+      "head": "44f192261f312ddf236cb7bdc05d8f22663f98f9",
+      "filesSha256": "79fb5e7c519aad28d730f51757bc3e6fdcfa501250fa7b718e80eaa31753a319",
+      "analysis": "Literalizes certain leading-quantifier extglobs, changes matcher semantics; not a published compatible release. Not adopted."
+    },
+    "picomatch246": {
+      "state": "open/unmerged",
+      "head": "f03bec2c02e46f063fbfdc161aae1d0f854b2565",
+      "filesSha256": "7ee3273f27dabb947adde5340c9652c895254c3047337699b3c383318073ad8b",
+      "analysis": "Proposal for v2; active Vite/tinyglobby graph requires v4. No incompatible downgrade applied."
+    },
+    "anchorPatchVersions": {
+      "versionsChecked": [
+        "0.31.1",
+        "0.31.2",
+        "0.31.3"
+      ],
+      "borshRequirementAll": "^0.10.3",
+      "highestPublished010": "0.10.4",
+      "disposition": "A compatible Anchor patch does not remove the authentic flagged Borsh version; current published source fix retained."
+    }
+  },
+  "macosInstaller": {
+    "beforeJob": 134332212908,
+    "beforeRun": 44166034756,
+    "beforeLabels": [
+      "macos-14"
+    ],
+    "beforeConclusion": "cancelled",
+    "beforeRunnerId": 0,
+    "beforeSteps": [],
+    "beforeExactAnnotation": "The configuration 'macos-14-arm64-us-default' is not supported",
+    "officialRetirementDate": "2026-11-02",
+    "officialRetirementUrl": "https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/",
+    "firstSupportedJob": 134355977401,
+    "firstSupportedLabel": "macos-15",
+    "firstSupportedObservation": "queued with no runner/steps/errors; pool not allocated during observed wait",
+    "currentRun": 44178051127,
+    "currentMacJob": 134374612552,
+    "currentLabel": "macos-latest",
+    "currentStatusAtPreparation": "SUCCESS",
+    "statusIsNotPass": false,
+    "otherExistingWorkflowSamePoolPassJob": 134355977487,
+    "internalComponentDecision": "PASS_BUILD_AND_ARTIFACT_INTEGRITY_ONLY",
+    "exactCapacityFailure": "The job was not acquired by Runner of type hosted even after multiple attempts",
+    "exactCapacityNotice": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.",
+    "nextRun": 44178051127,
+    "nextMacJob": 134374612552,
+    "nextStatus": "SUCCESS",
+    "previousCapacityResult": {
+      "job": {
+        "id": 134362564799,
+        "run_id": 44174624762,
+        "status": "completed",
+        "conclusion": "cancelled",
+        "runner_id": 0,
+        "runner_name": "",
+        "labels": [
+          "macos-latest"
+        ],
+        "steps": [],
+        "created_at": "2026-11-17T20:56:55Z",
+        "started_at": "2026-11-17T20:56:55Z",
+        "completed_at": "2026-11-17T21:12:00Z"
+      },
+      "check": {
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-11-17T20:56:55Z",
+        "completed_at": "2026-11-17T21:12:00Z",
+        "output": {
+          "title": null,
+          "summary": null,
+          "text": null,
+          "annotations_count": 4,
+          "annotations_url": "https://api.github.com/repos/khemisset18/gpubnb/check-runs/134362564799/annotations"
+        },
+        "details_url": "https://github.com/khemisset18/gpubnb/actions/runs/44174624762/job/134362564799"
+      },
+      "annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/khemisset18/gpubnb/blob/30b7b65d51445f698b7d363c795b53af8cf2fc23/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "The job was not acquired by Runner of type hosted even after multiple attempts",
+          "raw_details": ""
+        },
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/khemisset18/gpubnb/blob/30b7b65d51445f698b7d363c795b53af8cf2fc23/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "notice",
+          "title": "",
+          "message": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.",
+          "raw_details": ""
+        },
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/khemisset18/gpubnb/blob/30b7b65d51445f698b7d363c795b53af8cf2fc23/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "notice",
+          "title": "",
+          "message": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.",
+          "raw_details": ""
+        },
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/khemisset18/gpubnb/blob/30b7b65d51445f698b7d363c795b53af8cf2fc23/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "notice",
+          "title": "",
+          "message": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.",
+          "raw_details": ""
+        }
+      ]
+    }
+  },
+  "phases": [
+    {
+      "phase": "D0",
+      "fullStatus": "PASS_LIMITED",
+      "internalObservations": "PASS",
+      "proofs": [
+        40866305437
+      ],
+      "scope": "pinned source-rebuild route only",
+      "remaining": "prebuilt GPG route is separate and not selected"
+    },
+    {
+      "phase": "D1",
+      "fullStatus": "PASS_LIMITED",
+      "internalObservations": "PASS",
+      "proofs": [
+        40892872892,
+        43760009110
+      ],
+      "scope": "private Regtest version/genesis/namespace identity only",
+      "remaining": "no public-network qualification requested"
+    },
+    {
+      "phase": "D2",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "PASS_WITHIN_PROFILE",
+      "proofs": [
+        42875442068,
+        43005573333
+      ],
+      "scope": "32 native controls,24 typed predicates, reviewed legacy P2SH/CLTV candidate",
+      "remaining": "profile CANDIDATE_NOT_APPROVED; exact wallet/signer/hardware prerequisites are broader than the bounded matrix; no external auditor awaited for private tests"
+    },
+    {
+      "phase": "D3",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "PASS_WITHIN_PROFILE",
+      "proofs": [
+        43060202035
+      ],
+      "scope": "activation1350/1351, height/time/MTP, six sighashes, legacy malleability;2357 assertions",
+      "remaining": "full D2/profile prerequisites; no CSV/SegWit enabled"
+    },
+    {
+      "phase": "D4",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "PASS_WITHIN_PROFILE",
+      "proofs": [
+        42875442068,
+        43052066409,
+        43760009110
+      ],
+      "scope": "native funding/claim/refund and refusal controls; pre-lock bundle; current recovery source",
+      "remaining": "full financial/service/signer integration is not qualified or enabled"
+    },
+    {
+      "phase": "D5",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "PASS_WITHIN_BOUNDS",
+      "proofs": [
+        43108343770,
+        43326020199,
+        43484240757
+      ],
+      "scope": "15 fee/pinning controls; count100/101; unconfirmed/confirmed input; bounded fee ladder",
+      "remaining": "finite fee cap and pinning risks require explicit financial risk acceptance; arbitrary fees not guaranteed"
+    },
+    {
+      "phase": "D6",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "PASS_WITHIN_BOUNDS",
+      "proofs": [
+        43074060943,
+        43311713839,
+        43760009110
+      ],
+      "scope": "8+12 AuxPoW controls; all12 explicit CAuxPow::check error exits mapped; partitions/reorg/watchers",
+      "remaining": "full profile prerequisites; no exhaustive parser fuzzing claim; direct funding guard isolated in software"
+    },
+    {
+      "phase": "D7",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "PASS_VM_SCOPE_ONLY",
+      "proofs": [
+        43111959236,
+        43760009110
+      ],
+      "scope": "14 incidents + replacement VM; no original keys/backend; current keyless recovery native check",
+      "remaining": "physical host independence, real in-place reboot and physical power-loss behavior NOT_TESTED"
+    },
+    {
+      "phase": "D8",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "PASS_SOFTWARE_POLICY_ONLY",
+      "proofs": [
+        44166034489
+      ],
+      "scope": "12 external-signer policy tests, real OpenSSL public verification and exact terms; no native signing device",
+      "remaining": "hardware/firmware/display/profile/disconnect qualification NOT_TESTED"
+    },
+    {
+      "phase": "D9",
+      "fullStatus": "BLOCKED",
+      "internalObservations": "FAIL_SECURITY_GATES",
+      "proofs": [
+        43316922937,
+        44178051033
+      ],
+      "scope": "immutable source/evidence review and current strict scans",
+      "independentAudit": "NON_REALISE_HORS_MISSION",
+      "remaining": "three strict findings; full earlier criteria incomplete; independent audit not replaced by this report"
+    }
+  ],
+  "scenarioCoverage": [
+    {
+      "topic": "funding-claim-refund",
+      "result": "PASS",
+      "evidence": [
+        42875442068,
+        43052066409
+      ],
+      "limit": "synthetic private Regtest transactions, not a production financial service"
+    },
+    {
+      "topic": "double-spend-and-conflicts",
+      "result": "PASS",
+      "evidence": [
+        42875442068,
+        43108343770
+      ],
+      "limit": "actual UTXOs/mempools and conflicting branches; bounded fixtures"
+    },
+    {
+      "topic": "extreme-fees-and-dust",
+      "result": "PASS",
+      "evidence": [
+        43005573333,
+        43108343770
+      ],
+      "limit": "positive adequate pre-signature and zero-broadcast exhaustion; arbitrary fee coverage impossible with finite signatures"
+    },
+    {
+      "topic": "RBF-and-mempool",
+      "result": "PASS",
+      "evidence": [
+        43108343770,
+        43326020199,
+        43484240757
+      ],
+      "limit": "count case retained from initially failed overall run; corrected input case alone retried. Recovery sequence0xfffffffe remains non-opt-in"
+    },
+    {
+      "topic": "reorganizations-and-active-confirmations",
+      "result": "PASS",
+      "evidence": [
+        43111959236,
+        43311713839,
+        43760009110
+      ],
+      "limit": "private fixed depths; no inference from a sent flag or spent-output flag alone"
+    },
+    {
+      "topic": "incoherent-RPC-versus-chain",
+      "result": "PASS",
+      "evidence": [
+        44166034489,
+        43760009110
+      ],
+      "limit": "contradictory RPCs isolated in software; actual native header-lead guard refuses first"
+    },
+    {
+      "topic": "backend-failure-and-original-key-loss",
+      "result": "PASS",
+      "evidence": [
+        43111959236,
+        43760009110
+      ],
+      "limit": "public parcel, separate namespaces and VM handoffs; old VM proof retains its original core revision"
+    },
+    {
+      "topic": "restart-and-recovery",
+      "result": "PASS",
+      "evidence": [
+        43108343770,
+        43111959236
+      ],
+      "limit": "software/process/VM evidence; physical reboot and power outage NOT_TESTED"
+    },
+    {
+      "topic": "AuxPoW-and-malformed-proofs",
+      "result": "PASS",
+      "evidence": [
+        43074060943,
+        43311713839
+      ],
+      "limit": "12 exact source error exits mapped,2 parser controls and4 positive boundaries; no fuzzing completeness claim"
+    },
+    {
+      "topic": "nonconforming-transactions",
+      "result": "PASS",
+      "evidence": [
+        42875442068,
+        43060202035,
+        44166034489
+      ],
+      "limit": "wrong secret/key/lock/destination/script/amount/sighash and serialization controls within frozen profile"
+    },
+    {
+      "topic": "signature-safety",
+      "result": "PASS",
+      "evidence": [
+        44166034602,
+        44166034964,
+        44166034489
+      ],
+      "limit": "1636 public host recovery cases per old/new wrapper on3OS; DOGE software signature policy; SBF/hardware not implied"
+    },
+    {
+      "topic": "exact-financial-terms",
+      "result": "PASS",
+      "evidence": [
+        44166034489,
+        43760009110
+      ],
+      "limit": "independent bundle receipt, UTXO value, destination, fee, lock, sequence, sighash; real hardware screen not observed"
+    },
+    {
+      "topic": "errors-and-fail-closed-refusals",
+      "result": "PASS",
+      "evidence": [
+        44166034489,
+        43108343770,
+        43760009110
+      ],
+      "limit": "failed guards prohibit send/sign/settlement; exact known refusal still required"
+    },
+    {
+      "topic": "twenty-directions-and-settlement-gates",
+      "result": "PASS",
+      "evidence": [
+        44166034489
+      ],
+      "limit": "repository configuration inspection only; no live deployment changed"
+    }
+  ],
+  "strictFindings": [
+    {
+      "package": "borsh",
+      "version": "0.10.4",
+      "id": "GHSA-fjx5-qpf4-xjf2",
+      "severity": "MEDIUM",
+      "status": "FAIL",
+      "remainingCategory": "OFFICIAL_ADVISORY_DATA_CORRECTION_UNPUBLISHED"
+    },
+    {
+      "package": "glib",
+      "version": "0.18.5",
+      "id": "GHSA-wrw7-89jp-8q8g",
+      "severity": "MEDIUM",
+      "status": "FAIL",
+      "remainingCategory": "COMPATIBLE_OFFICIAL_MIGRATION_UNPUBLISHED"
+    },
+    {
+      "package": "picomatch",
+      "version": "4.0.5",
+      "id": "GHSA-fc5q-39xc-vjpf / CVE-2026-112366",
+      "severity": "HIGH",
+      "status": "FAIL",
+      "remainingCategory": "COMPATIBLE_OFFICIAL_FIX_UNPUBLISHED"
+    }
+  ],
+  "otherRemaining": [
+    {
+      "item": "physical hosts/reboot/hardware signer",
+      "category": "HARDWARE_UNAVAILABLE",
+      "requiredForFullQualification": true
+    },
+    {
+      "item": "SBF/runtime/CPI/accounts if selected for financial path",
+      "category": "SPECIFIC_RUNTIME_QUALIFICATION_NOT_PERFORMED",
+      "requiredForFullQualification": "if applicable; host checks do not establish it"
+    },
+    {
+      "item": "independent D9 audit",
+      "category": "EXTERNAL_HUMAN_CONTROL_OUTSIDE_THIS_MISSION",
+      "internalDecisionImpact": false
+    },
+    {
+      "item": "financial activation/main-dev merge",
+      "category": "EXPLICIT_OWNER_DECISION",
+      "internalDecisionImpact": false
+    }
+  ],
+  "all20DirectionsRemainDisabled": true,
+  "automaticSettlement": false,
+  "dogeCatalogInspection": {
+    "supportStatus": "MARKETPLACE_ONLY",
+    "newTradesEnabled": false,
+    "settlementRoute": null
+  },
+  "sourceIntegrity": {
+    "preservedSourceManifest": "docs/asset-exchange/research/2026-11-17/finalization/preserved-sources.json",
+    "verifiedFiles": 191,
+    "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "cargoLockSha256": "af9bb9a1fef24b84a616f1c8b5017a99f4cb3aea57134fd8fdc393e336b7611d",
+    "recoveryCoreSha256": "0b5ea29713c5878e6787e38d46951f41acc54f0bafaf7e2424d51e82a871bd37",
+    "glibFixFileSha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc"
+  },
+  "runtimeEvidenceFixCommit": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+  "syntheticTreeIdentityVerifiedDirectly": {
+    "method": "git rev-parse <commit>^{tree} for both fetched Git objects, not a three-dot comparison",
+    "syntheticCommit": "a4ed8e5f14e8cc72e59b197508acfc79693d8506",
+    "prHead": "39189e689c32e8f09ad7e11b899f5d1266f86b26",
+    "syntheticTree": "2680cb03a9bbdd0f10c3808455fb7f19ee948132",
+    "headTree": "2680cb03a9bbdd0f10c3808455fb7f19ee948132",
+    "equal": true
+  },
+  "runnerCandidateSyntheticTreeIdentity": {
+    "executionCommit": "fd076c433069f686bcb10bd665741dbbef815faa",
+    "prHead": "30b7b65d51445f698b7d363c795b53af8cf2fc23",
+    "directGitTree": "f4a13061f70fd5448b9de4eb69eadd3ce84dd5b3",
+    "localCandidateTree": "f4a13061f70fd5448b9de4eb69eadd3ce84dd5b3",
+    "equal": true
+  },
+  "strictArtifactsReverified": [
+    {
+      "label": "strict",
+      "artifactId": 14369676360,
+      "runId": 44174624862,
+      "head": "30b7b65d51445f698b7d363c795b53af8cf2fc23",
+      "zipSha256": "a12394ce00dda6ef0c580427612a90abd6e7058eb455b90a045348c4fdf26921",
+      "verifiedAtUtc": "2026-11-17T21:09:33.636878+00:00",
+      "findings": [
+        {
+          "target": "Cargo.lock",
+          "package": "borsh",
+          "version": "0.10.4",
+          "id": "GHSA-fjx5-qpf4-xjf2",
+          "severity": "MEDIUM",
+          "fixed": "1.0.0-alpha.1"
+        },
+        {
+          "target": "Cargo.lock",
+          "package": "glib",
+          "version": "0.18.5",
+          "id": "GHSA-wrw7-89jp-8q8g",
+          "severity": "MEDIUM",
+          "fixed": "0.20.0"
+        },
+        {
+          "target": "apps/host-desktop/package-lock.json",
+          "package": "picomatch",
+          "version": "4.0.5",
+          "id": "CVE-2026-112366",
+          "severity": "HIGH",
+          "fixed": null
+        }
+      ]
+    },
+    {
+      "label": "npm",
+      "artifactId": 14367959894,
+      "runId": 44174624862,
+      "head": "30b7b65d51445f698b7d363c795b53af8cf2fc23",
+      "zipSha256": "6388e7858a76edd4bb394e682b72db39078c7fce5875953a0a2beec777a11fa9",
+      "verifiedAtUtc": "2026-11-17T21:09:33.789234+00:00",
+      "findings": [
+        {
+          "package": "fdir",
+          "severity": "high",
+          "range": ">=5.2.1",
+          "fixAvailable": {
+            "name": "vite",
+            "version": "6.2.7",
+            "isSemVerMajor": true
+          },
+          "via": [
+            "picomatch"
+          ]
+        },
+        {
+          "package": "picomatch",
+          "severity": "high",
+          "range": "*",
+          "fixAvailable": {
+            "name": "vite",
+            "version": "6.2.7",
+            "isSemVerMajor": true
+          },
+          "via": [
+            1247710
+          ]
+        },
+        {
+          "package": "tinyglobby",
+          "severity": "high",
+          "range": "*",
+          "fixAvailable": true,
+          "via": [
+            "fdir",
+            "picomatch"
+          ]
+        },
+        {
+          "package": "vite",
+          "severity": "high",
+          "range": ">=6.3.0-beta.0",
+          "fixAvailable": {
+            "name": "vite",
+            "version": "6.2.7",
+            "isSemVerMajor": true
+          },
+          "via": [
+            "fdir",
+            "picomatch",
+            "tinyglobby"
+          ]
+        }
+      ]
+    }
+  ],
+  "completedRunnerCandidateWorkflows": [
+    {
+      "id": 44174624762,
+      "name": "host-desktop-dev-installers",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44174624862,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44174625058,
+      "name": "Solana host recovery compatibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44174625039,
+      "name": "host-desktop",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44174624918,
+      "name": "host-windows-preflight",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44174625135,
+      "name": "Rust compatible backport workspace qualification",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44174624911,
+      "name": "Asset Exchange G5 Foundation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44174625076,
+      "name": "workspace-reliability",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44174625294,
+      "name": "artifact-storage-s3-integration",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "runtimeEvidenceFixWorkflowsAtPreparation": [
+    {
+      "id": 44178050932,
+      "name": "Solana host recovery compatibility",
+      "status": "queued",
+      "conclusion": null
+    },
+    {
+      "id": 44178051125,
+      "name": "Asset Exchange G5 Foundation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44178051104,
+      "name": "host-windows-preflight",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44178051146,
+      "name": "workspace-reliability",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44178051033,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44178051102,
+      "name": "artifact-storage-s3-integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44178051127,
+      "name": "host-desktop-dev-installers",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44178051028,
+      "name": "Rust compatible backport workspace qualification",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44178050930,
+      "name": "host-desktop",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "previousInstallerArchivesReverified": [
+    {
+      "label": "Linux",
+      "runId": 44174624762,
+      "head": "30b7b65d51445f698b7d363c795b53af8cf2fc23",
+      "executionCommit": "fd076c433069f686bcb10bd665741dbbef815faa",
+      "artifactId": 14370690164,
+      "zipSha256": "0619b25d6f50ff2cc038648733aa34e0fbe8c985adc426141ab6c5d185d15bec",
+      "internalBundleDigestsVerified": 8,
+      "installer": {
+        "file": "deb/GPUbnb Host_0.1.0_amd64.deb",
+        "sha256": "dbbe7c38fb01cf5458c363da75f2f4bac768377c2f38f0c2bc0d745ca66d5ab3"
+      },
+      "lockHashesMatchCandidate": true,
+      "metadataScope": "default features only; native runtime OMITTED; evidence generation bug identified",
+      "metadataNativeRuntimeEnabled": false,
+      "defaultMetadataRand07AndLibsecpAbsent": true,
+      "nativeTests": {
+        "pass": 506,
+        "fail": 0,
+        "ignored": 0
+      },
+      "nativeInstallerBuild": "PASS",
+      "applicationInstalledOrLaunched": false,
+      "verifiedAtUtc": "2026-11-17T21:16:44.577380+00:00"
+    },
+    {
+      "label": "Windows",
+      "runId": 44174624762,
+      "head": "30b7b65d51445f698b7d363c795b53af8cf2fc23",
+      "executionCommit": "fd076c433069f686bcb10bd665741dbbef815faa",
+      "artifactId": 14369107533,
+      "zipSha256": "971d26178fd5da5003fde9e36a33684cefa8c8113492aa477c6c395015fec786",
+      "internalBundleDigestsVerified": 1,
+      "installer": {
+        "file": "nsis/GPUbnb Host_0.1.0_x64-setup.exe",
+        "sha256": "18531bd972c45a8b1b1de263560662366b097ac843470e409827bdef267d52cb"
+      },
+      "lockHashesMatchCandidate": true,
+      "metadataScope": "default features only; native runtime OMITTED; evidence generation bug identified",
+      "metadataNativeRuntimeEnabled": false,
+      "defaultMetadataRand07AndLibsecpAbsent": true,
+      "nativeTests": {
+        "pass": 506,
+        "fail": 0,
+        "ignored": 0
+      },
+      "nativeInstallerBuild": "PASS",
+      "applicationInstalledOrLaunched": false,
+      "verifiedAtUtc": "2026-11-17T21:16:44.599208+00:00"
+    }
+  ],
+  "runtimeEvidenceOmission": {
+    "reproducedInArtifacts": [
+      14370690164,
+      14369107533
+    ],
+    "beforeHostFeatures": [
+      "default"
+    ],
+    "beforeTauriPackages": 0,
+    "beforeGlibPackages": 0,
+    "reason": "tauri build --features desktop-runtime but cargo metadata used default features only",
+    "fix": "cargo metadata --locked --format-version 1 --features gpubnb-host-desktop/desktop-runtime",
+    "primaryDocumentation": "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html#feature-selection",
+    "binarySourceChange": false,
+    "lockChange": false,
+    "validation": "PASS_3_PLATFORMS_AFTER_DOWNLOAD_AND_DIGEST_AND_FEATURE_GRAPH_CHECK",
+    "resultRunId": 44178051127,
+    "scope": "all-target workspace metadata with desktop-runtime, not a target-filtered binary SBOM"
+  },
+  "retainedExecutionIndex": [
+    {
+      "runId": 40866305437,
+      "executionCommit": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/40866305437",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+      "scope": "D0 source-rebuild",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 40892872892,
+      "executionCommit": "1636df354d4fafd2cc2d9ab8595f4dca52582ad7",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/40892872892",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/1636df354d4fafd2cc2d9ab8595f4dca52582ad7",
+      "scope": "D1 private identity",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 42875442068,
+      "executionCommit": "5d5d6fc9825e9b24bea061570982ad77d727a25c",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/42875442068",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/5d5d6fc9825e9b24bea061570982ad77d727a25c",
+      "scope": "D2 32-case native experiment PASS; full D2 gate not satisfied",
+      "historicalWorkflowConclusion": "FAILURE_FULL_D2_GATE",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43005573333,
+      "executionCommit": "9fb396839eefc8cdc47028d6f8e0aecf516752cf",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43005573333",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/9fb396839eefc8cdc47028d6f8e0aecf516752cf",
+      "scope": "source policy diagnostic, not D0 binaries",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43060202035,
+      "executionCommit": "66afc5bf1fdff1666280a74c8f45604a14ca89b8",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43060202035",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/66afc5bf1fdff1666280a74c8f45604a14ca89b8",
+      "scope": "D3 source diagnostic,2357 assertions,4 selected/249 unselected",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43052066409,
+      "executionCommit": "4a253fc15503e9e9a164ce96375f1729c915c020",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43052066409",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/4a253fc15503e9e9a164ce96375f1729c915c020",
+      "scope": "multi-node pre-lock bundle and keyless refund",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43074060943,
+      "executionCommit": "6ebdaef913e6b102c0835fbab261da9ac4cc11b6",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43074060943",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/6ebdaef913e6b102c0835fbab261da9ac4cc11b6",
+      "scope": "eight original AuxPoW controls",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43108343770,
+      "executionCommit": "06c96c6284d1c33a771c41d1f9b6ffe533c946bf",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43108343770",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/06c96c6284d1c33a771c41d1f9b6ffe533c946bf",
+      "scope": "15 fee/pinning controls",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43111959236,
+      "executionCommit": "6307538265aef8273447891f445a28531043d1b5",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43111959236",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/6307538265aef8273447891f445a28531043d1b5",
+      "scope": "VM recovery14incidents +replacement",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43311713839,
+      "executionCommit": "c7adde84149250c3a972e570b5df4911b20778ee",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43311713839",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/c7adde84149250c3a972e570b5df4911b20778ee",
+      "scope": "12 extra AuxPoW properties",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43316922937,
+      "executionCommit": "0220aebdd411e018c47a55cfd5bbb974caf1fa25",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43316922937",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/0220aebdd411e018c47a55cfd5bbb974caf1fa25",
+      "scope": "602-file source attestation; exact historical package only",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43326020199,
+      "executionCommit": "66dadc73cd2beffb90d153dec72c280850ea0b2b",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43326020199",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/66dadc73cd2beffb90d153dec72c280850ea0b2b",
+      "scope": "RBF count case PASS retained; input case failed",
+      "historicalWorkflowConclusion": "FAILURE",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43484240757,
+      "executionCommit": "fc2d34c58e0696e48c4490cf758070d861058fc8",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43484240757",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/fc2d34c58e0696e48c4490cf758070d861058fc8",
+      "scope": "only corrected RBF input case rerun",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    },
+    {
+      "runId": 43760009110,
+      "executionCommit": "e3fbbe6339d2eaecc6bd999daf2d9fe7fb6a1816",
+      "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43760009110",
+      "commitUrl": "https://github.com/khemisset18/gpubnb/commit/e3fbbe6339d2eaecc6bd999daf2d9fe7fb6a1816",
+      "scope": "2 funding reorg/refusal/recovery controls",
+      "historicalWorkflowConclusion": "SUCCESS",
+      "nativeTestsRepeatedThisMission": false
+    }
+  ],
+  "fixedInstallerArchivesReverified": [
+    {
+      "platform": "linux",
+      "runId": 44178051127,
+      "head": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+      "executionCommit": "d0a2cedbf9efbafe512207eeeecf0a42d6ced161",
+      "executionTree": "9d1296f7c74fa032b18a9b15160da7df6bae7bbb",
+      "artifactId": 14370698016,
+      "zipSha256": "f074a4b7d874c5b33925013cf4c5c689dd12acd7b8fa9ddd07227ca6eb7340bb",
+      "internalBundleDigestsVerified": 8,
+      "installer": {
+        "file": "deb/GPUbnb Host_0.1.0_amd64.deb",
+        "sha256": "ce80961e6ecaa8356bd0495be6631867234584f84cd86f43c3530194e490864d"
+      },
+      "lockHashesMatchCandidate": true,
+      "metadataFeatures": [
+        "default",
+        "desktop-runtime"
+      ],
+      "metadataScope": "workspace all targets, native runtime feature enabled; not a reconstructed binary SBOM",
+      "metadataContainsTauriAndVendorGlib": true,
+      "actualVendoredGlibSelected": true,
+      "rand07AndLibsecpAbsent": true,
+      "nativeInstallerBuild": "PASS",
+      "applicationInstalledOrLaunched": false,
+      "verifiedAtUtc": "2026-11-17T21:24:06.790944+00:00",
+      "nativeTests": {
+        "suites": 18,
+        "pass": 506,
+        "fail": 0,
+        "ignored": 0,
+        "jobId": 134374612610
+      }
+    },
+    {
+      "platform": "windows",
+      "runId": 44178051127,
+      "head": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+      "executionCommit": "d0a2cedbf9efbafe512207eeeecf0a42d6ced161",
+      "executionTree": "9d1296f7c74fa032b18a9b15160da7df6bae7bbb",
+      "artifactId": 14372055336,
+      "zipSha256": "905668cc89dcd990deed222c4aef6d80c35f2666e6d34573c8f7e85e3f51a2a7",
+      "internalBundleDigestsVerified": 1,
+      "installer": {
+        "file": "nsis/GPUbnb Host_0.1.0_x64-setup.exe",
+        "sha256": "020e44e6e35b44243046363d5a42f63aacd94dceac57c5a1080a28140a673590"
+      },
+      "lockHashesMatchCandidate": true,
+      "metadataFeatures": [
+        "default",
+        "desktop-runtime"
+      ],
+      "metadataScope": "workspace all targets, native runtime feature enabled; not a reconstructed binary SBOM",
+      "metadataContainsTauriAndVendorGlib": true,
+      "actualVendoredGlibSelected": true,
+      "rand07AndLibsecpAbsent": true,
+      "nativeInstallerBuild": "PASS",
+      "applicationInstalledOrLaunched": false,
+      "verifiedAtUtc": "2026-11-17T21:24:06.856021+00:00",
+      "nativeTests": {
+        "suites": 18,
+        "pass": 506,
+        "fail": 0,
+        "ignored": 0,
+        "jobId": 134374612671
+      }
+    },
+    {
+      "platform": "macos",
+      "runId": 44178051127,
+      "head": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+      "executionCommit": "d0a2cedbf9efbafe512207eeeecf0a42d6ced161",
+      "executionTree": "9d1296f7c74fa032b18a9b15160da7df6bae7bbb",
+      "artifactId": 14371122487,
+      "zipSha256": "383f5635ce715f093d6567f77d17f2f74e4247be80a4244c7b280066ae93ab9e",
+      "internalBundleDigestsVerified": 5,
+      "installer": {
+        "file": "dmg/GPUbnb Host_0.1.0_aarch64.dmg",
+        "sha256": "b8e6125811ffafdcb74b1d8b53149ce0130aa9213c092b3c489abcbbae85379d"
+      },
+      "lockHashesMatchCandidate": true,
+      "metadataFeatures": [
+        "default",
+        "desktop-runtime"
+      ],
+      "metadataScope": "workspace all targets, native runtime feature enabled; not a reconstructed binary SBOM",
+      "metadataContainsTauriAndVendorGlib": true,
+      "actualVendoredGlibSelected": true,
+      "rand07AndLibsecpAbsent": true,
+      "nativeInstallerBuild": "PASS",
+      "applicationInstalledOrLaunched": false,
+      "verifiedAtUtc": "2026-11-17T21:24:06.893189+00:00",
+      "nativeTests": {
+        "suites": 18,
+        "pass": 500,
+        "fail": 0,
+        "ignored": 0,
+        "jobId": 134374612552
+      }
+    }
+  ],
+  "strictArtifactsReverifiedAtFinalCode": [
+    {
+      "label": "strict",
+      "artifactId": 14370867553,
+      "runId": 44178051033,
+      "head": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+      "zipSha256": "d77dadced4a46a5bfda53fe381cc031400533a05377a0e9655fae4d63cbf85e5",
+      "verifiedAtUtc": "2026-11-17T21:22:43.417115+00:00",
+      "findings": [
+        {
+          "target": "Cargo.lock",
+          "package": "borsh",
+          "version": "0.10.4",
+          "id": "GHSA-fjx5-qpf4-xjf2",
+          "severity": "MEDIUM",
+          "fixed": "1.0.0-alpha.1"
+        },
+        {
+          "target": "Cargo.lock",
+          "package": "glib",
+          "version": "0.18.5",
+          "id": "GHSA-wrw7-89jp-8q8g",
+          "severity": "MEDIUM",
+          "fixed": "0.20.0"
+        },
+        {
+          "target": "apps/host-desktop/package-lock.json",
+          "package": "picomatch",
+          "version": "4.0.5",
+          "id": "CVE-2026-112366",
+          "severity": "HIGH",
+          "fixed": null
+        }
+      ]
+    },
+    {
+      "label": "npm",
+      "artifactId": 14370403474,
+      "runId": 44178051033,
+      "head": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+      "zipSha256": "3134106e15132ad267d0043ff545e36fe96a45f8e20a6992df00639d212967db",
+      "verifiedAtUtc": "2026-11-17T21:22:44.035247+00:00",
+      "findings": [
+        {
+          "package": "fdir",
+          "severity": "high",
+          "range": ">=5.2.1",
+          "fixAvailable": {
+            "name": "vite",
+            "version": "6.2.7",
+            "isSemVerMajor": true
+          }
+        },
+        {
+          "package": "picomatch",
+          "severity": "high",
+          "range": "*",
+          "fixAvailable": {
+            "name": "vite",
+            "version": "6.2.7",
+            "isSemVerMajor": true
+          }
+        },
+        {
+          "package": "tinyglobby",
+          "severity": "high",
+          "range": "*",
+          "fixAvailable": true
+        },
+        {
+          "package": "vite",
+          "severity": "high",
+          "range": ">=6.3.0-beta.0",
+          "fixAvailable": {
+            "name": "vite",
+            "version": "6.2.7",
+            "isSemVerMajor": true
+          }
+        }
+      ]
+    }
+  ],
+  "finalCodeSyntheticExecution": {
+    "commit": "d0a2cedbf9efbafe512207eeeecf0a42d6ced161",
+    "head": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+    "executionTree": "9d1296f7c74fa032b18a9b15160da7df6bae7bbb",
+    "headTree": "9d1296f7c74fa032b18a9b15160da7df6bae7bbb",
+    "directGitObjectComparison": true,
+    "equal": true
+  },
+  "solanaLatestRunObservation": {
+    "runId": 44178050932,
+    "head": "8b39c405fa51dd4ce516778b4d5d69d84d094d5f",
+    "status": "Windows/Linux SUCCESS; macOS QUEUED",
+    "conclusion": null,
+    "notPromotedToPass": true,
+    "lastCompletedSameCryptographicSources": 44174625058,
+    "lastCompletedSameCryptographicSourcesResult": "SUCCESS_3_OS",
+    "deltaSinceLastCompleted": "installer runner/evidence workflow only; no Rust/Anchor/Solana source/lock changes",
+    "jobs": [
+      {
+        "id": 134374610171,
+        "name": "public-host-recovery (macos-latest)",
+        "status": "queued",
+        "conclusion": null
+      },
+      {
+        "id": 134374610661,
+        "name": "public-host-recovery (windows-latest)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 134374610806,
+        "name": "public-host-recovery (ubuntu-24.04)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "newReportIntegrityManifest": "docs/asset-exchange/research/2026-11-17/internal-qualification/SHA256SUMS.txt"
+}
