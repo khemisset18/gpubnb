@@ -56,6 +56,65 @@ class PackageTests(unittest.TestCase):
         m = json.loads(p.read_text()); fn(m); p.write_text(json.dumps(m))
         self.proof['manifestSha256'] = s.sha(p)
 
+    def test_workflow_publisher_pin_is_current_and_consistent(self):
+        import re
+        workflow = (
+            Path(__file__).parents[2] / '.github' / 'workflows'
+            / 'stage4-complete-windows-package.yml'
+        ).read_text(encoding='utf-8')
+        defaults = re.findall(r"default: '([0-9a-f]{64})'", workflow)
+        fallbacks = re.findall(
+            r"inputs\.publisher_sha256 \|\| '([0-9a-f]{64})'", workflow
+        )
+        self.assertEqual(len(defaults), 1, 'exactly one dispatch publisher default')
+        self.assertEqual(fallbacks, defaults, 'PR build and dispatch must use the same pin')
+        self.assertNotEqual(
+            defaults[0],
+            '3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619',
+            'expired 2026-11-13 publisher must not be a CI default',
+        )
+
+    def test_signed_copy_support_bundle_dependency_closure(self):
+        # Regression: support/stage4-package-common.ps1 dot-sources a path
+        # policy script; the 2026-11-15 CI ZIP omitted it and failed on PC1.
+        # This tests every packaged script's relative dot-source/invoke
+        # dependencies, not just the one file that originally failed.
+        import re
+        scripts = Path(__file__).parents[1]
+        build = (scripts / 'build-stage4-unsigned-package.ps1').read_text(encoding='utf-8')
+        start = build.index("$support=Join-Path $output 'support'")
+        end = build.index("Copy-Item -LiteralPath (Join-Path $repo 'docs", start)
+        support_block = build[start:end]
+        copied = set(re.findall(r"'([^']+\.ps1)'", support_block))
+        self.assertIn('stage4-windows-path-policy.ps1', copied)
+        self.assertIn('stage4-private-test-sign-copies.ps1', copied)
+        # An offline signer candidate requires its own policy and verifier.
+        # Shipping the generator without either dependency would fail again
+        # on PC1, just like the previously omitted path-policy module.
+        for required in (
+            'new-stage4-private-qualification-package.ps1',
+            'stage4-private-qualification-policy.ps1',
+            'verify-stage4-private-qualification.ps1',
+        ):
+            self.assertIn(required, copied)
+        # The unsigned CI bundle is preparation-only: do NOT distribute a
+        # service mutation script as though it were required for signing.
+        self.assertNotIn('stage4-private-four-file-maintenance.ps1', copied)
+        self.assertIn('stage4-package-common.ps1', copied)
+        self.assertIn('verify-stage4-package.ps1', copied)
+        for name in copied:
+            with self.subTest(script=name):
+                source = scripts / name
+                self.assertTrue(source.is_file(), f'missing tracked source {name}')
+                content = source.read_text(encoding='utf-8')
+                references = set(re.findall(
+                    r"Join-Path\s+\$PSScriptRoot\s+'([^']+\.ps1)'", content
+                ))
+                self.assertTrue(
+                    references <= copied,
+                    f'{name} refers to scripts not bundled: {sorted(references - copied)}'
+                )
+
     def test_positive_four_components_exact_identity_imports(self):
         m = self.verify()
         self.assertEqual(len(m['files']), 4)
