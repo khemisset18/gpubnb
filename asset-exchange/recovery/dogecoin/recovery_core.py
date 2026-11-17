@@ -146,15 +146,19 @@ def online_context(rpc):
     return chain,network
 
 
-def active_confirmation(rpc,transaction):
+def active_confirmation(rpc,transaction,tip_height):
     confirmations=transaction.get('confirmations',0)
     require(type(confirmations) is int,'invalid confirmation observation')
     if confirmations<=0:return False
     block=transaction.get('blockhash')
     require(type(block) is str and re.fullmatch('[0-9a-f]{64}',block),'confirmed transaction missing block')
     header=rpc('getblockheader',block)
-    require(type(header.get('height')) is int and header.get('confirmations',0)>0,'inactive confirmation anchor')
-    require(rpc('getblockhash',header['height'])==block,'confirmation is outside active chain')
+    height=header.get('height');depth=header.get('confirmations',0)
+    require(type(height) is int and type(depth) is int and depth>0,'inactive confirmation anchor')
+    require(0<=height<=tip_height,'confirmation anchor outside observed chain height')
+    # Both RPC declarations must describe the same observed chain snapshot.
+    require(confirmations==depth==tip_height-height+1,'incoherent confirmation depth observation')
+    require(rpc('getblockhash',height)==block,'confirmation is outside active chain')
     return True
 
 
@@ -165,13 +169,13 @@ def observe(bundle,rpc,previous=None):
     fund_tx=rpc('getrawtransaction',funding['txid'],1,missing_ok=True)
     if fund_tx is not None:
         require(fund_tx.get('hex')==funding['transactionHex'],'RPC funding bytes mismatch')
-        funding_confirmed=active_confirmation(rpc,fund_tx)
+        funding_confirmed=active_confirmation(rpc,fund_tx,chain['blocks'])
     else:funding_confirmed=False
     for entry in bundle['refunds']:
         value=rpc('getrawtransaction',entry['txid'],1,missing_ok=True)
         if value is None:continue
         require(value.get('hex')==entry['transactionHex'],'RPC refund bytes mismatch')
-        confirmed=active_confirmation(rpc,value)
+        confirmed=active_confirmation(rpc,value,chain['blocks'])
         pending=None if confirmed else rpc('getmempoolentry',entry['txid'],missing_ok=True)
         if confirmed or pending is not None:known.append((entry,confirmed,value))
     # Every ladder entry spends the same outpoint. Multiple pending/confirmed
