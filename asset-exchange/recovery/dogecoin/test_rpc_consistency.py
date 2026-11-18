@@ -125,5 +125,74 @@ class RpcConsistencyTests(unittest.TestCase):
                 self.assertTrue(result['fundingConfirmed'])
                 self.assertFalse(result['automaticSettlement'])
 
+    def test_chain_change_after_observation_refuses_before_broadcast(self):
+        changes=[{'blocks':1355,'headers':1355,'bestblockhash':'cc'*32},
+                 {'bestblockhash':'cc'*32},
+                 {'blocks':1357,'headers':1357,'bestblockhash':'cc'*32}]
+        for change in changes:
+            with self.subTest(change=change):
+                base=fixture_tests.FakeRpc(self.bundle)
+                reads=0
+                def rpc(method,*params,**kwargs):
+                    nonlocal reads
+                    value=base(method,*params,**kwargs)
+                    if method=='getblockchaininfo':
+                        reads+=1
+                        if reads==3:return {**value,**change}
+                    return value
+                with self.assertRaisesRegex(ValueError,'chain changed before rebroadcast'):
+                    recovery.rebroadcast(self.bundle,rpc)
+                self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_header_lead_after_observation_refuses_before_broadcast(self):
+        base=fixture_tests.FakeRpc(self.bundle)
+        reads=0
+        def rpc(method,*params,**kwargs):
+            nonlocal reads
+            value=base(method,*params,**kwargs)
+            if method=='getblockchaininfo':
+                reads+=1
+                if reads==3:return {**value,'headers':value['blocks']+1}
+            return value
+        with self.assertRaisesRegex(ValueError,'unresolved header lead; no broadcast'):
+            recovery.rebroadcast(self.bundle,rpc)
+        self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_header_lead_on_observation_readback_is_not_reported_synchronized(self):
+        for operation in (recovery.observe,recovery.rebroadcast):
+            with self.subTest(operation=operation.__name__):
+                base=fixture_tests.FakeRpc(self.bundle)
+                reads=0
+                def rpc(method,*params,**kwargs):
+                    nonlocal reads
+                    value=base(method,*params,**kwargs)
+                    if method=='getblockchaininfo':
+                        reads+=1
+                        if reads==2:return {**value,'headers':value['blocks']+1}
+                    return value
+                if operation==recovery.observe:
+                    self.assertFalse(operation(self.bundle,rpc)['nodeSynchronized'])
+                else:
+                    with self.assertRaisesRegex(ValueError,'unresolved header lead; no broadcast'):
+                        operation(self.bundle,rpc)
+                self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_observation_readback_rejects_invalid_header_observations(self):
+        for headers in (-1,1355,True,1356.0,'1356',None):
+            for operation in (recovery.observe,recovery.rebroadcast):
+                with self.subTest(headers=headers,operation=operation.__name__):
+                    base=fixture_tests.FakeRpc(self.bundle)
+                    reads=0
+                    def rpc(method,*params,**kwargs):
+                        nonlocal reads
+                        value=base(method,*params,**kwargs)
+                        if method=='getblockchaininfo':
+                            reads+=1
+                            if reads==2:return {**value,'headers':headers}
+                        return value
+                    with self.assertRaisesRegex(ValueError,'incoherent chain/header observation'):
+                        operation(self.bundle,rpc)
+                    self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
 
 if __name__=='__main__':unittest.main()
