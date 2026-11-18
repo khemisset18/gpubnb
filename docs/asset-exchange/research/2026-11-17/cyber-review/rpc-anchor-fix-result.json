@@ -1,0 +1,105 @@
+{
+  "finding": "RPC_CONFIRMATION_ANCHOR_INCONSISTENT_WITH_OBSERVED_TIP",
+  "before": {
+    "scope": "NEW SOFTWARE-ONLY REPRODUCER; no native node or real RPC; existing public signed fixture reused",
+    "sourceSha256": "0b5ea29713c5878e6787e38d46951f41acc54f0bafaf7e2424d51e82a871bd37",
+    "publicBundleSha256": "6cff926486cbe795ae5d7a452012383a351e14f4a966702fa556dc7d70cb8d69",
+    "reportedTipHeight": 1356,
+    "fundingHeaderHeight": 1357,
+    "observeState": "UTXO_AVAILABLE",
+    "fundingConfirmed": true,
+    "rebroadcastAction": "REBROADCAST_IDENTICAL_PRESIGNED_BYTES",
+    "mockSendCalls": 1,
+    "automaticSettlement": false,
+    "newKeys": 0,
+    "newSignatures": 0,
+    "nativeRpcCalls": 0,
+    "risk": "Contradictory RPC anchor above reported tip is accepted as active confirmation; fund-confirmation guard can be bypassed at the mocked boundary. No arbitrary transaction or settlement demonstrated."
+  },
+  "after": [
+    {
+      "operation": "observe",
+      "result": "REFUSED_BEFORE_BROADCAST",
+      "reason": "confirmation anchor outside observed chain height",
+      "mockSendCalls": 0
+    },
+    {
+      "operation": "rebroadcast",
+      "result": "REFUSED_BEFORE_BROADCAST",
+      "reason": "confirmation anchor outside observed chain height",
+      "mockSendCalls": 0
+    }
+  ],
+  "sourceFilesSha256": {
+    "asset-exchange/recovery/dogecoin/recovery_core.py": "862c2b34f5ab3a905737b35122cd3a2374a1f258cd4f3bc8216e309f5f833ee7",
+    "asset-exchange/recovery/dogecoin/test_recovery.py": "20a75c6e5f004bf3f80442435ed4a711bbb4c1cf052b067472c7b1fb5c164e21",
+    "asset-exchange/recovery/dogecoin/test_rpc_consistency.py": "cbd7586dd1cd869313999d73f2480ae3392f856e823997be694b065782babd96"
+  },
+  "regressionsBefore": {
+    "testMethods": 3,
+    "passingMethods": 1,
+    "failingMethods": 2,
+    "failedSubcases": 20,
+    "typeErrorSubcases": 2
+  },
+  "regressionsAfter": {
+    "testMethods": 3,
+    "pass": 3,
+    "fail": 0,
+    "skip": 0
+  },
+  "affectedSuites": [
+    {
+      "suite": "recovery",
+      "exitCode": 0,
+      "summary": [
+        "Ran 33 tests in 1.410s",
+        "OK"
+      ],
+      "seconds": 1.529,
+      "logSha256": "54b0189984811a57a30f82c01f62f1a4d6bee0fa23dcbfbbc951a0bf0043f13f"
+    },
+    {
+      "suite": "d6",
+      "exitCode": 0,
+      "summary": [
+        "Ran 45 tests in 1.157s",
+        "OK"
+      ],
+      "seconds": 1.33,
+      "logSha256": "a44059d9eeaea68536b2dc0e714bc7f22251e663d2124e87ebea19b300a591b1"
+    },
+    {
+      "suite": "policy",
+      "exitCode": 0,
+      "summary": [
+        "Ran 14 tests in 0.405s",
+        "OK"
+      ],
+      "seconds": 0.52,
+      "logSha256": "bb70b834ed5e0e6a7453f4c2bf18a71b59b2c992458051af7533e2e4a298c165"
+    },
+    {
+      "suite": "signer",
+      "exitCode": 0,
+      "summary": [
+        "Ran 12 tests in 0.433s",
+        "OK"
+      ],
+      "seconds": 0.532,
+      "logSha256": "2c682f68016072d52a345e65f67d51d934247e0502efd273f71d1fc0a2991b5c"
+    }
+  ],
+  "newNativeNodeExecution": false,
+  "newNativeSignatures": 0,
+  "newNativeRpc": 0,
+  "notes": "The public-fixture reproducer creates no keys/signatures. Normal affected unit suites use their existing disposable synthetic signer fixture. No private user key or fund.",
+  "logsSha256": {
+    "new-regressions-before.log": "a8e56c9466e09f64851a6867bed6ff1d02be2da7b50de96bf9c8ae1f2fec12fa",
+    "d6-after.log": "a44059d9eeaea68536b2dc0e714bc7f22251e663d2124e87ebea19b300a591b1",
+    "recovery-after.log": "54b0189984811a57a30f82c01f62f1a4d6bee0fa23dcbfbbc951a0bf0043f13f",
+    "signer-after.log": "2c682f68016072d52a345e65f67d51d934247e0502efd273f71d1fc0a2991b5c",
+    "policy-after.log": "bb70b834ed5e0e6a7453f4c2bf18a71b59b2c992458051af7533e2e4a298c165",
+    "new-regressions-after.log": "a642601cbc70cf08d73e7520b3cd15abd310f69a2e243a83bb0fd48c3d989a83"
+  }
+}

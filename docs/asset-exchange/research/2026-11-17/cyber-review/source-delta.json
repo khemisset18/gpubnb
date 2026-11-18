@@ -1,0 +1,26 @@
+{
+  "referenceManifest": "../finalization/preserved-sources.json",
+  "totalPreviouslyPreservedFiles": 191,
+  "unchangedCount": 188,
+  "changedCount": 3,
+  "changedFiles": {
+    "asset-exchange/recovery/dogecoin/recovery_core.py": {
+      "before": "0b5ea29713c5878e6787e38d46951f41acc54f0bafaf7e2424d51e82a871bd37",
+      "after": "862c2b34f5ab3a905737b35122cd3a2374a1f258cd4f3bc8216e309f5f833ee7"
+    },
+    "asset-exchange/recovery/dogecoin/test_recovery.py": {
+      "before": "df357e473e070fd7a79b028f4a1a65b3db4a0935554552a446273317fbb0b6c3",
+      "after": "20a75c6e5f004bf3f80442435ed4a711bbb4c1cf052b067472c7b1fb5c164e21"
+    },
+    "asset-exchange/recovery/dogecoin/test_rpc_consistency.py": {
+      "before": "d14f47bc5884ef55951bf4d318c419fd49bbd0c55b735c51e22c2fc3ff078736",
+      "after": "cbd7586dd1cd869313999d73f2480ae3392f856e823997be694b065782babd96"
+    }
+  },
+  "unchangedFinancialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "unchangedCargoLockSha256": "af9bb9a1fef24b84a616f1c8b5017a99f4cb3aea57134fd8fdc393e336b7611d",
+  "newCoreSourceMatchesNativeHarnessAndExecution": true,
+  "harnessCommit": "7d884845657368c28d8ec5c56f8a01d0a3dad814",
+  "executionCommit": "e9291dfcbeaa287291f530df8bb8f5c527161650",
+  "nativeStandalonePackageReproducedFromCurrentIntegrationSource": true
+}

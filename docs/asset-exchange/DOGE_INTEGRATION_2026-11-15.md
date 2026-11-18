@@ -1,6 +1,7 @@
 # DOGE — candidat intégré de validation, 15 novembre 2026
 
-> État courant : [qualification technique interne du17 novembre](DOGE_INTERNAL_QUALIFICATION_2026-11-17.md).
+> État courant : [revue interne de cybersécurité finalisée le18 novembre](DOGE_CYBERSECURITY_REVIEW_2026-11-18.md),
+> avec correction RPC testée en logiciel et dans le laboratoire privé existant.
 > Décision interne FAIL sur les trois alertes de sécurité. Aucun auditeur externe
 > n'est attendu pour les essais privés ; audit indépendant D9 NON RÉALISÉ hors mission.
 > Les résultats ci-dessous restent des instantanés historiques à leurs SHA.

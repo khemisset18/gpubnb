@@ -1,0 +1,61 @@
+[
+  {
+    "artifactId": 14374685397,
+    "runId": 44184744507,
+    "head": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+    "zipSha256": "955e4df0cb74678e139f7b95e43fa52ef17dfcc3fd8bff9b706a405683314583",
+    "findings": [
+      {
+        "id": "GHSA-fjx5-qpf4-xjf2",
+        "package": "borsh",
+        "version": "0.10.4",
+        "severity": "MEDIUM",
+        "fixed": "1.0.0-alpha.1"
+      },
+      {
+        "id": "GHSA-wrw7-89jp-8q8g",
+        "package": "glib",
+        "version": "0.18.5",
+        "severity": "MEDIUM",
+        "fixed": "0.20.0"
+      },
+      {
+        "id": "CVE-2026-112366",
+        "package": "picomatch",
+        "version": "4.0.5",
+        "severity": "HIGH",
+        "fixed": null
+      }
+    ],
+    "verified": true
+  },
+  {
+    "artifactId": 14372564472,
+    "runId": 44184744507,
+    "head": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+    "zipSha256": "7d8d49cde60c75d0e4edd1bf80ae69e34b9886c4f9f09719e2f5265a78bebf72",
+    "findings": [
+      {
+        "package": "fdir",
+        "severity": "high",
+        "range": ">=5.2.1"
+      },
+      {
+        "package": "picomatch",
+        "severity": "high",
+        "range": "*"
+      },
+      {
+        "package": "tinyglobby",
+        "severity": "high",
+        "range": "*"
+      },
+      {
+        "package": "vite",
+        "severity": "high",
+        "range": ">=6.3.0-beta.0"
+      }
+    ],
+    "verified": true
+  }
+]

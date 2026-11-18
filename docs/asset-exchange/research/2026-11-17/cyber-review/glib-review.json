@@ -1,0 +1,787 @@
+{
+  "schemaVersion": 1,
+  "assessmentKind": "INTERNAL_SOURCE_AND_DEPENDENCY_REVIEW",
+  "observedAtUtc": "2026-11-17T21:51:23.063249+00:00",
+  "scope": "Read-only GLib review, source research and integrity checks only; no build/test/node/signature/broadcast/release",
+  "repositoryHeadReviewed": "3a482ed02eb1374520aaeb4540dbf1c36e362d8a",
+  "advisory": "GHSA-wrw7-89jp-8q8g",
+  "publishedSafeVersionRange": ">=0.20.0 (or <0.15.0; incompatible downgrade not considered)",
+  "selectedVersion": "0.18.5",
+  "selectedOfficialBackportIntegrity": {
+    "upstreamFixCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+    "file": "vendor/security/glib-0.18.5/src/variant_iter.rs",
+    "sha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc",
+    "byteIdenticalToOfficialFixedFile": true,
+    "sourceChangeRequired": false
+  },
+  "freshPrimarySources": [
+    {
+      "name": "glib-advisory",
+      "url": "https://api.github.com/advisories/GHSA-wrw7-89jp-8q8g",
+      "sha256": "0a7ea7b0ef41ef4ef4895e5965048e91147ab61a2c29d24ba71f62c5a4579e47",
+      "observedAtUtc": "2026-11-17T21:47:13.025698+00:00",
+      "data": {
+        "updated_at": "2024-12-23T20:19:26Z",
+        "vulnerabilities": [
+          {
+            "package": {
+              "ecosystem": "rust",
+              "name": "glib"
+            },
+            "vulnerable_version_range": ">= 0.15.0, < 0.20.0",
+            "first_patched_version": "0.20.0",
+            "vulnerable_functions": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "glib-rustsec",
+      "url": "https://api.osv.dev/v1/vulns/RUSTSEC-2024-0429",
+      "sha256": "18b0a6a9456072d6f4e522cc87dfc4fa31e6d3df0490c186204353c019002447",
+      "observedAtUtc": "2026-11-17T21:47:10.644132+00:00",
+      "data": {
+        "affected": [
+          {
+            "package": {
+              "name": "glib",
+              "ecosystem": "crates.io",
+              "purl": "pkg:cargo/glib"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "0.15.0"
+                  },
+                  {
+                    "fixed": "0.20.0"
+                  }
+                ]
+              }
+            ],
+            "ecosystem_specific": {
+              "affects": {
+                "arch": [],
+                "functions": [
+                  "glib::VariantStrIter::last",
+                  "glib::VariantStrIter::next",
+                  "glib::VariantStrIter::next_back",
+                  "glib::VariantStrIter::nth",
+                  "glib::VariantStrIter::nth_back"
+                ],
+                "os": []
+              },
+              "affected_functions": null
+            },
+            "database_specific": {
+              "categories": [],
+              "cvss": null,
+              "informational": "unsound",
+              "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2024-0429.json"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "fix-pr",
+      "url": "https://api.github.com/repos/gtk-rs/gtk-rs-core/pulls/1343",
+      "sha256": "94a935c87e6877fbc4f5e784a195a3d18d45a5d020a63021054742d8cdb23293",
+      "observedAtUtc": "2026-11-17T21:47:12.988478+00:00",
+      "data": {
+        "state": "closed",
+        "merged": true,
+        "merge_commit_sha": "05dff0ee696f9bcd8617cd48c4b812d046d440cb",
+        "updated_at": "2024-06-17T09:27:54Z",
+        "title": "glib: fix UB in VariantStrIter::impl_get",
+        "draft": false,
+        "head": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34"
+      }
+    },
+    {
+      "name": "tauri-migration",
+      "url": "https://api.github.com/repos/tauri-apps/tauri/pulls/16170",
+      "sha256": "e1446c20288605af9575c54ef9c89accf48c750024125823605c92d96fefc6d5",
+      "observedAtUtc": "2026-11-17T21:47:12.928987+00:00",
+      "data": {
+        "state": "open",
+        "merged": false,
+        "merge_commit_sha": null,
+        "updated_at": "2026-10-21T08:25:44Z",
+        "title": "chore(deps): update gtk crates to 0.19",
+        "draft": true,
+        "head": "899ca2105ffd06293013b6d2bff4416987d99010"
+      }
+    },
+    {
+      "name": "wry-migration",
+      "url": "https://api.github.com/repos/tauri-apps/wry/pulls/1843",
+      "sha256": "57e1fd01659d025ac91f123050a5fcbd2b1aa5c067c781d8f5e08df666924394",
+      "observedAtUtc": "2026-11-17T21:47:12.940089+00:00",
+      "data": {
+        "state": "open",
+        "merged": false,
+        "merge_commit_sha": null,
+        "updated_at": "2026-10-18T20:25:20Z",
+        "title": "chore(deps): update gtk crates to 0.19",
+        "draft": true,
+        "head": "327242ae73301c5e34dcc158e31ae453e8afe837"
+      }
+    },
+    {
+      "name": "tao-migration",
+      "url": "https://api.github.com/repos/tauri-apps/tao/pulls/1332",
+      "sha256": "1d2069ff1608e12bbec962431f3f643567efbd0a753d629279388a8c7f6f8730",
+      "observedAtUtc": "2026-11-17T21:47:13.020196+00:00",
+      "data": {
+        "state": "open",
+        "merged": false,
+        "merge_commit_sha": "7fb151ea83c291b424781696101a317d33657837",
+        "updated_at": "2026-09-22T14:41:10Z",
+        "title": "chore(deps): update gtk crates to 0.19",
+        "draft": false,
+        "head": "08660027c723e09a45b10badf60a73a661c94a95"
+      }
+    },
+    {
+      "name": "glib-registry",
+      "url": "https://crates.io/api/v1/crates/glib",
+      "sha256": "3ba3d2337aec5ea3e81c64d619576ba9f785bfa1c59e5a6ee1a33a1ffa7aacbb",
+      "observedAtUtc": "2026-11-17T21:47:19.039982+00:00",
+      "data": {
+        "latest": "0.22.11",
+        "stable": "0.22.11",
+        "lastVersions": [
+          "0.22.11",
+          "0.22.10",
+          "0.22.9",
+          "0.22.8",
+          "0.22.7",
+          "0.22.6",
+          "0.22.5",
+          "0.22.4"
+        ],
+        "latest018": [
+          "0.18.5",
+          "0.18.4",
+          "0.18.3",
+          "0.18.2",
+          "0.18.1"
+        ]
+      }
+    },
+    {
+      "name": "gtk-registry",
+      "url": "https://crates.io/api/v1/crates/gtk",
+      "sha256": "3c08cc89276778dd750fb97c84988e69170ea0851c3b920f6ae205b1f77e1ca8",
+      "observedAtUtc": "2026-11-17T21:47:18.757744+00:00",
+      "data": {
+        "latest": "0.19.0",
+        "stable": "0.19.0",
+        "lastVersions": [
+          "0.19.0",
+          "0.18.2",
+          "0.18.1",
+          "0.18.0",
+          "0.17.1",
+          "0.17.0",
+          "0.16.2",
+          "0.16.1"
+        ],
+        "latest018": [
+          "0.18.2",
+          "0.18.1",
+          "0.18.0"
+        ]
+      }
+    },
+    {
+      "name": "tauri-registry",
+      "url": "https://crates.io/api/v1/crates/tauri",
+      "sha256": "b2fb8d89f50e9c5dcb198cab3904a576c0399ebdf8eba1d162ee574257121bfa",
+      "observedAtUtc": "2026-11-17T21:47:19.169313+00:00",
+      "data": {
+        "latest": "2.12.6",
+        "stable": "2.12.6",
+        "lastVersions": [
+          "2.12.6",
+          "3.0.0-alpha.6",
+          "2.12.5",
+          "3.0.0-alpha.5",
+          "2.12.4",
+          "2.12.3",
+          "2.12.2",
+          "3.0.0-alpha.4"
+        ],
+        "latest018": []
+      }
+    },
+    {
+      "name": "wry-registry",
+      "url": "https://crates.io/api/v1/crates/wry",
+      "sha256": "35d77cc349f7a1050c38343f08918e0ec2bb004b809b746202f79c61c4be870a",
+      "observedAtUtc": "2026-11-17T21:47:18.849588+00:00",
+      "data": {
+        "latest": "0.57.2",
+        "stable": "0.57.2",
+        "lastVersions": [
+          "0.57.2",
+          "0.57.1",
+          "0.57.0",
+          "0.56.1",
+          "0.56.0",
+          "0.55.1",
+          "0.24.12",
+          "0.55.0"
+        ],
+        "latest018": [
+          "0.18.3",
+          "0.18.2",
+          "0.18.1",
+          "0.18.0"
+        ]
+      }
+    },
+    {
+      "name": "tao-registry",
+      "url": "https://crates.io/api/v1/crates/tao",
+      "sha256": "fd9395ec259f43ee0d818f0d5a8dd577bdf7235e813b87c0806fbeeed92f014c",
+      "observedAtUtc": "2026-11-17T21:47:18.811403+00:00",
+      "data": {
+        "latest": "0.37.2",
+        "stable": "0.37.2",
+        "lastVersions": [
+          "0.37.2",
+          "0.37.1",
+          "0.37.0",
+          "0.36.0",
+          "0.35.3",
+          "0.35.2",
+          "0.35.1",
+          "0.35.0"
+        ],
+        "latest018": [
+          "0.18.3",
+          "0.18.2",
+          "0.18.1",
+          "0.18.0"
+        ]
+      }
+    },
+    {
+      "name": "webkit2gtk-registry",
+      "url": "https://crates.io/api/v1/crates/webkit2gtk",
+      "sha256": "60f4daa9a74ff72a11a8b7a27508f8cc5252b51027a367e7ce2a41475dd03722",
+      "observedAtUtc": "2026-11-17T21:47:25.052006+00:00",
+      "data": {
+        "latest": "2.0.2",
+        "stable": "2.0.2",
+        "lastVersions": [
+          "2.0.2",
+          "2.0.1",
+          "2.0.0",
+          "1.1.1",
+          "1.1.0",
+          "1.0.0",
+          "0.19.2",
+          "0.19.1"
+        ],
+        "latest018": [
+          "0.18.2",
+          "0.18.1",
+          "0.18.0"
+        ]
+      }
+    }
+  ],
+  "dependencyConstraints": [
+    {
+      "name": "tauri-published-deps",
+      "url": "https://crates.io/api/v1/crates/tauri/2.12.6/dependencies",
+      "sha256": "d5a650cb88f428872fa5a0ec566d6fc7da7836deb0d1258440c34ee9d8deb194",
+      "data": [
+        {
+          "crate_id": "gtk",
+          "req": "^0.18",
+          "kind": "normal",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+        },
+        {
+          "crate_id": "tauri-runtime-wry",
+          "req": "~2.12.4",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "webkit2gtk",
+          "req": "^2",
+          "kind": "normal",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+        }
+      ]
+    },
+    {
+      "name": "wry-published-deps",
+      "url": "https://crates.io/api/v1/crates/wry/0.57.2/dependencies",
+      "sha256": "6f60f9715a6f8ce5965a7ccfbb9f0f96b19bbe11d6983927dbebce0e08aec983",
+      "data": [
+        {
+          "crate_id": "tao",
+          "req": "^0.37",
+          "kind": "dev",
+          "target": null
+        },
+        {
+          "crate_id": "gtk",
+          "req": "^0.18",
+          "kind": "normal",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+        },
+        {
+          "crate_id": "javascriptcore-rs",
+          "req": "=1.1.2",
+          "kind": "normal",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+        },
+        {
+          "crate_id": "soup3",
+          "req": "^0.5",
+          "kind": "normal",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+        },
+        {
+          "crate_id": "webkit2gtk",
+          "req": "=2.0.2",
+          "kind": "normal",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+        }
+      ]
+    },
+    {
+      "name": "tao-published-deps",
+      "url": "https://crates.io/api/v1/crates/tao/0.37.2/dependencies",
+      "sha256": "b988a5204b02189479cfae99e334db452844de0195f0abdf05163c657d1e787a",
+      "data": [
+        {
+          "crate_id": "gtk",
+          "req": "^0.18",
+          "kind": "normal",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+        }
+      ]
+    },
+    {
+      "name": "gtk018-deps",
+      "url": "https://crates.io/api/v1/crates/gtk/0.18.2/dependencies",
+      "sha256": "de3c7db76e026e6e6ea3f2fa01547198be36405dd25b8b6a8c9394cdcc8da4ac",
+      "data": [
+        {
+          "crate_id": "gdk",
+          "req": "^0.18",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "glib",
+          "req": "^0.18",
+          "kind": "normal",
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "gtk019-deps",
+      "url": "https://crates.io/api/v1/crates/gtk/0.19.0/dependencies",
+      "sha256": "a346b50bc65a4478dfb613d080027d733b2c02d81fcf2b5ce000a591739661e3",
+      "data": [
+        {
+          "crate_id": "gdk",
+          "req": "^0.19.0",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "glib",
+          "req": "^0.22",
+          "kind": "normal",
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "webkit-deps",
+      "url": "https://crates.io/api/v1/crates/webkit2gtk/2.0.2/dependencies",
+      "sha256": "322724a25f1991469ad711ce6ea986cab8e2591efc99650ec9a025ed2f35a0ce",
+      "data": [
+        {
+          "crate_id": "gdk",
+          "req": "^0.18.0",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "glib",
+          "req": "^0.18.0",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "glib-sys",
+          "req": "^0.18.0",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "gtk",
+          "req": "^0.18.0",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "javascriptcore-rs",
+          "req": "=1.1",
+          "kind": "normal",
+          "target": null
+        },
+        {
+          "crate_id": "soup3",
+          "req": "^0.5",
+          "kind": "normal",
+          "target": null
+        }
+      ]
+    },
+    {
+      "name": "tauri-migration-files",
+      "url": "https://api.github.com/repos/tauri-apps/tauri/pulls/16170/files",
+      "sha256": "3251ad73ede24fc8a2a7b6a78e1024eca307dfadc3efd956e917ca2ebb8fd763",
+      "data": {
+        "changedFiles": 30,
+        "additions": 254,
+        "deletions": 247,
+        "sourceFiles": [
+          "crates/tauri-runtime-wry/src/lib.rs",
+          "crates/tauri-runtime/src/window.rs",
+          "crates/tauri/src/test/mock_runtime.rs",
+          "crates/tauri/src/webview/webview_window.rs",
+          "crates/tauri/src/window/mod.rs"
+        ],
+        "manifests": [
+          "Cargo.toml",
+          "bench/Cargo.toml",
+          "bench/tests/cpu_intensive/src-tauri/Cargo.toml",
+          "bench/tests/files_transfer/src-tauri/Cargo.toml",
+          "bench/tests/helloworld/src-tauri/Cargo.toml",
+          "crates/tauri-bundler/Cargo.toml",
+          "crates/tauri-cli/Cargo.toml",
+          "crates/tauri-driver/Cargo.toml",
+          "crates/tauri-macos-sign/Cargo.toml",
+          "crates/tauri-runtime-wry/Cargo.toml",
+          "crates/tauri-runtime/Cargo.toml",
+          "crates/tauri/Cargo.toml",
+          "examples/api/src-tauri/Cargo.toml",
+          "examples/file-associations/src-tauri/Cargo.toml"
+        ]
+      }
+    },
+    {
+      "name": "wry-migration-files",
+      "url": "https://api.github.com/repos/tauri-apps/wry/pulls/1843/files",
+      "sha256": "ab1df7013b2374e899da6669e951514091968aa2836665249d092e01dd2e1a26",
+      "data": {
+        "changedFiles": 5,
+        "additions": 286,
+        "deletions": 247,
+        "sourceFiles": [
+          "src/webkitgtk/mod.rs",
+          "src/webkitgtk/web_context.rs"
+        ],
+        "manifests": [
+          "Cargo.toml"
+        ]
+      }
+    },
+    {
+      "name": "tao-migration-files",
+      "url": "https://api.github.com/repos/tauri-apps/tao/pulls/1332/files",
+      "sha256": "d013b5a6ddf01f8734a95829340442d054b5d8b759979d3ab797a35f799d2013",
+      "data": {
+        "changedFiles": 11,
+        "additions": 341,
+        "deletions": 269,
+        "sourceFiles": [
+          "src/platform/unix.rs",
+          "src/platform_impl/linux/device.rs",
+          "src/platform_impl/linux/event_loop.rs",
+          "src/platform_impl/linux/portal.rs",
+          "src/platform_impl/linux/util.rs",
+          "src/platform_impl/linux/window.rs"
+        ],
+        "manifests": [
+          "Cargo.toml"
+        ]
+      }
+    }
+  ],
+  "officialPublishedMinimalCompatibleFix": "NOT_AVAILABLE",
+  "directVersionForceCompatible": false,
+  "reason": "Published Tauri/Wry/Tao and WebKitGTK require GTK/GLib0.18; GTK0.19 needs GLib0.22. API types/event-loop/channel migration spans multiple providers, not a drop-in GLib replacement. Even Tauri3.0.0-alpha.6 published still requests GTK0.18.",
+  "strictScannerDisposition": "FAIL retained; honest0.18.5 package remains in advisory version range despite exact fixed source; no scanner rerun needed because code/conditions unchanged",
+  "editkinExample": {
+    "pr": "https://github.com/Hao0321/Editkin/pull/29",
+    "commit": "6010f2b76dbb1c49f77d5fdfddafed5f61744c86",
+    "mergeCommit": "2cca2d661a5a5e20b4bcccffeb142e08ad222fd7",
+    "manifestSha256": "c90600fc7e5bae439b20cd1ed7b0a445191c74543e122e4523a57acb8aa8414c",
+    "gitPatchedCrates": 15,
+    "gitUpstreamRepositories": 7,
+    "patches": {
+      "tauri": {
+        "git": "https://github.com/tauri-apps/tauri.git",
+        "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+      },
+      "tauri-build": {
+        "git": "https://github.com/tauri-apps/tauri.git",
+        "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+      },
+      "tauri-codegen": {
+        "git": "https://github.com/tauri-apps/tauri.git",
+        "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+      },
+      "tauri-macros": {
+        "git": "https://github.com/tauri-apps/tauri.git",
+        "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+      },
+      "tauri-runtime": {
+        "git": "https://github.com/tauri-apps/tauri.git",
+        "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+      },
+      "tauri-runtime-wry": {
+        "git": "https://github.com/tauri-apps/tauri.git",
+        "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+      },
+      "tauri-utils": {
+        "git": "https://github.com/tauri-apps/tauri.git",
+        "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+      },
+      "tao": {
+        "git": "https://github.com/tauri-apps/tao.git",
+        "rev": "08660027c723e09a45b10badf60a73a661c94a95"
+      },
+      "wry": {
+        "git": "https://github.com/tauri-apps/wry.git",
+        "rev": "327242ae73301c5e34dcc158e31ae453e8afe837"
+      },
+      "webkit2gtk": {
+        "git": "https://github.com/tauri-apps/webkit2gtk-rs.git",
+        "rev": "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72"
+      },
+      "webkit2gtk-sys": {
+        "git": "https://github.com/tauri-apps/webkit2gtk-rs.git",
+        "rev": "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72"
+      },
+      "muda": {
+        "git": "https://github.com/tauri-apps/muda.git",
+        "rev": "e4b5c4cf58935cd7a387a6843f099e535bdf3c4a"
+      },
+      "tray-icon": {
+        "git": "https://github.com/tauri-apps/tray-icon.git",
+        "rev": "79b656b7a61b6b551f90ed1b137bf17a920f6d0b"
+      },
+      "libappindicator": {
+        "git": "https://github.com/tauri-apps/libappindicator-rs.git",
+        "rev": "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93"
+      },
+      "libappindicator-sys": {
+        "git": "https://github.com/tauri-apps/libappindicator-rs.git",
+        "rev": "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93"
+      }
+    },
+    "actualCiRun": "https://github.com/Hao0321/Editkin/actions/runs/36682270509",
+    "linuxNativeJob": "https://github.com/Hao0321/Editkin/actions/runs/36682270509/job/109799220856",
+    "linuxNativeJobConclusion": "success",
+    "sourceMatrix3OSConclusion": "success; JavaScript/source checks, NOT native desktop3OS",
+    "ciNativeCommandsVerified": [
+      "cargo build --locked --features community-desktop,tauri/custom-protocol",
+      "cargo tree --locked --target x86_64-unknown-linux-gnu -i glib",
+      "cargo audit --deny unsound",
+      "Xvfb/D-Bus native WebDriver smoke"
+    ],
+    "officialRegistryMigration": false,
+    "sourceVersionIdentityFalsificationObserved": false,
+    "sourceCodeProofTransferredToGpuBnb": false,
+    "windowsMacNativeInstallerProofTransferredToGpuBnb": false,
+    "gpuBnbStrictTrivyPassEstablished": false,
+    "requires": {
+      "tauri": "2.12.0 upstream git migration",
+      "tauri-build": "2.7.0 upstream git migration",
+      "rustVersionMinimum": "1.92 (their CI1.98.1; GPUbnb1.97.1 meets MSRV)",
+      "coordinatedWebKitTaoWryMenusTrayIndicator": true
+    },
+    "adoptionDecision": "NOT_ADOPTED: parent explicitly excludes adoption of the coordinated unpublished fork in this review; current source mitigation retained",
+    "architecturalInterpretation": "A genuine experimental migration pattern exists in another repository; absence of a published compatible stable migration does not mean that such a coordinated development candidate is technically impossible."
+  },
+  "otherRepositories": {
+    "Loom38": {
+      "route": "issue, not PR",
+      "url": "https://api.github.com/repos/aiaimimi0920/Loom/issues/38",
+      "sha256": "a7bd26f0e4ab48504900bbc914c23eedc396628984419847b5a69118b4371c34",
+      "state": "open",
+      "title": "security: replace GTK3/glib before 2026-10-31",
+      "updated_at": "2026-09-30T07:34:38Z",
+      "body": "## Scope\nReplace or remove the Linux GTK3 dependency path that currently resolves glib 0.18.x and triggers RUSTSEC-2024-0429 / Dependabot alert #1.\n\n## Current evidence\n- glib is transitive through gtk 0.18 / WebKitGTK and is only compiled on the Linux desktop path.\n- The formal Loom release is Windows-only; Linux publication is blocked until this issue is closed or freshly reassessed.\n- glib 0.20 cannot be introduced independently because the current GTK3 parent requires the 0.18 API line.\n- Temporary OSV exception expires 2026-10-31 and must not be renewed automatically.\n\n## Exit criteria\n1. Replace the GTK3/WebKitGTK parent with a compatible maintained stack, or remove the Linux target.\n2. Regenerate all Cargo.lock files through Cargo.\n3. Run the unconfigured and configured OSV scans plus Linux tests.\n4. Remove RUSTSEC-2024-0429 from security/osv-scanner.toml and close Dependabot alert #1."
+    },
+    "LoongPort399": "tracking issue, no compatible migration; contains no-direct-call reachability argument and disabled Dependabot security updates, neither adopted"
+  },
+  "repoChanges": [],
+  "testsRepeated": 0,
+  "rawSourceSnapshots": [
+    {
+      "file": "alternate-migration-summary.json",
+      "sha256": "84fab2e380b13b8136789dc46d9e6220186f204a72dce088f94e6c8d6de722e8"
+    },
+    {
+      "file": "dependency-and-migration-summary.json",
+      "sha256": "d053ae3a97af6a382f9d1d5ddc2cdc49c1e1ee11518ba3c9e36258f4633840f8"
+    },
+    {
+      "file": "editkin-checks.json",
+      "sha256": "92ef30af6854b84d7873736a1e9a631659c257a146770385e56920b74526b599"
+    },
+    {
+      "file": "editkin-files.json",
+      "sha256": "54f31c9b7ff6035422ccc696a834621ae7af2d9a30a21f6affcd738b7e594b37"
+    },
+    {
+      "file": "editkin-manifest.toml",
+      "sha256": "c90600fc7e5bae439b20cd1ed7b0a445191c74543e122e4523a57acb8aa8414c"
+    },
+    {
+      "file": "editkin-pr.json",
+      "sha256": "5b497cddef38cd7912b8ebe52f46c8f1534f9db7b740e52da3d84cc9ef2fe4b9"
+    },
+    {
+      "file": "editkin-source-workflow.txt",
+      "sha256": "8d5fc2b624cafa6e09d4d978ad1349ca0e52dac573f250230e5a52a5b0e7e859"
+    },
+    {
+      "file": "editkin-workflows.json",
+      "sha256": "2ec68c0e6a14d98b65c58d4b568a4404cc896659c6cda9baf960c92674f20a03"
+    },
+    {
+      "file": "fix-pr.json",
+      "sha256": "94a935c87e6877fbc4f5e784a195a3d18d45a5d020a63021054742d8cdb23293"
+    },
+    {
+      "file": "fresh-primary-summary.json",
+      "sha256": "82caaa21664c3802eed1005ba1b0b9a1062ddccbbc3400e6728cd7a5854ffb40"
+    },
+    {
+      "file": "glib-advisory.json",
+      "sha256": "0a7ea7b0ef41ef4ef4895e5965048e91147ab61a2c29d24ba71f62c5a4579e47"
+    },
+    {
+      "file": "glib-registry.json",
+      "sha256": "3ba3d2337aec5ea3e81c64d619576ba9f785bfa1c59e5a6ee1a33a1ffa7aacbb"
+    },
+    {
+      "file": "glib-rustsec.json",
+      "sha256": "18b0a6a9456072d6f4e522cc87dfc4fa31e6d3df0490c186204353c019002447"
+    },
+    {
+      "file": "gtk-registry.json",
+      "sha256": "3c08cc89276778dd750fb97c84988e69170ea0851c3b920f6ae205b1f77e1ca8"
+    },
+    {
+      "file": "gtk018-deps.json",
+      "sha256": "de3c7db76e026e6e6ea3f2fa01547198be36405dd25b8b6a8c9394cdcc8da4ac"
+    },
+    {
+      "file": "gtk019-deps.json",
+      "sha256": "a346b50bc65a4478dfb613d080027d733b2c02d81fcf2b5ce000a591739661e3"
+    },
+    {
+      "file": "loongport-issue.txt",
+      "sha256": "889ddd25f54211235a3a6e9226024e9188dbe4178cfa3cde8233ac5bdd396ca1"
+    },
+    {
+      "file": "official-fixed-file.txt",
+      "sha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc"
+    },
+    {
+      "file": "related-repositories-summary.json",
+      "sha256": "f898ff97dfc36124dc72d022387fb68b337c75fd7d3067c619510220c35502b2"
+    },
+    {
+      "file": "tao-migration-files.json",
+      "sha256": "d013b5a6ddf01f8734a95829340442d054b5d8b759979d3ab797a35f799d2013"
+    },
+    {
+      "file": "tao-migration.json",
+      "sha256": "1d2069ff1608e12bbec962431f3f643567efbd0a753d629279388a8c7f6f8730"
+    },
+    {
+      "file": "tao-published-deps.json",
+      "sha256": "b988a5204b02189479cfae99e334db452844de0195f0abdf05163c657d1e787a"
+    },
+    {
+      "file": "tao-registry.json",
+      "sha256": "fd9395ec259f43ee0d818f0d5a8dd577bdf7235e813b87c0806fbeeed92f014c"
+    },
+    {
+      "file": "tauri-latest-deps.json",
+      "sha256": "0c2f4e05f7ea6d8955a29ace113903ea7044e9cc19eb1743c05ab015e0dd3ab7"
+    },
+    {
+      "file": "tauri-migration-all-files.txt",
+      "sha256": "6a7fa8024307b80dbc91b968ec6ce74fc15f1721127e31d0604611be1cc29746"
+    },
+    {
+      "file": "tauri-migration-files.json",
+      "sha256": "3251ad73ede24fc8a2a7b6a78e1024eca307dfadc3efd956e917ca2ebb8fd763"
+    },
+    {
+      "file": "tauri-migration.json",
+      "sha256": "e1446c20288605af9575c54ef9c89accf48c750024125823605c92d96fefc6d5"
+    },
+    {
+      "file": "tauri-published-deps.json",
+      "sha256": "d5a650cb88f428872fa5a0ec566d6fc7da7836deb0d1258440c34ee9d8deb194"
+    },
+    {
+      "file": "tauri-registry.json",
+      "sha256": "b2fb8d89f50e9c5dcb198cab3904a576c0399ebdf8eba1d162ee574257121bfa"
+    },
+    {
+      "file": "webkit-deps.json",
+      "sha256": "322724a25f1991469ad711ce6ea986cab8e2591efc99650ec9a025ed2f35a0ce"
+    },
+    {
+      "file": "webkit2gtk-registry.json",
+      "sha256": "60f4daa9a74ff72a11a8b7a27508f8cc5252b51027a367e7ce2a41475dd03722"
+    },
+    {
+      "file": "wry-migration-files.json",
+      "sha256": "ab1df7013b2374e899da6669e951514091968aa2836665249d092e01dd2e1a26"
+    },
+    {
+      "file": "wry-migration.json",
+      "sha256": "57e1fd01659d025ac91f123050a5fcbd2b1aa5c067c781d8f5e08df666924394"
+    },
+    {
+      "file": "wry-published-deps.json",
+      "sha256": "6f60f9715a6f8ce5965a7ccfbb9f0f96b19bbe11d6983927dbebce0e08aec983"
+    },
+    {
+      "file": "wry-registry.json",
+      "sha256": "35d77cc349f7a1050c38343f08918e0ec2bb004b809b746202f79c61c4be870a"
+    }
+  ],
+  "migrationFilePagination": {
+    "initialTauriPageFiles": 30,
+    "completeTauriPrFiles": 31,
+    "completeSourceUrl": "https://api.github.com/repos/tauri-apps/tauri/pulls/16170/files?per_page=100",
+    "completeResponseSha256": "6a7fa8024307b80dbc91b968ec6ce74fc15f1721127e31d0604611be1cc29746"
+  }
+}

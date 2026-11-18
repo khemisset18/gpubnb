@@ -1,0 +1,241 @@
+test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) ... 
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=-1, operation='observe') ... FAIL
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=-1, operation='rebroadcast') ... FAIL
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=1357, operation='observe') ... FAIL
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=1357, operation='rebroadcast') ... FAIL
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=-1, operation='observe') ... FAIL
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=-1, operation='rebroadcast') ... FAIL
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=1357, operation='observe') ... FAIL
+  test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=1357, operation='rebroadcast') ... FAIL
+test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) ... 
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=1, operation='observe') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=1, operation='rebroadcast') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=5, operation='observe') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=5, operation='rebroadcast') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=1, operation='observe') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=1, operation='rebroadcast') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=5, operation='observe') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=5, operation='rebroadcast') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=True, operation='observe') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=True, operation='rebroadcast') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=4.0, operation='observe') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=4.0, operation='rebroadcast') ... FAIL
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value='4', operation='observe') ... ERROR
+  test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value='4', operation='rebroadcast') ... ERROR
+test_coherent_funding_depths_follow_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_coherent_funding_depths_follow_the_observed_tip) ... ok
+
+======================================================================
+ERROR: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value='4', operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 116, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    operation(self.bundle,rpc)
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/recovery_core.py", line 168, in observe
+    funding_confirmed=active_confirmation(rpc,fund_tx)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/recovery_core.py", line 156, in active_confirmation
+    require(type(header.get('height')) is int and header.get('confirmations',0)>0,'inactive confirmation anchor')
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: '>' not supported between instances of 'str' and 'int'
+
+======================================================================
+ERROR: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value='4', operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 116, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    operation(self.bundle,rpc)
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/recovery_core.py", line 211, in rebroadcast
+    status=observe(bundle,rpc,previous)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/recovery_core.py", line 168, in observe
+    funding_confirmed=active_confirmation(rpc,fund_tx)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/recovery_core.py", line 156, in active_confirmation
+    require(type(header.get('height')) is int and header.get('confirmations',0)>0,'inactive confirmation anchor')
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: '>' not supported between instances of 'str' and 'int'
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=-1, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=-1, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=1357, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='funding', height=1357, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=-1, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=-1, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=1357, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) (target='refund', height=1357, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 97, in test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip
+    with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=1, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=1, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=5, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='transaction', value=5, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=1, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=1, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=5, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=5, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=True, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=True, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=4.0, operation='observe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) (field='header', value=4.0, operation='rebroadcast')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/44921c6f8796/doge-integrated/asset-exchange/recovery/dogecoin/test_rpc_consistency.py", line 115, in test_transaction_and_header_depths_must_match_the_same_observed_tip
+    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.741s
+
+FAILED (failures=20, errors=2)

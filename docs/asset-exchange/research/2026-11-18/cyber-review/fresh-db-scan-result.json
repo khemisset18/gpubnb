@@ -1,0 +1,80 @@
+{
+  "steps": [
+    {
+      "name": "download-official-db-with-temp",
+      "argv": [
+        "/workspace/scratch/44921c6f8796/evidence/cyber-review-20261118/fresh-trivy/trivy",
+        "fs",
+        "--download-db-only",
+        "--cache-dir",
+        "/workspace/scratch/44921c6f8796/evidence/cyber-review-20261118/fresh-trivy/uncached-official-db-with-temp"
+      ],
+      "startedAtUtc": "2026-11-18T18:41:49.472580+00:00",
+      "finishedAtUtc": "2026-11-18T18:42:04.367693+00:00",
+      "exitCode": 0,
+      "logSha256": "ddf5ffab772716fd675c6f037a605cc46eb24ee6f0866a34918a34e3a371051c"
+    },
+    {
+      "name": "strict-fs",
+      "argv": [
+        "/workspace/scratch/44921c6f8796/evidence/cyber-review-20261118/fresh-trivy/trivy",
+        "fs",
+        "--cache-dir",
+        "/workspace/scratch/44921c6f8796/evidence/cyber-review-20261118/fresh-trivy/uncached-official-db-with-temp",
+        "--scanners",
+        "vuln",
+        "--include-dev-deps",
+        "--severity",
+        "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL",
+        "--ignore-unfixed=false",
+        "--exit-code",
+        "1",
+        "--format",
+        "json",
+        "--output",
+        "/workspace/scratch/44921c6f8796/evidence/cyber-review-20261118/fresh-trivy/fresh-trivy-results.json",
+        "."
+      ],
+      "startedAtUtc": "2026-11-18T18:42:04.367753+00:00",
+      "finishedAtUtc": "2026-11-18T18:42:04.528141+00:00",
+      "exitCode": 1,
+      "logSha256": "6428b6267184627e72e959f073fff813ac89b915d17e78e5624fc7e2d9fd9538"
+    }
+  ],
+  "scannerVersion": "0.76.2",
+  "sourceHead": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+  "freshCacheDirectory": true,
+  "nativeDogeExecution": false,
+  "tempDirectoryCorrectionOnly": true,
+  "officialDatabaseMetadata": {
+    "Version": 2,
+    "NextUpdate": "2026-11-19T13:03:23.615585935Z",
+    "UpdatedAt": "2026-11-18T13:03:23.615586156Z",
+    "DownloadedAt": "2026-11-18T18:42:04.363885038Z"
+  },
+  "findings": [
+    {
+      "id": "GHSA-fjx5-qpf4-xjf2",
+      "package": "borsh",
+      "version": "0.10.4",
+      "severity": "MEDIUM",
+      "source": "ghsa"
+    },
+    {
+      "id": "GHSA-wrw7-89jp-8q8g",
+      "package": "glib",
+      "version": "0.18.5",
+      "severity": "MEDIUM",
+      "source": "ghsa"
+    },
+    {
+      "id": "CVE-2026-112366",
+      "package": "picomatch",
+      "version": "4.0.5",
+      "severity": "HIGH",
+      "source": "ghsa"
+    }
+  ],
+  "reportSha256": "f3ff692625638af8d1deac4e5ef8930667e473bcbdc92389fb257292138583bd",
+  "status": "SCANNED_UNMODIFIED_OFFICIAL_DB"
+}

@@ -1,0 +1,24 @@
+{
+  "steps": [
+    {
+      "name": "download-official-db",
+      "argv": [
+        "/workspace/scratch/44921c6f8796/evidence/cyber-review-20261118/fresh-trivy/trivy",
+        "fs",
+        "--download-db-only",
+        "--cache-dir",
+        "/workspace/scratch/44921c6f8796/evidence/cyber-review-20261118/fresh-trivy/uncached-official-db"
+      ],
+      "startedAtUtc": "2026-11-18T18:40:37.212639+00:00",
+      "finishedAtUtc": "2026-11-18T18:40:43.368182+00:00",
+      "exitCode": 1,
+      "logSha256": "ad3a6de1c1174818ecdd872fcdcca4e856029b471147b8517f1506f94e7a7d18"
+    }
+  ],
+  "officialUnmodifiedDatabase": true,
+  "scannerVersion": "0.76.2",
+  "sourceHead": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+  "newNativeDogeExecution": false,
+  "status": "NOT_SCANNED_MISSING_DEFAULT_TEMP_DIRECTORY",
+  "officialDatabaseDownloaded": false
+}
