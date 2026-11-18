@@ -189,6 +189,8 @@ def observe(bundle,rpc,previous=None):
                 'live funding UTXO terms mismatch')
     current=rpc('getblockchaininfo')
     require(current.get('bestblockhash')==chain['bestblockhash'] and current.get('blocks')==chain['blocks'],'chain changed during observation; retry required')
+    require(type(current.get('headers')) is int and current['headers']>=current['blocks'],
+            'incoherent chain/header observation')
     confirmed=next((x for x in known if x[1]),None)
     pending=next((x for x in known if not x[1]),None)
     require(not confirmed or funding_confirmed,'confirmed refund without confirmed funding; inconsistent RPC observations')
@@ -202,7 +204,8 @@ def observe(bundle,rpc,previous=None):
     return {'schemaVersion':1,'state':state,'transition':transition,'tipHeight':chain['blocks'],'tipHash':chain['bestblockhash'],
             'fundingConfirmed':funding_confirmed,'refundTxid':entry['txid'] if entry else None,
             'confirmedBlock':confirmed[2].get('blockhash') if confirmed else None,'automaticSettlement':False,
-            'nodeSynchronized':chain['headers']==chain['blocks'],'qualificationStatus':'BLOCKED','observationOnly':True}
+            'nodeSynchronized':chain['headers']==chain['blocks'] and current['headers']==current['blocks'],
+            'qualificationStatus':'BLOCKED','observationOnly':True}
 
 
 def fee_floor_koinu(rate):
@@ -217,7 +220,16 @@ def rebroadcast(bundle,rpc,previous=None):
     require(status['nodeSynchronized'],'node has an unresolved header lead; no broadcast')
     require(status['state'] in ('UTXO_AVAILABLE','PENDING'),'funding unavailable or ambiguous; no broadcast')
     require(status['fundingConfirmed'],'funding is not confirmed on active chain; no broadcast')
-    chain=rpc('getblockchaininfo');info=rpc('getmempoolinfo');network=rpc('getnetworkinfo')
+    chain=rpc('getblockchaininfo')
+    # Funding and spendability were checked against observe's snapshot. A new
+    # tip (including a same-height fork) requires a fresh observation instead
+    # of reusing that authorization with a different finality cutoff.
+    require(type(chain.get('blocks')) is int and chain['blocks']==status['tipHeight']
+            and chain.get('bestblockhash')==status['tipHash'],
+            'chain changed before rebroadcast; retry required')
+    require(type(chain.get('headers')) is int and chain['headers']==chain['blocks'],
+            'node has an unresolved header lead; no broadcast')
+    info=rpc('getmempoolinfo');network=rpc('getnetworkinfo')
     rate=max(fee_floor_koinu(info['mempoolminfee']),fee_floor_koinu(network['relayfee']))
     eligible=[]
     for entry in bundle['refunds']:
