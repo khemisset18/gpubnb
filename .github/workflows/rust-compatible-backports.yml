@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - prototypes/rust-compatible-backports/**
+      - prototypes/gtk-migration/**
       - vendor/security/**
       - Cargo.toml
       - Cargo.lock
@@ -50,6 +51,7 @@ jobs:
             ${{ runner.temp }}/rust-backport-workspace/report.json
             ${{ runner.temp }}/rust-backport-workspace/active-metadata.json
             ${{ runner.temp }}/rust-backport-workspace/metadata.json
+            ${{ runner.temp }}/rust-backport-workspace/probe-metadata.json
             ${{ runner.temp }}/rust-backport-workspace/*.log
             ${{ runner.temp }}/rust-backport-workspace/candidate-Cargo.lock
           if-no-files-found: error

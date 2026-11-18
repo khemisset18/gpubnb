@@ -87,6 +87,19 @@ def main():
     parser.add_argument('--prepare-only', action='store_true')
     args=parser.parse_args()
     work=args.fresh_work_directory.resolve()
+    # Preserve the historical branch and its exact reconstruction. An active
+    # official GTK migration has a different graph and must pass the complete
+    # equivalent provenance + release-iterator + native regression runner.
+    root_manifest = tomllib.loads((HERE.parent.parent/'Cargo.toml').read_text())
+    tauri_patch = root_manifest.get('patch', {}).get('crates-io', {}).get('tauri')
+    if tauri_patch is not None:
+        if work.exists():
+            raise FileExistsError(str(work))
+        migration = HERE.parent/'gtk-migration'/'prepare.py'
+        assert migration.is_file(), 'migration qualification runner missing'
+        import sys
+        subprocess.run([sys.executable, str(migration), *sys.argv[1:]], check=True)
+        return
     work.mkdir(mode=0o700, parents=False, exist_ok=False)
     pins=json.loads((HERE/'source-pins.json').read_text())
     assert [(p['name'],p['version']) for p in pins['patches']] == [('glib','0.18.5')]
