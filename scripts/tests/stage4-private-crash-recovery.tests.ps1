@@ -38,8 +38,13 @@ foreach($step in $steps) {
             # Crash recovery itself in the gap between removing live and restoring backup.
             if((Run-Child $root 'recovery-removed-gpubnb-agent.exe' $true) -eq 0) {throw 'expected_recovery_process_death'}
         }
+        $stopCountAfterFirst=$null
         foreach($attempt in 1..2) {
             if((Run-Child $root '' $true) -ne 0) {throw ('recovery_failed:'+ $step+':'+(Get-Content (Join-Path $root 'child.log') -Raw))}
+            $stopLog=Join-Path $root 'fake-service-stop-events'
+            $stopCount=if(Test-Path -LiteralPath $stopLog){@(Get-Content -LiteralPath $stopLog).Count}else{0}
+            if($attempt -eq 1){$stopCountAfterFirst=$stopCount}
+            elseif($stopCount -ne $stopCountAfterFirst){throw ('repeated_recovery_stopped_healthy_service:'+ $step)}
             foreach($pin in $pins) {
                 $live=Join-Path $target $pin.name
                 $expected=if($step -ceq 'journal-committed'){$pin.newHash}else{$pin.oldHash}
