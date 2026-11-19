@@ -136,8 +136,9 @@ class GatewaySupervisor(strict_http.GatewaySupervisor):
                 "--tmpfs=/tmp:rw,exec,nosuid,size=1024m",
                 "--mount", f"type=volume,source={volume},target=/config",
                 "--env", "PUID=1000", "--env", "PGID=1000",
+                "--device=/dev/dri:/dev/dri",
                 "--gpus", f"device={','.join(gpu_uuids)}",
-                "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute",
+                "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute,video",
                 image,
             ], timeout=legacy.START_TIMEOUT_SECONDS)
             return

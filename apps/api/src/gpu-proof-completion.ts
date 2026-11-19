@@ -28,6 +28,10 @@ export type GpuProofCompletionOutcome = {
   // terminal/incompatible state, and bookingStatus/machineReleased above describe what this
   // call *attempted*, not what is now true in the database.
   changed: boolean;
+  // Only populated for an explicitly selected Linux desktop Workspace.
+  workspaceSlug?: string;
+  workspaceSessionId?: string | null;
+  workspacePreparationQueued?: boolean;
 };
 
 /**
@@ -54,15 +58,38 @@ export async function completeGpuProofJob(
   bookingId: string,
   machineId: string,
 ): Promise<GpuProofCompletionOutcome> {
-  let developerWorkspaceCompatible = null;
+  // Preserve the renter's immutable choice across funding and GPU_PROOF.
+  // A missing value means a legacy Compute/Developer booking.
+  const selected = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { requestedWorkspaceSlug: true },
+  });
+  const desktopSlugs = ['cloud-desktop', 'creator', 'cad', 'gaming'] as const;
+  type DesktopSlug = typeof desktopSlugs[number];
+  const requested = selected?.requestedWorkspaceSlug;
+  const chosenDesktop: DesktopSlug | null = desktopSlugs.find(slug => slug === requested) ?? null;
+  const targetSlug = chosenDesktop ?? 'developer';
+  let targetWorkspaceCompatible = null;
   try {
-    developerWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, 'developer');
+    targetWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, targetSlug);
+    if (chosenDesktop && !targetWorkspaceCompatible.enabledByOwner) {
+      targetWorkspaceCompatible = null;
+    }
   } catch (error) {
-    if (!(error instanceof Error) || error.message !== 'developer_workspace_incompatible') throw error;
+    if (!(error instanceof Error) ||
+      ![targetSlug + '_workspace_incompatible', targetSlug + '_workspace_runtime_unavailable'].includes(error.message)) {
+      throw error;
+    }
   }
+  const desktopLimits: Record<DesktopSlug, { maxRamMiB: number; maxCpuCores: number; storageQuotaMiB: number }> = {
+    'cloud-desktop': { maxRamMiB: 8192, maxCpuCores: 4, storageQuotaMiB: 81920 },
+    creator: { maxRamMiB: 16384, maxCpuCores: 4, storageQuotaMiB: 102400 },
+    cad: { maxRamMiB: 16384, maxCpuCores: 4, storageQuotaMiB: 122880 },
+    gaming: { maxRamMiB: 16384, maxCpuCores: 4, storageQuotaMiB: 204800 },
+  };
 
   return runBookingTransaction(db, async (tx) => {
-    if (developerWorkspaceCompatible) {
+    if (targetWorkspaceCompatible) {
       // Keep the booking alive and the GPU locked to it. The activation grace window
       // remains a hard upper bound if the persistent workspace never becomes openable.
       const now = new Date();
@@ -94,7 +121,7 @@ export async function completeGpuProofJob(
       }
 
       let developerSession = await tx.workspaceSession.findFirst({
-        where: { bookingId, machineWorkspaceId: developerWorkspaceCompatible.id },
+        where: { bookingId, machineWorkspaceId: targetWorkspaceCompatible.id },
         select: { id: true },
       });
       let developerPreparationQueued = false;
@@ -105,20 +132,20 @@ export async function completeGpuProofJob(
             bookingId,
             renterId: booking.buyerId,
             machineId,
-            machineWorkspaceId: developerWorkspaceCompatible.id,
+            machineWorkspaceId: targetWorkspaceCompatible.id,
             status: WorkspaceSessionStatus.PREPARING,
             isolationType: 'DOCKER',
             runtimeBackend: WorkspaceRuntimeBackend.CONTAINER,
             resourceLimits: {
-              maxRamMiB: 4096,
-              maxCpuCores: 2,
-              storageQuotaMiB: 10240,
+              ...(chosenDesktop ? desktopLimits[chosenDesktop] : {
+                maxRamMiB: 4096, maxCpuCores: 2, storageQuotaMiB: 10240,
+              }),
               networkAccess: 'RESTRICTED',
               autoStopMinutes: 60,
             },
             connectionType: 'GPUBNB_GATEWAY',
             preparationProgress: 5,
-            preparationStep: 'GPU_PROOF_VERIFIED_AUTO_DEVELOPER',
+            preparationStep: chosenDesktop ? 'GPU_PROOF_VERIFIED_DESKTOP_REQUESTED' : 'GPU_PROOF_VERIFIED_AUTO_DEVELOPER',
             preparationRequestedAt: now,
             readyDeadlineAt: new Date(Math.max(Date.now(), now.getTime() + 60_000)),
             expiresAt: booking.endsAt,
@@ -126,7 +153,7 @@ export async function completeGpuProofJob(
               create: {
                 actorType: 'RENTER',
                 actorId: booking.buyerId,
-                action: 'DEVELOPER_PREPARATION_AUTO_REQUESTED_AFTER_GPU_PROOF',
+                action: chosenDesktop ? 'DESKTOP_PREPARATION_AUTO_REQUESTED_AFTER_GPU_PROOF' : 'DEVELOPER_PREPARATION_AUTO_REQUESTED_AFTER_GPU_PROOF',
               },
             },
           },
@@ -138,7 +165,7 @@ export async function completeGpuProofJob(
           where: { bookingId, type: JobType.GPU_DIAGNOSTIC, status: JobStatus.QUEUED },
           data: {
             status: JobStatus.CANCELLED,
-            errorCode: 'superseded_by_developer_workspace',
+            errorCode: chosenDesktop ? 'superseded_by_desktop_workspace' : 'superseded_by_developer_workspace',
             finishedAt: now,
           },
         });
@@ -148,7 +175,7 @@ export async function completeGpuProofJob(
             renterId: booking.buyerId,
             machineId,
             type: JobType.WORKSPACE_PREPARE,
-            parameters: { workspaceSlug: 'developer', timeoutSeconds: 1200 },
+            parameters: { workspaceSlug: targetSlug, timeoutSeconds: chosenDesktop ? 1800 : 1200 },
           },
         });
         developerSession = await tx.workspaceSession.update({
@@ -162,9 +189,14 @@ export async function completeGpuProofJob(
       return {
         bookingStatus: BookingStatus.STARTING,
         machineReleased: false,
-        developerWorkspaceSessionId: developerSession.id,
-        developerPreparationQueued,
+        developerWorkspaceSessionId: chosenDesktop ? null : developerSession.id,
+        developerPreparationQueued: chosenDesktop ? false : developerPreparationQueued,
         changed: true,
+        ...(chosenDesktop ? {
+          workspaceSlug: chosenDesktop,
+          workspaceSessionId: developerSession.id,
+          workspacePreparationQueued: developerPreparationQueued,
+        } : {}),
       };
     }
 

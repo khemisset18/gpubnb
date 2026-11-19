@@ -1055,7 +1055,17 @@ def run_workspace_gateway_forever(
     if not isinstance(machine_id, str) or not machine_id:
         raise RuntimeError("workspace_gateway_machine_not_linked")
     api = ApiClient(str(config.get("apiUrl") or "https://gpubnb.netlify.app/api"), config.get("caFile"))
-    supervisor = GatewaySupervisor(
+    # The base gateway intentionally does not accept the four Linux desktop
+    # slugs. Select the signed-resource-scoped supervisor and enable its
+    # Selkies routes only on Linux. Never activate Windows-native Stage 4 by
+    # accidentally falling through a Docker backend.
+    supervisor_type = GatewaySupervisor
+    if __import__('platform').system() == 'Linux':
+        from .workspace_gateway_v8 import GatewaySupervisor as LeasedGatewaySupervisor
+        from .workspace_gateway_v9 import install as enable_linux_desktops
+        enable_linux_desktops()
+        supervisor_type = LeasedGatewaySupervisor
+    supervisor = supervisor_type(
         api,
         load_key(),
         machine_id,

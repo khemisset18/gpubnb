@@ -445,6 +445,8 @@ model Booking {
   buyerId String
   listingId String
   idempotencyKey String
+  // Immutable renter choice, persisted before funding so GPU_PROOF launches the right workspace.
+  requestedWorkspaceSlug String? @db.VarChar(80)
   startsAt DateTime
   endsAt DateTime
   quotedLamports BigInt

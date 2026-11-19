@@ -824,7 +824,7 @@ def run_next_job(
             )
         elif job.get("type") == "WORKSPACE_PREPARE":
             developer_gpu_uuid: str | None = None
-            if workspace_slug in ("developer", "ai", "video"):
+            if workspace_slug in ("developer", "ai", "video", "cloud-desktop", "creator", "cad", "gaming"):
                 # AI and Video Workspaces are renter-billed and GPU-compute
                 # just like Developer - same rationale, same resolver: never
                 # fall back to a fixed device index for a workload the renter

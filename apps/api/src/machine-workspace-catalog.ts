@@ -16,7 +16,11 @@ export const executableWorkspaceSlugs = [
 ] as const;
 export type ExecutableWorkspaceSlug = typeof executableWorkspaceSlugs[number];
 
-const linuxDesktopWorkspaceSlugs = new Set<string>(['cloud-desktop', 'creator', 'cad', 'gaming']);
+export const linuxDesktopWorkspaceSlugs = ['cloud-desktop', 'creator', 'cad', 'gaming'] as const;
+const linuxDesktopWorkspaceSlugSet = new Set<string>(linuxDesktopWorkspaceSlugs);
+export function isLinuxDesktopWorkspaceSlug(slug: string): boolean {
+  return linuxDesktopWorkspaceSlugSet.has(slug);
+}
 
 export function isExecutableWorkspaceSlug(value: string): value is ExecutableWorkspaceSlug {
   return executableWorkspaceSlugs.includes(value as ExecutableWorkspaceSlug);
@@ -24,14 +28,14 @@ export function isExecutableWorkspaceSlug(value: string): value is ExecutableWor
 
 function isWorkspaceRuntimeAvailable(machine: MachineCapabilities, slug: string): boolean {
   if (!isExecutableWorkspaceSlug(slug)) return false;
-  if (!linuxDesktopWorkspaceSlugs.has(slug)) return true;
+  if (!isLinuxDesktopWorkspaceSlug(slug)) return true;
 
   // This capability describes the qualified Linux/Selkies path and nothing
   // else. Require Linux positively rather than merely excluding Windows: a
   // future/unknown OS must never inherit a desktop backend by accident. The
   // Windows-native backend gets its own independently measured branch.
   const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
-  if (!os.startsWith('linux')) return false;
+  if (!os.startsWith('linux') || os.includes('wsl') || os.includes('microsoft')) return false;
   return machine.desktopGpuRenderingAvailable;
 }
 

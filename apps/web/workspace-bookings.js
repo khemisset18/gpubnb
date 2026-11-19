@@ -42,6 +42,16 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
   const securityLabActionInFlight=new Set();
   const securityLabErrors=new Map();
   const securityLabDetailByBooking=new Map();
+  const desktopWorkspaces=Object.freeze([
+    {slug:'cloud-desktop',name:'Cloud Desktop',openLabel:'Ouvrir le bureau Linux'},
+    {slug:'creator',name:'Creator',openLabel:'Ouvrir Blender'},
+    {slug:'cad',name:'CAD',openLabel:'Ouvrir FreeCAD'},
+    {slug:'gaming',name:'Gaming expérimental',openLabel:'Ouvrir le bureau de jeu'},
+  ]);
+  const desktopActionInFlight=new Set();
+  const desktopErrors=new Map();
+  const desktopDetailByBooking=new Map();
+  const desktopKey=(bookingId,slug)=>bookingId+':'+slug;
 
   async function request(path,options={}){
     const headers={accept:'application/json',...(options.headers||{})};
@@ -283,6 +293,30 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     return `<article class="list-row" data-security-lab-row="${escapeHTML(booking.id)}"><div><strong>Security Lab · ${title}</strong>${errorHTML}</div><div class="actions">${action}${badge}</div></article>`;
   }
 
+  function desktopBlockHTML(booking,job,detail,errorMessage,workspace){
+    if(!preparableBookingStatuses.has(booking.status)||job?.status!=='COMPLETED')return '';
+    const title=escapeHTML(booking.listing?.title||'Réservation GPU');
+    const phase=detail?deriveDeveloperPhase({bookingStatus:booking.status,gpuProofJob:job,workspaceDetail:detail}):DeveloperPhase.CREATE;
+    const errorHTML=errorMessage?'<p class="muted" role="alert">'+escapeHTML(errorMessage)+'</p>':'';
+    const attrs='data-booking-id="'+escapeHTML(booking.id)+'" data-desktop-slug="'+escapeHTML(workspace.slug)+'"';
+    let action='';
+    let badge='<span class="badge">'+escapeHTML(detail?.status||'NON DÉMARRÉ')+'</span>';
+    if(phase===DeveloperPhase.CREATE){
+      action='<button class="button button-primary" type="button" data-desktop-action="create" '+attrs+'>Créer mon espace</button>';
+    }else if(phase===DeveloperPhase.OPEN){
+      action='<button class="button button-primary" type="button" data-desktop-action="open" '+attrs+'>'+escapeHTML(workspace.openLabel)+'</button>';
+    }else if(phase===DeveloperPhase.RETRY){
+      action='<button class="button" type="button" data-desktop-action="retry" '+attrs+'>Réessayer</button>';
+      badge='<span class="badge warn">'+escapeHTML(detail?.preparation?.errorCode||detail?.status||'ÉCHEC')+'</span>';
+    }else if(phase===DeveloperPhase.PREPARING){
+      action='<span class="muted">'+escapeHTML(preparationLabel(detail))+'</span>';
+    }
+    if(detail?.status==='QUARANTINED'){action='';badge='<span class="badge warn">Machine en quarantaine</span>';}
+    const info=workspace.slug==='gaming'?
+      '<p class="muted">Steam en ligne nécessite une sortie réseau autorisée ; le réseau isolé actuel ne la fournit pas.</p>':'';
+    return '<article class="list-row" data-desktop-row="'+escapeHTML(booking.id)+'"><div><strong>'+escapeHTML(workspace.name)+' · '+title+'</strong>'+info+errorHTML+'</div><div class="actions">'+action+badge+'</div></article>';
+  }
+
   function rowHTML(booking,job,history=false){
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
     if(!job){
@@ -449,7 +483,25 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
         row.booking,row.job,securityLabDetailByBooking.get(row.booking.id)||null,securityLabErrors.get(row.booking.id),
       )).join('');
 
-      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
+      await Promise.all(eligible.flatMap(row=>desktopWorkspaces
+        .filter(workspace=>!desktopActionInFlight.has(desktopKey(row.booking.id,workspace.slug)))
+        .map(async workspace=>{
+          const key=desktopKey(row.booking.id,workspace.slug);
+          try{
+            const detail=await request('/bookings/'+encodeURIComponent(row.booking.id)+'/workspace/'+encodeURIComponent(workspace.slug)+'/status');
+            desktopDetailByBooking.set(key,detail);
+          }catch(error){
+            if(error.status===404)desktopDetailByBooking.set(key,null);
+          }
+        })));
+      const desktopHTML=eligible.flatMap(row=>desktopWorkspaces
+        .filter(workspace=>row.booking.requestedWorkspaceSlug===workspace.slug)
+        .map(workspace=>desktopBlockHTML(
+        row.booking,row.job,desktopDetailByBooking.get(desktopKey(row.booking.id,workspace.slug))||null,
+        desktopErrors.get(desktopKey(row.booking.id,workspace.slug)),workspace,
+      ))).join('');
+
+      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${desktopHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
 
       root.querySelectorAll('[data-prepare-compute]').forEach(button=>button.addEventListener('click',async()=>{
         button.disabled=true;button.textContent='Préparation Compute…';
@@ -787,6 +839,41 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
           const url=resolveWorkspaceOpenUrl(GATEWAY,access);
           window.open(url,'_blank','noopener');
         });
+      }));
+      root.querySelectorAll('[data-desktop-action]').forEach(button=>button.addEventListener('click',async()=>{
+        const bookingId=button.dataset.bookingId;
+        const slug=button.dataset.desktopSlug;
+        const action=button.dataset.desktopAction;
+        if(!bookingId||!desktopWorkspaces.some(item=>item.slug===slug))return;
+        const key=desktopKey(bookingId,slug);
+        if(desktopActionInFlight.has(key))return;
+        desktopActionInFlight.add(key);
+        desktopErrors.delete(key);
+        button.disabled=true;
+        const originalText=button.textContent;
+        button.textContent=action==='open'?'Ouverture…':'Démarrage…';
+        try{
+          const endpoint='/bookings/'+encodeURIComponent(bookingId)+'/workspace/'+encodeURIComponent(slug);
+          if(action==='create')await request(endpoint,{method:'POST'});
+          else if(action==='retry')await request('/bookings/'+encodeURIComponent(bookingId)+'/workspace/retry',{method:'POST'});
+          else if(action==='open'){
+            // Open synchronously on click so browsers do not block the granted workspace tab.
+            const tab=window.open('about:blank','_blank');
+            try{
+              const access=await request(endpoint+'/access',{method:'POST'});
+              const url=resolveWorkspaceOpenUrl(GATEWAY,access);
+              if(tab)tab.location.replace(url);
+              else window.location.assign(url);
+            }catch(error){if(tab)tab.close();throw error;}
+          }else throw new Error('action_workspace_inconnue');
+        }catch(error){
+          desktopErrors.set(key,error.message||'Action impossible.');
+          button.disabled=false;
+          button.textContent=originalText;
+        }finally{
+          desktopActionInFlight.delete(key);
+          await render();
+        }
       }));
     }catch(error){root.innerHTML=`<div class="empty-state"><p class="muted">${escapeHTML(error.message||'Impossible de charger les réservations GPU.')}</p></div>`;}
   }
