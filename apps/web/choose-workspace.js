@@ -48,10 +48,11 @@ async function prepareSelected(listing,workspace,button){
     bookingCreated=true;
     for(let attempt=0;attempt<40;attempt++){
       try{await workspacePreparationRequest(booking.id,workspace);forgetBooking();location.href='bookings.html';return}
-      catch(error){if(error.code!=='funded_booking_required')throw error}
+      catch(error){if(error.code!=='funded_booking_required'&&error.code!=='gpu_proof_pending')throw error}
       await wait(3000);
     }
-    throw new Error('Le financement bêta prend plus de temps que prévu.');
+    // A slow verified GPU proof must not cause a second reservation attempt.
+    forgetBooking();location.href='bookings.html';return;
   }catch(error){
     button.disabled=false;button.textContent='Réessayer';
     if(error.status===401){
