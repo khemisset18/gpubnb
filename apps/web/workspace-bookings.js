@@ -483,7 +483,23 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
         row.booking,row.job,securityLabDetailByBooking.get(row.booking.id)||null,securityLabErrors.get(row.booking.id),
       )).join('');
 
-      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
+      await Promise.all(eligible.flatMap(row=>desktopWorkspaces
+        .filter(workspace=>!desktopActionInFlight.has(desktopKey(row.booking.id,workspace.slug)))
+        .map(async workspace=>{
+          const key=desktopKey(row.booking.id,workspace.slug);
+          try{
+            const detail=await request('/bookings/'+encodeURIComponent(row.booking.id)+'/workspace/'+encodeURIComponent(workspace.slug)+'/status');
+            desktopDetailByBooking.set(key,detail);
+          }catch(error){
+            if(error.status===404)desktopDetailByBooking.set(key,null);
+          }
+        })));
+      const desktopHTML=eligible.flatMap(row=>desktopWorkspaces.map(workspace=>desktopBlockHTML(
+        row.booking,row.job,desktopDetailByBooking.get(desktopKey(row.booking.id,workspace.slug))||null,
+        desktopErrors.get(desktopKey(row.booking.id,workspace.slug)),workspace,
+      ))).join('');
+
+      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${desktopHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
 
       root.querySelectorAll('[data-prepare-compute]').forEach(button=>button.addEventListener('click',async()=>{
         button.disabled=true;button.textContent='Préparation Compute…';
