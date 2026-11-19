@@ -42,6 +42,16 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
   const securityLabActionInFlight=new Set();
   const securityLabErrors=new Map();
   const securityLabDetailByBooking=new Map();
+  const desktopWorkspaces=Object.freeze([
+    {slug:'cloud-desktop',name:'Cloud Desktop',openLabel:'Ouvrir le bureau Linux'},
+    {slug:'creator',name:'Creator',openLabel:'Ouvrir Blender'},
+    {slug:'cad',name:'CAD',openLabel:'Ouvrir FreeCAD'},
+    {slug:'gaming',name:'Gaming expérimental',openLabel:'Ouvrir le bureau de jeu'},
+  ]);
+  const desktopActionInFlight=new Set();
+  const desktopErrors=new Map();
+  const desktopDetailByBooking=new Map();
+  const desktopKey=(bookingId,slug)=>bookingId+':'+slug;
 
   async function request(path,options={}){
     const headers={accept:'application/json',...(options.headers||{})};
@@ -281,6 +291,30 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
       badge=`<span class="badge">${escapeHTML(detail?.status||'TERMINÉ')}</span>`;
     }
     return `<article class="list-row" data-security-lab-row="${escapeHTML(booking.id)}"><div><strong>Security Lab · ${title}</strong>${errorHTML}</div><div class="actions">${action}${badge}</div></article>`;
+  }
+
+  function desktopBlockHTML(booking,job,detail,errorMessage,workspace){
+    if(!preparableBookingStatuses.has(booking.status)||job?.status!=='COMPLETED')return '';
+    const title=escapeHTML(booking.listing?.title||'Réservation GPU');
+    const phase=detail?deriveDeveloperPhase({bookingStatus:booking.status,gpuProofJob:job,workspaceDetail:detail}):DeveloperPhase.CREATE;
+    const errorHTML=errorMessage?'<p class="muted" role="alert">'+escapeHTML(errorMessage)+'</p>':'';
+    const attrs='data-booking-id="'+escapeHTML(booking.id)+'" data-desktop-slug="'+escapeHTML(workspace.slug)+'"';
+    let action='';
+    let badge='<span class="badge">'+escapeHTML(detail?.status||'NON DÉMARRÉ')+'</span>';
+    if(phase===DeveloperPhase.CREATE){
+      action='<button class="button button-primary" type="button" data-desktop-action="create" '+attrs+'>Créer mon espace</button>';
+    }else if(phase===DeveloperPhase.OPEN){
+      action='<button class="button button-primary" type="button" data-desktop-action="open" '+attrs+'>'+escapeHTML(workspace.openLabel)+'</button>';
+    }else if(phase===DeveloperPhase.RETRY){
+      action='<button class="button" type="button" data-desktop-action="retry" '+attrs+'>Réessayer</button>';
+      badge='<span class="badge warn">'+escapeHTML(detail?.preparation?.errorCode||detail?.status||'ÉCHEC')+'</span>';
+    }else if(phase===DeveloperPhase.PREPARING){
+      action='<span class="muted">'+escapeHTML(preparationLabel(detail))+'</span>';
+    }
+    if(detail?.status==='QUARANTINED'){action='';badge='<span class="badge warn">Machine en quarantaine</span>';}
+    const info=workspace.slug==='gaming'?
+      '<p class="muted">Steam en ligne nécessite une sortie réseau autorisée ; le réseau isolé actuel ne la fournit pas.</p>':'';
+    return '<article class="list-row" data-desktop-row="'+escapeHTML(booking.id)+'"><div><strong>'+escapeHTML(workspace.name)+' · '+title+'</strong>'+info+errorHTML+'</div><div class="actions">'+action+badge+'</div></article>';
   }
 
   function rowHTML(booking,job,history=false){
