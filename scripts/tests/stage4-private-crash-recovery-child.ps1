@@ -6,9 +6,10 @@ $ErrorActionPreference='Stop'
 # The real core/recovery validates the TEMP-only fixture scope again.
 $target=Join-Path $Root 'installed'
 $state=Join-Path $Root 'fake-service-running'
+$stopLog=Join-Path $Root 'fake-service-stop-events'
 $callbacks=@{
     TargetDirectory=$target
-    StopControlledService={Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue}
+    StopControlledService={[IO.File]::AppendAllText($stopLog,"STOP`n");Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue}
     StartControlledService={[IO.File]::WriteAllText($state,'running')}
     IsControlledServiceRunning={Test-Path -LiteralPath $state}
     IsControlledServiceStopped={-not (Test-Path -LiteralPath $state)}
