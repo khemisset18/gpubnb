@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { ListingResourceMode, type PrismaClient } from '@prisma/client';
+import { ListingResourceMode, MachineWorkspaceState, type PrismaClient } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 
@@ -22,7 +22,7 @@ import {
   getPublicExactGpuListing,
   listPublicExactGpuListings,
 } from './rental-public-listings.js';
-import { allWorkspaceCompatibility, compatibleWorkspaceChoices } from './machine-workspace-catalog.js';
+import { allWorkspaceCompatibility, compatibleWorkspaceChoices, isLinuxDesktopWorkspaceSlug, linuxDesktopWorkspaceSlugs } from './machine-workspace-catalog.js';
 
 const listingInput = z.object({
   machineId: z.string().cuid(),
@@ -136,9 +136,22 @@ export function registerRentalMarketplaceRoutes(
       config.HEARTBEAT_OFFLINE_SECONDS,
     );
     if (!listing) return reply.code(404).send({ error: 'listing_unavailable' });
+    const enabled = await db.machineWorkspace.findMany({
+      where: {
+        machineId: listing.machine.id,
+        enabledByOwner: true,
+        state: { in: [MachineWorkspaceState.READY, MachineWorkspaceState.LIMITED] },
+        workspace: { slug: { in: [...linuxDesktopWorkspaceSlugs] } },
+      },
+      select: { workspace: { select: { slug: true } } },
+    });
+    const optedIn = new Set(enabled.map(item => item.workspace.slug));
     return {
       ...listing,
-      workspaces: allWorkspaceCompatibility(listing.machine),
+      workspaces: allWorkspaceCompatibility(listing.machine).map(item => ({
+        ...item,
+        bookable: item.bookable && (!isLinuxDesktopWorkspaceSlug(item.slug) || optedIn.has(item.slug)),
+      })),
     };
   });
 
