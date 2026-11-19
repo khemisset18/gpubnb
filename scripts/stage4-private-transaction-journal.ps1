@@ -101,7 +101,22 @@ function Invoke-Stage4FourFileRecovery {
         # files live; RESTORING may itself be partially applied after a crash.
         # Validate all pinned recovery sources above, stop the service, then
         # idempotently restore each old component from its verified backup.
-        if($journal.phase -cne 'COMMITTED') {
+        # A completed rollback is replayable: do not STOP a healthy Agent again
+        # when all four old live files already have their pinned hashes and ACLs.
+        # Final pin and runtime-health validation still run below, on every call.
+        $alreadyRestored=($journal.phase -ceq 'ROLLED_BACK')
+        if($alreadyRestored) {
+            foreach($pin in $journal.files) {
+                $live=Join-Path $target $pin.name
+                if(-not (Test-Path -LiteralPath $live -PathType Leaf) -or
+                    (Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ine $pin.oldHash -or
+                    (Get-Acl -LiteralPath $live).Sddl -cne $pin.sddl) {
+                    $alreadyRestored=$false
+                    break
+                }
+            }
+        }
+        if($journal.phase -cne 'COMMITTED' -and -not $alreadyRestored) {
             if(-not (& $IsControlledServiceStopped)) { & $StopControlledService }
             if(-not (& $IsControlledServiceStopped)) {throw 'stage4_recovery_stop_unconfirmed'}
             & $RecoveryCheckpoint 'recovery-stopped'
