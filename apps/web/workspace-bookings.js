@@ -838,6 +838,41 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
           window.open(url,'_blank','noopener');
         });
       }));
+      root.querySelectorAll('[data-desktop-action]').forEach(button=>button.addEventListener('click',async()=>{
+        const bookingId=button.dataset.bookingId;
+        const slug=button.dataset.desktopSlug;
+        const action=button.dataset.desktopAction;
+        if(!bookingId||!desktopWorkspaces.some(item=>item.slug===slug))return;
+        const key=desktopKey(bookingId,slug);
+        if(desktopActionInFlight.has(key))return;
+        desktopActionInFlight.add(key);
+        desktopErrors.delete(key);
+        button.disabled=true;
+        const originalText=button.textContent;
+        button.textContent=action==='open'?'Ouverture…':'Démarrage…';
+        try{
+          const endpoint='/bookings/'+encodeURIComponent(bookingId)+'/workspace/'+encodeURIComponent(slug);
+          if(action==='create')await request(endpoint,{method:'POST'});
+          else if(action==='retry')await request('/bookings/'+encodeURIComponent(bookingId)+'/workspace/retry',{method:'POST'});
+          else if(action==='open'){
+            // Open synchronously on click so browsers do not block the granted workspace tab.
+            const tab=window.open('about:blank','_blank');
+            try{
+              const access=await request(endpoint+'/access',{method:'POST'});
+              const url=resolveWorkspaceOpenUrl(GATEWAY,access);
+              if(tab)tab.location.replace(url);
+              else window.location.assign(url);
+            }catch(error){if(tab)tab.close();throw error;}
+          }else throw new Error('action_workspace_inconnue');
+        }catch(error){
+          desktopErrors.set(key,error.message||'Action impossible.');
+          button.disabled=false;
+          button.textContent=originalText;
+        }finally{
+          desktopActionInFlight.delete(key);
+          await render();
+        }
+      }));
     }catch(error){root.innerHTML=`<div class="empty-state"><p class="muted">${escapeHTML(error.message||'Impossible de charger les réservations GPU.')}</p></div>`;}
   }
   // Purely local: re-reads each countdown span's own server-provided endsAt (set by the
