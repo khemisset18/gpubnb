@@ -1050,6 +1050,10 @@ async function createDesktopWorkspaceSession(
     include: { listing: { select: { machineId: true } } },
   });
   if (!booking) return { error: 'funded_booking_required' as const };
+  // A paid booking cannot be switched silently to a different desktop after funding.
+  if (booking.requestedWorkspaceSlug && booking.requestedWorkspaceSlug !== slug) {
+    return { error: 'workspace_not_selected_for_booking' as const };
+  }
 
   let machineWorkspace;
   try {
