@@ -1058,6 +1058,8 @@ async function createDesktopWorkspaceSession(
     return { error: error instanceof Error ? error.message : `${slug}_workspace_incompatible` };
   }
 
+  if (!machineWorkspace.enabledByOwner) return { error: 'workspace_not_enabled_by_owner' as const };
+
   const existing = await db.workspaceSession.findFirst({
     where: { bookingId, renterId, machineWorkspaceId: machineWorkspace.id },
     select: { id: true, status: true, preparationProgress: true, preparationStep: true },
@@ -1074,6 +1076,43 @@ async function createDesktopWorkspaceSession(
         data: { buyerId: renterId },
       });
       if (eligible.count !== 1) throw new Error('funded_booking_required');
+
+      // Fail closed if the owner withdrew consent, the host is no longer
+      // available, or GPU desktop capability was revoked since the first read.
+      const liveHost = await tx.machineWorkspace.findFirst({
+        where: {
+          id: machineWorkspace.id,
+          enabledByOwner: true,
+          machine: {
+            connectivity: MachineConnectivity.ONLINE,
+            moderationStatus: ModerationStatus.CLEAR,
+            desktopGpuRenderingAvailable: true,
+            operatingSystem: { startsWith: 'Linux', mode: 'insensitive' },
+          },
+        },
+        select: { id: true },
+      });
+      if (!liveHost) throw new Error('desktop_workspace_host_unavailable');
+
+      // The Compute proof must actually finish before the paid GPU starts
+      // another interactive runtime. Merely funding a booking is insufficient.
+      const proof = await tx.job.findFirst({
+        where: { bookingId, type: JobType.GPU_PROOF, status: JobStatus.COMPLETED },
+        select: { id: true },
+      });
+      if (!proof) throw new Error('gpu_proof_pending');
+
+      // One paid interactive desktop per booking. Serializing on the updated
+      // booking row above fences concurrent requests for different slugs.
+      const otherLive = await tx.workspaceSession.findFirst({
+        where: {
+          bookingId,
+          status: { in: liveWorkspaceSessions },
+          machineWorkspace: { workspace: { slug: { not: 'compute' } } },
+        },
+        select: { id: true },
+      });
+      if (otherLive) throw new Error('another_interactive_workspace_active');
 
       const created = await tx.workspaceSession.create({
         data: {
@@ -1126,7 +1165,7 @@ async function createDesktopWorkspaceSession(
       select: { id: true, status: true, preparationProgress: true, preparationStep: true },
     });
     if (raced) return { session: raced };
-    if (error instanceof Error && error.message === 'funded_booking_required') return { error: error.message };
+    if (error instanceof Error && ['funded_booking_required', 'desktop_workspace_host_unavailable', 'gpu_proof_pending', 'another_interactive_workspace_active'].includes(error.message)) return { error: error.message };
     throw error;
   }
 }
