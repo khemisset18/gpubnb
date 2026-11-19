@@ -35,8 +35,11 @@ const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.ACTIVE,
 ];
 
+// Every interactive workspace holds rental authority, not only Developer.
+// A background reconciler must not complete/release a desktop booking while
+// Creator, CAD, Cloud Desktop or Gaming is still preparing or running.
 const DEVELOPER_SESSION_FILTER = {
-  machineWorkspace: { workspace: { slug: 'developer' } },
+  machineWorkspace: { workspace: { slug: { not: 'compute' } } },
 } as const;
 
 export function betaTestDevBypassActive(): boolean {
@@ -213,7 +216,7 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
           nvidiaRuntimeAvailable: true,
         },
       },
-      workspaceSessions: { none: { machineWorkspace: { workspace: { slug: 'developer' } } } },
+      workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
     },
     select: { id: true, buyerId: true, listing: { select: { machineId: true } } },
     take: 50,
