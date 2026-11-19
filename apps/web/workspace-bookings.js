@@ -494,7 +494,9 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
             if(error.status===404)desktopDetailByBooking.set(key,null);
           }
         })));
-      const desktopHTML=eligible.flatMap(row=>desktopWorkspaces.map(workspace=>desktopBlockHTML(
+      const desktopHTML=eligible.flatMap(row=>desktopWorkspaces
+        .filter(workspace=>row.booking.requestedWorkspaceSlug===workspace.slug)
+        .map(workspace=>desktopBlockHTML(
         row.booking,row.job,desktopDetailByBooking.get(desktopKey(row.booking.id,workspace.slug))||null,
         desktopErrors.get(desktopKey(row.booking.id,workspace.slug)),workspace,
       ))).join('');
