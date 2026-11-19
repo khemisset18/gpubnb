@@ -689,6 +689,28 @@ def workspace_health_command(image: str, workspace_slug: str, gpu_uuid: str | No
             "--entrypoint", "bash", image,
             "-c", SECURITY_LAB_WORKSPACE_HEALTHCHECK_SCRIPT,
         ]
+    if workspace_slug in ("cloud-desktop", "creator", "cad", "gaming"):
+        # The four desktop images already exist, but none contains the GPUbnb
+        # diagnostic binary. Use a bounded, non-networked, exact-GPU check
+        # instead of incorrectly executing diagnostic_command(image).
+        if not SAFE_GPU_ID.fullmatch(gpu_uuid or ""):
+            raise RuntimeError("desktop_workspace_invalid_target_gpu")
+        app_command = {
+            "cloud-desktop": "test -e /dev/dri/renderD128",
+            "creator": "command -v blender >/dev/null",
+            "cad": "command -v freecadcmd >/dev/null",
+            "gaming": "test -x /usr/games/steam",
+        }[workspace_slug]
+        return [
+            "docker", "run", "--rm", "--network=none",
+            "--security-opt=no-new-privileges", "--pids-limit=64",
+            "--memory=1g", "--cpus=1",
+            "--gpus", f"device={gpu_uuid}",
+            "--device=/dev/dri:/dev/dri",
+            "--env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute,video",
+            "--entrypoint=/bin/sh", image, "-ec",
+            "test -e /dev/dri/renderD128 && test -e /dev/nvidiactl && " + app_command,
+        ]
     return diagnostic_command(image)
 
 
@@ -705,7 +727,7 @@ def prepare_workspace(
     # Both real workspace images (code-server, and the multi-gigabyte Jupyter
     # data-science stack) are far larger than the diagnostic/GPU-proof images
     # this default otherwise guards; give both the same extended pull budget.
-    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab"} else 600
+    timeout_limit = 1800 if workspace_slug in {"developer", "data", "ai", "video", "audio", "api", "mobile", "security-lab", "cloud-desktop", "creator", "cad", "gaming"} else 600
     timeout = max(30, min(timeout_limit, int(timeout_seconds)))
     cache_hit = _pull_image(image, timeout, progress_callback)
     health_finished = threading.Event()
