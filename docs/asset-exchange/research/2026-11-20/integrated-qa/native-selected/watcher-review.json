@@ -1,0 +1,68 @@
+{
+  "historicalEvidenceReview": true,
+  "scope": "funding-reorg-regression",
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false,
+  "stages": {
+    "pending-confirmed-funding": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "MEMPOOL",
+        "doge-b": "MEMPOOL"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    },
+    "funding-rolled-back": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "UNCERTAIN",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "UNCERTAIN",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "MEMPOOL",
+        "doge-b": "MEMPOOL"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    },
+    "funding-restored": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "MEMPOOL",
+        "doge-b": "MEMPOOL"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    },
+    "refund-confirmed": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "CONFIRMED",
+        "doge-b": "CONFIRMED"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    }
+  }
+}

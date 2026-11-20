@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import multinode
 sys.path.insert(0,str(Path(__file__).resolve().parents[3]/'recovery'/'dogecoin'))
 import funding_reorg
@@ -73,6 +73,7 @@ class FundingReorgBoundaries(unittest.TestCase):
         self.assertEqual(m['importedPublicBlocksMaximum'],1355)
         self.assertFalse(m['signingAllowed']);self.assertFalse(m['repeatsPreviouslyQualifiedSuite'])
         self.assertFalse(m['settlementAllowed']);self.assertEqual(m['qualificationStatus'],'BLOCKED')
+        self.assertEqual(m['selectedNativeCases'],['unconfirmed-funding-refuses-rebroadcast'])
         self.assertEqual(multinode.manifest()['maxRpc'],480)
         self.assertEqual(multinode.manifest('fee-pinning')['maxRpc'],800)
         self.assertEqual(multinode.manifest('auxpow-expanded')['maxBroadcastFixtures'],0)
@@ -104,6 +105,79 @@ class FundingReorgBoundaries(unittest.TestCase):
                 funding_reorg.run_funding_reorg({'keys':keys,'rpc':rpc,'report':{},'save':Mock()},root,
                     {'bundleDigests':{'parent':'0'*64},'files':{'bundle-parent.json':'0'*64}})
             rpc.assert_not_called()
+
+    def test_new_control_keeps_key_and_receipt_guards_before_native_access(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);keys=root/'keys';keys.mkdir();(keys/'unexpected').write_text('synthetic placeholder')
+            rpc=Mock(side_effect=AssertionError('no RPC permitted'))
+            with self.assertRaisesRegex(ValueError,'cannot create signing keys'):
+                funding_reorg.run_unconfirmed_funding({'keys':keys,'rpc':rpc},root,{})
+            (keys/'unexpected').unlink();(root/'bundle-parent.json').write_text('{}')
+            with self.assertRaisesRegex(ValueError,'receipt mismatch'):
+                funding_reorg.run_unconfirmed_funding({'keys':keys,'rpc':rpc},root,
+                    {'bundleDigests':{'parent':'0'*64},'files':{'bundle-parent.json':'0'*64}})
+            rpc.assert_not_called()
+
+    def control_context(self,root):
+        keys=root/'keys';keys.mkdir()
+        bundle={'funding':{'txid':'11'*32,'transactionHex':'00'},
+                'refunds':[{'txid':'22'*32,'transactionHex':'01','sha256':'33'*32}]}
+        chain={'blocks':1355,'headers':1355,'bestblockhash':'44'*32}
+        def rpc(node,method,*params):
+            self.assertEqual(node,'a')
+            if method=='getblockchaininfo':return dict(chain)
+            if method=='getrawmempool':return ['11'*32,'22'*32]
+            raise AssertionError('unexpected native method '+method)
+        def tx(node,txid):
+            self.assertEqual(node,'a')
+            return {'hex':'00' if txid=='11'*32 else '01','confirmations':0}
+        def recover(context):
+            self.assertEqual(context['source'],'a')
+            self.assertEqual(context['labLabel'],'funding-unconfirmed')
+            if context['mode']=='observe':return {'state':'PENDING','fundingConfirmed':False}
+            self.assertEqual(context['mode'],'rebroadcast')
+            return {'expectedRefusal':context['expectedError'],'rpcCalls':[{'method':'getblockchaininfo'}]}
+        context={'keys':keys,'rpc':Mock(side_effect=rpc),'tx':Mock(side_effect=tx),
+                 'report':{'stages':[]},'save':Mock(),'submit':Mock(),'import_chain':Mock(),
+                 'recover':Mock(side_effect=recover)}
+        return context,bundle,chain
+
+    def test_only_new_control_runs_without_mining_or_old_scenario(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);c,bundle,_=self.control_context(root)
+            with patch.object(funding_reorg,'retained_public_bundle',return_value=(root,bundle,'55'*32)),\
+                 patch.object(funding_reorg,'run_funding_reorg',side_effect=AssertionError('old suite repeated')):
+                funding_reorg.run_unconfirmed_funding(c,root,{'blocks':['44'*32]*1355})
+            self.assertNotIn('mine',c)
+            self.assertEqual(c['submit'].call_args_list,[unittest.mock.call('a',b'\x00'),unittest.mock.call('a',b'\x01')])
+            self.assertEqual(c['recover'].call_count,2)
+            self.assertEqual(c['report']['stages'],[])
+            result=c['report']['fundingUnconfirmed']
+            self.assertTrue(result['newFundingGuardIsolatedNatively'])
+            self.assertEqual(result['generatedBlocks'],0)
+            self.assertEqual(result['cases'][0]['id'],'unconfirmed-funding-refuses-rebroadcast')
+
+    def test_header_lead_or_confirmed_fixture_cannot_claim_direct_guard_isolation(self):
+        for change in ('header-lead','confirmed'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp);c,bundle,chain=self.control_context(root)
+                if change=='header-lead':chain['headers']=1356
+                else:c['tx'].side_effect=lambda node,txid:{'hex':'00','confirmations':1,'blockhash':'44'*32}
+                with patch.object(funding_reorg,'retained_public_bundle',return_value=(root,bundle,'55'*32)):
+                    with self.assertRaisesRegex(ValueError,'synchronized public tip|unexpectedly confirmed'):
+                        funding_reorg.run_unconfirmed_funding(c,root,{'blocks':['44'*32]*1355})
+                c['recover'].assert_not_called()
+
+    def test_different_refusal_or_any_standalone_send_cannot_pass_new_control(self):
+        for change in ('wrong-refusal','send'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp);c,bundle,_=self.control_context(root)
+                c['recover'].side_effect=[{'state':'PENDING','fundingConfirmed':False},
+                    {'expectedRefusal':funding_reorg.REFUSAL if change=='wrong-refusal' else funding_reorg.FUNDING_REFUSAL,
+                     'rpcCalls':[{'method':'sendrawtransaction' if change=='send' else 'getblockchaininfo'}]}]
+                with patch.object(funding_reorg,'retained_public_bundle',return_value=(root,bundle,'55'*32)):
+                    with self.assertRaisesRegex(ValueError,'direct funding guard did not refuse'):
+                        funding_reorg.run_unconfirmed_funding(c,root,{'blocks':['44'*32]*1355})
 
     def watcher_report(self):
         stages=[]
@@ -142,6 +216,51 @@ class FundingReorgBoundaries(unittest.TestCase):
         for change in [lambda r:r['stages'].pop(),lambda r:r['manifest'].update(labSuite='multinode'),
             lambda r:r['stages'][1]['observations'][0].update(tipHash=format(1356,'064x'),tipHeight=1356)]:
             report=self.watcher_report();change(report);result,_=self.check_watcher(report)
+            self.assertNotEqual(result.returncode,0)
+
+
+    def unconfirmed_report(self):
+        refusal=funding_reorg.FUNDING_REFUSAL
+        rows=[]
+        for state in ('PENDING','UNKNOWN'):
+            rows.append({'source':'a','labLabel':'funding-unconfirmed','state':state,'fundingConfirmed':False,
+                'txid':'22'*32 if state=='PENDING' else None,
+                'transition':'PENDING' if state=='PENDING' else 'EXPECTED_REFUSAL','qualificationStatus':'BLOCKED',
+                'expectedRefusal':refusal if state=='UNKNOWN' else None,'rpcCalls':[{'method':'getblockchaininfo'}],
+                'isolationProof':{'backendUnavailable':True,'originalSigningKeysUnavailable':True}})
+        return {'experimentStatus':'PASS','qualificationStatus':'BLOCKED','generatedBlocks':0,'stages':[],
+            'manifest':{'labSuite':'recovery-funding-reorg','selectedNativeCases':['unconfirmed-funding-refuses-rebroadcast']},
+            'independentRecoveryCalls':rows,'fundingUnconfirmed':{'keysCreated':0,'transactionsSigned':0,
+                'oldFundingReorgCasesRepeated':False,'newFundingGuardIsolatedNatively':True,
+                'activeBlocks':1355,'activeHeaders':1355,'fundingConfirmations':0,'refundConfirmations':0,
+                'fundingTxid':'11'*32,'refundTxid':'22'*32,'refundSha256':'33'*32,'retainedBundleSha256':'55'*32,
+                'standaloneInvocations':2,'generatedBlocks':0,'refusalBroadcasts':0,'standaloneRefusal':refusal,
+                'cases':[{'id':'unconfirmed-funding-refuses-rebroadcast','status':'PASS'}]}}
+
+    def test_new_evidence_contract_requires_only_the_isolated_guard(self):
+        result,value=self.check_watcher(self.unconfirmed_report())
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertTrue(value['newFundingGuardIsolatedNatively'])
+        self.assertFalse(value['oldFundingReorgCasesRepeated'])
+        self.assertFalse(value['settlementAllowed']);self.assertFalse(value['canAdvance'])
+
+    def test_new_contract_rejects_replays_mining_wrong_refusal_or_broadcast(self):
+        changes=[lambda r:r.update(generatedBlocks=1),
+            lambda r:r['manifest'].update(selectedNativeCases=['old-two-cases']),
+            lambda r:r['fundingUnconfirmed'].update(activeHeaders=1356),
+            lambda r:r['fundingUnconfirmed'].update(standaloneRefusal=funding_reorg.REFUSAL),
+            lambda r:r['fundingUnconfirmed'].update(oldFundingReorgCasesRepeated=True),
+            lambda r:r['fundingUnconfirmed']['cases'].append({'id':'pending-refund-after-funding-reorg','status':'PASS'}),
+            lambda r:r.update(fundingReorg={}),
+            lambda r:(r['fundingUnconfirmed'].pop('refundTxid'),r['independentRecoveryCalls'][0].pop('txid')),
+            lambda r:r['fundingUnconfirmed'].update(refundTxid='BAD'),
+            lambda r:r['independentRecoveryCalls'].append(r['independentRecoveryCalls'][0]),
+            lambda r:r['independentRecoveryCalls'][1].update(state='PENDING'),
+            lambda r:r['independentRecoveryCalls'][1].update(transition='PENDING'),
+            lambda r:r['independentRecoveryCalls'][1].update(qualificationStatus='PASS'),
+            lambda r:r['independentRecoveryCalls'][1]['rpcCalls'].append({'method':'sendrawtransaction'})]
+        for change in changes:
+            report=self.unconfirmed_report();change(report);result,_=self.check_watcher(report)
             self.assertNotEqual(result.returncode,0)
 
 
