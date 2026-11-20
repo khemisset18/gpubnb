@@ -7,7 +7,6 @@ import {
   MachineWorkspaceState,
   ModerationStatus,
   type Prisma,
-  type PrismaClient,
 } from '@prisma/client';
 
 import { config } from './config.js';
@@ -54,7 +53,7 @@ export type NativeRentalEligibility = {
  * This is a static pre-booking screen, NOT proof of renter VM/session isolation.
  */
 export async function nativeRentalEligibility(
-  db: PrismaClient | Prisma.TransactionClient,
+  db: Prisma.TransactionClient,
   listingId: string,
   slug: WindowsNativeDesktopSlug,
   now: Date = new Date(),
