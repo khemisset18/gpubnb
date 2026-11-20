@@ -4,6 +4,7 @@ import {
   ListingStatus,
   MachineConnectivity,
   MachineOperational,
+  MiningRuntimeState,
   MachineWorkspaceState,
   ModerationStatus,
   type Prisma,
@@ -36,6 +37,14 @@ const rentableMachineStatuses: MachineOperational[] = [
   MachineOperational.RESERVED,
   MachineOperational.RUNNING,
 ];
+
+const blockedMiningStates = new Set<MiningRuntimeState>([
+  MiningRuntimeState.PREEMPTING,
+  MiningRuntimeState.VERIFYING_STOP,
+  MiningRuntimeState.RENTAL_BLOCKED,
+  MiningRuntimeState.QUARANTINED,
+  MiningRuntimeState.EMERGENCY_STOPPED,
+]);
 
 export type NativeRentalEligibility = {
   eligible: boolean;
@@ -92,7 +101,7 @@ export async function nativeRentalEligibility(
             moderationStatus: true,
             lastSeenAt: true,
             miningResource: {
-              select: { enabled: true, quarantined: true, lastSeenAt: true },
+              select: { enabled: true, quarantined: true, runtimeState: true, lastSeenAt: true },
             },
           },
         },
@@ -120,6 +129,7 @@ export async function nativeRentalEligibility(
     || gpu.vendor?.toUpperCase() !== 'NVIDIA'
     || !gpu.miningResource?.enabled
     || gpu.miningResource.quarantined
+    || blockedMiningStates.has(gpu.miningResource.runtimeState)
     || !fresh(gpu.miningResource.lastSeenAt)) {
     return { eligible: false, reason: 'native_gpu_or_host_not_healthy', machineId: listing.machineId };
   }
