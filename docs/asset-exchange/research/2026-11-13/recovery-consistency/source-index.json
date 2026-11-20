@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-11-13",
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "source": "https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/blockchain.cpp#L1003-L1082",
+  "upstreamFileSha256": "219a002f86ba8f9e9d1a862cb9d76a255c5c6ae56f5ff94d592a31c4e5698455",
+  "sourceObservation": "gettxout include_mempool=true uses CCoinsViewMemPool, prunes spent outputs and returns null for a spent output; with include_mempool=false it uses the chain UTXO view. The regression uses native rollback and both parent/refund mempool entries.",
+  "preparedSourceSha256": {
+    "asset-exchange/recovery/dogecoin/recovery_core.py": "0b5ea29713c5878e6787e38d46951f41acc54f0bafaf7e2424d51e82a871bd37",
+    "asset-exchange/recovery/dogecoin/cleanroom.py": "417f699d9a33a969dea35065a042514df9210f5bf43b07f931f2f56fd6e2c0db",
+    "asset-exchange/qualification/dogecoin/d6/funding_reorg.py": "257fc1e15dc9366d225d67965223e39c9bfb8341cda0b8212dc6f80cd9bc0e03",
+    "asset-exchange/qualification/dogecoin/d6/multinode.py": "e9a13453954832e7872c3362c1ae801abfbac298e359aa6cd9ccbc4d7076df19",
+    "asset-exchange/qualification/dogecoin/d6/check-watcher-evidence.mjs": "af4b5610d2705859a713a039c2769f3647ac2c1e87f91639b0f505065771722a"
+  },
+  "reusedRunId": 43111959236,
+  "publicParcelSha256": "ace1f4d52cfac8c0cb68ad23c2ce603d2e0b0f1c4c92fe3f4591b0e24b1ac0b9",
+  "publicChainSha256": "3416b8b69aea7cd1f690810e068954ac3132197bd2a1ed074a7b0c89c6e25309",
+  "importedBlocks": 1355,
+  "newBlockCap": 2,
+  "rpcCap": 400,
+  "signedFixtureCap": 2,
+  "newKeys": 0,
+  "newSignatures": 0,
+  "standaloneInvocationCap": 8,
+  "nativeStatusAtPreparation": "NOT_TESTED",
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false,
+  "ibdSources": {
+    "src/validation.cpp": "e9f13df6a83e057fba52f3525fec894ba13a1dcec52be3cf71b13fd181c79e00",
+    "src/validation.h": "8549c1b0d4f17b10f947865745b41cfc13f00cc89b6aeae1ed4f8a460063dc93",
+    "src/net_processing.cpp": "13a20f115f57c330aebedcea5f3b416c2313e5af21507ecd256f87aece6d2f5d"
+  },
+  "ibdSourceObservation": "validation.cpp IsInitialBlockDownload rejects a tip older than nMaxTipAge; validation.h defaults it to24h; net_processing.cpp only adds transaction inventory requests outside IBD. No source/flag change.",
+  "nativeFundingGuardIsolation": false,
+  "nativeRefusalScope": "Existing header lead guard refuses first; unchanged recovery_core order. Software regression isolates the added funding guard."
+}
