@@ -13,6 +13,7 @@ import {
 import { STALLED_ACTIVATION_GRACE_MS } from './dev-booking-reconciler.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import { ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
+import { isWindowsNativeDesktopSlug } from './windows-native-workspace-policy.js';
 
 export type GpuProofCompletionOutcome = {
   bookingStatus: typeof BookingStatus.STARTING | typeof BookingStatus.COMPLETED;
@@ -54,6 +55,23 @@ export async function completeGpuProofJob(
   bookingId: string,
   machineId: string,
 ): Promise<GpuProofCompletionOutcome> {
+  // Native Windows Workspaces intentionally do not use a Docker GPU_PROOF job.
+  // Even if a stale/legacy job is finalized for a booking which already chose
+  // a native desktop, it must NEVER auto-queue Developer on that paid GPU.
+  const selected = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { requestedWorkspaceSlug: true },
+  });
+  if (selected?.requestedWorkspaceSlug
+      && isWindowsNativeDesktopSlug(selected.requestedWorkspaceSlug)) {
+    return {
+      bookingStatus: BookingStatus.STARTING,
+      machineReleased: false,
+      developerWorkspaceSessionId: null,
+      developerPreparationQueued: false,
+      changed: false,
+    };
+  }
   let developerWorkspaceCompatible = null;
   try {
     developerWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, 'developer');
