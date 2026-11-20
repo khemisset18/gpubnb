@@ -1,4 +1,4 @@
-"""One keyless funding-reorg regression inside the existing private executor.
+"""Finite keyless funding controls inside the existing private executor.
 
 Uses pinned public signatures/history; no launcher, signer, wallet or old code.
 """
@@ -12,10 +12,11 @@ from recovery_core import load_bundle,read_regular
 # invalidateblock retains the higher header. The existing header-lead guard
 # therefore refuses before the new funding guard; do not weaken or reorder it.
 REFUSAL='node has an unresolved header lead; no broadcast'
+FUNDING_REFUSAL='funding is not confirmed on active chain; no broadcast'
 
 
-def run_funding_reorg(c,directory,seed):
-    root=Path(directory);rpc=c['rpc'];report=c['report'];save=c['save']
+def retained_public_bundle(c,directory,seed):
+    root=Path(directory)
     require(not list(c['keys'].iterdir()),'funding reorg cannot create signing keys')
     path=root/'bundle-parent.json';digest=seed['bundleDigests']['parent']
     require(hashlib.sha256(read_regular(path)).hexdigest()==seed['files']['bundle-parent.json']==digest,
@@ -32,6 +33,61 @@ def run_funding_reorg(c,directory,seed):
                 'retained synthetic transaction identity mismatch')
         c['txids'].add(txid);c['submitted'].add(entry['transactionHex'])
     c['blocks'].update(seed['blocks'])
+    return root,bundle,digest
+
+
+def run_unconfirmed_funding(c,directory,seed):
+    """Select only the previously unisolated funding guard; never mine a block."""
+    root,bundle,digest=retained_public_bundle(c,directory,seed)
+    rpc=c['rpc'];report=c['report'];save=c['save']
+    funding=bundle['funding'];fid=funding['txid'];refund=bundle['refunds'][0];tid=refund['txid']
+    result={'cases':[],'keysCreated':0,'transactionsSigned':0,'retainedBundleSha256':digest,
+        'fundingTxid':fid,'refundTxid':tid,'refundSha256':refund['sha256'],
+        'oldFundingReorgCasesRepeated':False,'newFundingGuardIsolatedNatively':False,
+        'qualificationStatus':'BLOCKED'}
+    report['fundingUnconfirmed']=result;save()
+    c['import_chain'](root/'public-chain.dat',seed['blocks'][-1],len(seed['blocks']))
+    before=rpc('a','getblockchaininfo')
+    require(before['blocks']==before['headers']==1355,'exact synchronized public tip required')
+    c['submit']('a',bytes.fromhex(funding['transactionHex']))
+    c['submit']('a',bytes.fromhex(refund['transactionHex']))
+    pool=rpc('a','getrawmempool')
+    require(fid in pool and tid in pool,'unconfirmed public parent/refund admission missing')
+    for txid,entry in ((fid,funding),(tid,refund)):
+        value=c['tx']('a',txid)
+        require(value['hex']==entry['transactionHex'] and value.get('confirmations',0)==0
+                and not value.get('blockhash'),'public fixture unexpectedly confirmed or mutated')
+    chain=rpc('a','getblockchaininfo')
+    require(chain['blocks']==chain['headers']==1355 and chain['bestblockhash']==before['bestblockhash'],
+            'synchronized tip changed during unconfirmed guard preparation')
+    context={'bundlePath':str(root/'bundle-parent.json'),'bundleSha256':digest,
+             'source':'a','labLabel':'funding-unconfirmed'}
+    observed=c['recover']({**context,'mode':'observe'})
+    require(observed['state']=='PENDING' and observed['fundingConfirmed'] is False,
+            'unconfirmed funding observation differs')
+    refused=c['recover']({**context,'mode':'rebroadcast','expectedError':FUNDING_REFUSAL})
+    require(refused['expectedRefusal']==FUNDING_REFUSAL
+            and not any(row['method']=='sendrawtransaction' for row in refused['rpcCalls']),
+            'direct funding guard did not refuse before broadcast')
+    after=rpc('a','getblockchaininfo')
+    require(after['blocks']==after['headers']==1355 and after['bestblockhash']==before['bestblockhash'],
+            'unconfirmed guard changed the native chain')
+    require(not list(c['keys'].iterdir()),'signing key residue in unconfirmed funding control')
+    result.update(newFundingGuardIsolatedNatively=True,activeBlocks=1355,activeHeaders=1355,
+        fundingConfirmations=0,refundConfirmations=0,standaloneInvocations=2,
+        generatedBlocks=0,refusalBroadcasts=0,standaloneRefusal=FUNDING_REFUSAL)
+    result['cases'].append({'id':'unconfirmed-funding-refuses-rebroadcast','status':'PASS',
+        'expectationScope':'exchange-protocol/native-chain','nativeParentAndRefundPending':True,
+        'nodeSynchronized':True,'fundingConfirmed':False,'refusalBroadcasts':0,
+        'standaloneRefusal':FUNDING_REFUSAL})
+    save()
+
+
+def run_funding_reorg(c,directory,seed):
+    root,bundle,digest=retained_public_bundle(c,directory,seed)
+    rpc=c['rpc'];report=c['report'];save=c['save']
+    path=root/'bundle-parent.json'
+    funding=bundle['funding'];fid=funding['txid'];refund=bundle['refunds'][0];tid=refund['txid']
     result={'cases':[],'keysCreated':0,'transactionsSigned':0,'retainedBundleSha256':digest,
         'refundTxid':tid,'refundSha256':refund['sha256'],'retainedKoinu':'98000000','feeKoinu':'1000000',
         'previousNativeSuitesRepeated':False,'newFundingGuardIsolatedNatively':False,

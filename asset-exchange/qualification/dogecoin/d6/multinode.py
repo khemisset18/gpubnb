@@ -83,7 +83,8 @@ def manifest(lab_suite='multinode'):
         result.update(rpcAllowlist=sorted(FUNDING_METHODS),maxRpc=400,maxGeneratedBlocks=2,
             maxBroadcastFixtures=2,maxAuxpowFixtures=0,importedPublicBlocksMaximum=1355,
             maxStandaloneInvocations=8,keys='no signing keys created or provided',signingAllowed=False,
-            repeatsPreviouslyQualifiedSuite=False)
+            repeatsPreviouslyQualifiedSuite=False,
+            selectedNativeCases=['unconfirmed-funding-refuses-rebroadcast'])
     return result
 
 
@@ -412,8 +413,8 @@ def run(args, recovery_runner=None, bundle_validator=None):
                 out=out,report=report,save=save),handoff_root,handoff_manifest)
             finish();return
         if lab_suite=='recovery-funding-reorg':
-            from funding_reorg import run_funding_reorg
-            run_funding_reorg(dict(rpc=rpc,submit=submit,mine=mine,tx=tx,wait=wait_for,sync=synchronized,
+            from funding_reorg import run_unconfirmed_funding
+            run_unconfirmed_funding(dict(rpc=rpc,submit=submit,tx=tx,wait=wait_for,sync=synchronized,
                 peers=peer_view,recover=independent_fee_recovery,import_chain=import_chain,
                 keys=keys,out=out,report=report,save=save,submitted=submitted,txids=txids,blocks=blocks,
                 addresses=addresses,normalize=normalize_observation),handoff_root,handoff_manifest)
