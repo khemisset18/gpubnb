@@ -1455,9 +1455,32 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         (request.query as { qualification?: string }).qualification || '',
       );
 
+      if (qualification && (qualification !== 'windows-native' || slug !== 'cloud-desktop')) {
+        return reply.code(400).send({ error: 'unsupported_private_qualification' });
+      }
+      const selected = await db.booking.findFirst({
+        where: { id: bookingId, buyerId: session.userId },
+        select: {
+          requestedWorkspaceSlug: true,
+          listing: { select: { machine: { select: { operatingSystem: true } } } },
+        },
+      });
+      if (!selected) return reply.code(409).send({ error: 'funded_booking_required' });
+      const isWindowsHost = selected.listing.machine.operatingSystem?.trim().toLowerCase().startsWith('windows') ?? false;
+      // A paid native booking can never silently open another Workspace
+      // or fall back to the Linux Docker launch path.
+      if (selected.requestedWorkspaceSlug && selected.requestedWorkspaceSlug !== slug) {
+        return reply.code(409).send({ error: 'workspace_not_selected_for_booking' });
+      }
+      if (isWindowsHost && qualification !== 'windows-native' && selected.requestedWorkspaceSlug !== slug) {
+        return reply.code(409).send({ error: 'windows_native_selection_required' });
+      }
+
       const result = slug === 'cloud-desktop' && qualification === 'windows-native'
         ? await createWindowsNativeQualificationSession(db, bookingId, session.userId, redis)
-        : await createDesktopWorkspaceSession(db, bookingId, session.userId, slug);
+        : isWindowsHost
+          ? await createWindowsNativeRentalSession(db, bookingId, session.userId, slug)
+          : await createDesktopWorkspaceSession(db, bookingId, session.userId, slug);
 
       if ('error' in result) return reply.code(409).send({ error: result.error });
       return result.session;
