@@ -21,6 +21,7 @@ Security boundaries:
 """
 from __future__ import annotations
 
+import os
 import platform
 import re
 import socket
@@ -59,6 +60,21 @@ from .windows_native_runtime import (
 
 WINDOWS_NATIVE_RUNTIME_BACKEND = "WINDOWS_NATIVE"
 WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS = frozenset({"cloud-desktop"})
+WINDOWS_NATIVE_EXTENDED_WORKSPACE_SLUGS = frozenset({"creator", "cad", "gaming"})
+
+
+def windows_native_active_workspace_slugs() -> frozenset[str]:
+    """Expand native profiles only after a deliberate *local* provider opt-in.
+
+    Server commercial release permission is a separate requirement and is
+    disabled by default. An Agent cannot widen backend permissions merely
+    because a stale API desired-session payload mentions Creator/CAD/Gaming.
+    The signed helper still performs isolation, app, GPU, audio and controller
+    checks on every launch; this is not an alternative to security review.
+    """
+    if os.environ.get("GPUBNB_WINDOWS_NATIVE_EXTENDED_LOCAL_OPT_IN") == "true":
+        return WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS | WINDOWS_NATIVE_EXTENDED_WORKSPACE_SLUGS
+    return WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS
 WINDOWS_NATIVE_MEDIA_HEADER = "X-GPUbnb-Media-Token"
 WINDOWS_NATIVE_USAGE_INTERVAL_SECONDS = 10.0
 WINDOWS_NATIVE_START_RETRY_MAX_SECONDS = 60.0
@@ -474,7 +490,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         *,
         private_console_qualification: bool = False,
     ) -> NativeGatewayRuntime:
-        if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
+        if workspace_slug not in windows_native_active_workspace_slugs():
             raise RuntimeError("windows_native_workspace_not_promoted")
         backend = CONSOLE_BACKEND if private_console_qualification else "iddcx"
         if private_console_qualification and console_session_change_fenced():
@@ -545,7 +561,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         private_console_qualification: bool = False,
     ) -> NativeGatewayRuntime:
         self._trace("native_start_begin", session_id=session_id)
-        if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
+        if workspace_slug not in windows_native_active_workspace_slugs():
             raise RuntimeError("windows_native_workspace_not_promoted")
         specs = self._native_specs(session_id)
         self._trace(
@@ -899,7 +915,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 else {}
             )
 
-            if workspace_slug not in WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS:
+            if workspace_slug not in windows_native_active_workspace_slugs():
                 self._report_error(RuntimeError("windows_native_workspace_not_promoted"))
                 if session_id in self.native_runtimes:
                     self._native_stop_and_report(session_id)
