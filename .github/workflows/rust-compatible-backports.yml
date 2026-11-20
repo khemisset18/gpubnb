@@ -15,12 +15,15 @@ on:
       - qualification/doge-gtk-20261118
     paths:
       - prototypes/rust-compatible-backports/**
-      - prototypes/gtk-migration/**
+      - prototypes/gtk-migration/prepare.py
+      - prototypes/gtk-migration/source-pins.json
+      - prototypes/gtk-migration/probe/**
       - vendor/security/**
       - Cargo.toml
       - Cargo.lock
       - apps/host-desktop/src-tauri/**
-      - .github/workflows/rust-compatible-backports.yml
+      # GUI-only test and workflow routing changes reuse the unchanged Rust
+      # qualification already running; the pull-request gate above stays intact.
 
 permissions:
   contents: read

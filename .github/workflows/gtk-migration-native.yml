@@ -79,7 +79,7 @@ jobs:
       - name: Compile actual native application in release mode
         run: |
           set -o pipefail
-          cargo build --locked --release -p gpubnb-host-desktop --features desktop-runtime 2>&1 | tee "$RUNNER_TEMP/gtk-native/native-build.log"
+          cargo build --locked --release -p gpubnb-host-desktop --features desktop-runtime,tauri/custom-protocol 2>&1 | tee "$RUNNER_TEMP/gtk-native/native-build.log"
       - name: Exercise actual native welcome, status and safe IPC
         run: |
           export PATH="$RUNNER_TEMP/tauri-webdriver/bin:$PATH"

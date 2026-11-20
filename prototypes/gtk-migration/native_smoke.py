@@ -69,7 +69,10 @@ def main():
             request('POST', f'/session/{session}/timeouts', {'script': 30000, 'implicit': 10000, 'pageLoad': 30000})
             deadline = time.monotonic() + 60
             while True:
-                state = script('return {text:document.body.innerText,bridge:!!window.__TAURI_INTERNALS__,welcome:!!document.querySelector("#start-onboarding")};')
+                state = script('return {url:window.location.href,text:document.body.innerText,bridge:!!window.__TAURI_INTERNALS__,welcome:!!document.querySelector("#start-onboarding")};')
+                if report.get('nativeStartup') != state:
+                    report['nativeStartup'] = state
+                    save()
                 if state['bridge'] and state['welcome'] and 'GPUbnb Host' in state['text']:
                     break
                 assert time.monotonic() < deadline, f'native UI startup timeout: {state}'
@@ -107,6 +110,19 @@ def main():
             (output / 'native-status.png').write_bytes(screenshot)
             report.update(result='PASS', screenshotSha256=hashlib.sha256(screenshot).hexdigest())
             save()
+        except Exception as error:
+            report['error'] = str(error)
+            if session:
+                try:
+                    report['lastNativePage'] = script('return {url:window.location.href,text:document.body.innerText};')
+                    screenshot = base64.b64decode(request('GET', f'/session/{session}/screenshot'), validate=True)
+                    assert screenshot.startswith(b'\x89PNG\r\n\x1a\n')
+                    (output / 'native-failure.png').write_bytes(screenshot)
+                    report['failureScreenshotSha256'] = hashlib.sha256(screenshot).hexdigest()
+                except (OSError, AssertionError, ValueError) as diagnostic_error:
+                    report['diagnosticError'] = str(diagnostic_error)
+            save()
+            raise
         finally:
             if session:
                 try:
