@@ -23,6 +23,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Prepare native evidence directory before tool installation
+        run: mkdir -p "$RUNNER_TEMP/gtk-native"
       - uses: dtolnay/rust-toolchain@1.97.1
       - uses: actions/setup-node@v6
         with:
@@ -30,9 +32,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install official native development and GUI test dependencies
         run: |
-          sudo apt-get -o Acquire::Retries=2 update
+          set -o pipefail
+          sudo apt-get -o Acquire::Retries=2 update 2>&1 | tee "$RUNNER_TEMP/gtk-native/apt-update.log"
+          apt-cache show webkit2gtk-driver > "$RUNNER_TEMP/gtk-native/webkit-driver-package.txt"
           sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libwebkit2gtk-driver libappindicator3-dev librsvg2-dev patchelf xvfb dbus-x11
+            libwebkit2gtk-4.1-dev webkit2gtk-driver libappindicator3-dev librsvg2-dev patchelf xvfb dbus-x11 \
+            2>&1 | tee "$RUNNER_TEMP/gtk-native/apt-install.log"
       - name: Build locked frontend
         run: |
           npm ci --prefix apps/host-desktop --ignore-scripts --no-audit --no-fund
