@@ -94,14 +94,16 @@ export async function nativeRentalEligibility(
       accelerators: {
         select: {
           accelerator: {
-            hardwareUuid: true,
-            vendor: true,
-            vramMiB: true,
-            status: true,
-            moderationStatus: true,
-            lastSeenAt: true,
-            miningResource: {
-              select: { enabled: true, quarantined: true, runtimeState: true, lastSeenAt: true },
+            select: {
+              hardwareUuid: true,
+              vendor: true,
+              vramMiB: true,
+              status: true,
+              moderationStatus: true,
+              lastSeenAt: true,
+              miningResource: {
+                select: { enabled: true, quarantined: true, runtimeState: true, lastSeenAt: true },
+              },
             },
           },
         },
