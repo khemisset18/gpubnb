@@ -70,6 +70,13 @@ export async function nativeRentalEligibility(
   if (!windowsNativeCommercialReleaseEnabled()) {
     return { eligible: false, reason: 'windows_native_release_not_approved', machineId: null };
   }
+  // The existing native browser/media protocol transports H.264 frames and
+  // keyboard/mouse only. It has no end-to-end audio or Gamepad API pipeline,
+  // even if the local Windows helper reports audioReady/controllerReady.
+  // Prevent paid Gaming rentals until these browser-to-worker paths exist.
+  if (slug === 'gaming') {
+    return { eligible: false, reason: 'windows_native_gaming_audio_controller_unimplemented', machineId: null };
+  }
   const listing = await db.gpuListing.findFirst({
     where: {
       id: listingId,
