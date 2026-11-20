@@ -17,8 +17,8 @@ export function isWindowsNativeDesktopSlug(value: string): value is WindowsNativ
 
 export type WindowsNativeHostCapabilities = {
   operatingSystem: string | null | undefined;
-  nativeDesktopStreamingAvailable: boolean | null | undefined;
-  nativeDesktopStreamingGpuUuid: string | null | undefined;
+  nativeDesktopStreamingAvailable?: boolean | null;
+  nativeDesktopStreamingGpuUuid?: string | null;
   ramTotalMiB: number | null | undefined;
   diskTotalMiB: number | null | undefined;
   vramMiB: number | null | undefined;
