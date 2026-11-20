@@ -115,6 +115,7 @@ WINDOWS_NATIVE_WORKSPACE_PROFILES: dict[str, NativeWorkspaceProfile] = {
         slug="creator",
         application="Blender",
         executable_candidates=(
+            r"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
@@ -124,6 +125,7 @@ WINDOWS_NATIVE_WORKSPACE_PROFILES: dict[str, NativeWorkspaceProfile] = {
         slug="cad",
         application="FreeCAD",
         executable_candidates=(
+            r"C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe",
             r"C:\Program Files\FreeCAD 1.0\bin\FreeCAD.exe",
             r"C:\Program Files\FreeCAD 0.21\bin\FreeCAD.exe",
         ),
