@@ -10,12 +10,24 @@ on:
       - Cargo.lock
       - .github/workflows/rust-compatible-backports.yml
   workflow_dispatch:
+  push:
+    branches:
+      - qualification/doge-gtk-20261118
+    paths:
+      - prototypes/rust-compatible-backports/**
+      - prototypes/gtk-migration/**
+      - vendor/security/**
+      - Cargo.toml
+      - Cargo.lock
+      - apps/host-desktop/src-tauri/**
+      - .github/workflows/rust-compatible-backports.yml
 
 permissions:
   contents: read
 
 jobs:
   actual-workspace:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/qualification/doge-gtk-20261118'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:

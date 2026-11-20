@@ -5,6 +5,15 @@ on:
   push:
     branches:
       - qualification/doge-gtk-20261118
+    # Source/behavior changes require a new native run. Workflow routing alone
+    # does not repeat an unchanged native build already running on this branch.
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - apps/host-desktop/**
+      - prototypes/gtk-migration/**
+      - vendor/security/**
 
 permissions:
   contents: read
