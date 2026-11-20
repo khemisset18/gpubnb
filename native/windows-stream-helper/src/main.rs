@@ -163,11 +163,13 @@ fn validate_workspace_application(
             // alone does not authorize an arbitrary user/network supplied binary.
             let allowed: &[&str] = match workspace {
                 "creator" => &[
+                    r"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe",
                     r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
                     r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
                     r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
                 ],
                 "cad" => &[
+                    r"C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe",
                     r"C:\Program Files\FreeCAD 1.0\bin\FreeCAD.exe",
                     r"C:\Program Files\FreeCAD 0.21\bin\FreeCAD.exe",
                 ],
