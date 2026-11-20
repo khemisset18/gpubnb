@@ -1,6 +1,8 @@
 import { MachineWorkspaceState, WorkspaceRelease, type PrismaClient } from '@prisma/client';
 
 import { analyzeWorkspace, type MachineCapabilities } from './workspace-compatibility.js';
+import { windowsNativeWorkspaceCandidate } from './windows-native-workspace-policy.js';
+import { windowsNativeCommercialReleaseEnabled } from './windows-native-rental-eligibility.js';
 import { workspaceManifest, workspaceManifests, type WorkspaceManifest } from './workspace-manifests.js';
 
 // Executable means there is a real runtime path behind the catalogue card: a
@@ -31,6 +33,11 @@ function isWorkspaceRuntimeAvailable(machine: MachineCapabilities, slug: string)
   // future/unknown OS must never inherit a desktop backend by accident. The
   // Windows-native backend gets its own independently measured branch.
   const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
+  if (os.startsWith('windows')) {
+    if (!windowsNativeCommercialReleaseEnabled()) return false;
+    const manifest = workspaceManifest(slug);
+    return Boolean(manifest && windowsNativeWorkspaceCandidate(machine, manifest, machine.gpuUuid).candidate);
+  }
   if (!os.startsWith('linux')) return false;
   return machine.desktopGpuRenderingAvailable;
 }
@@ -80,10 +87,19 @@ export async function ensureCompatibleMachineWorkspace(
       cudaVersion: true, dockerAvailable: true, nvidiaRuntimeAvailable: true,
       operatingSystem: true, virtualizationAvailable: true,
       desktopGpuRenderingAvailable: true,
+      gpuUuid: true, nativeDesktopStreamingAvailable: true,
+      nativeDesktopStreamingGpuUuid: true,
     },
   });
   if (!machine) throw new Error('machine_not_found');
 
+  // The old ensureCompatibleMachineWorkspace path creates a Docker-prepared
+  // session. Windows native sessions need a separate, exact-GPU allocation and
+  // helper-authorized READY path; never reinterpret them as Docker sessions.
+  if ((machine.operatingSystem ?? '').trim().toLowerCase().startsWith('windows')
+      && linuxDesktopWorkspaceSlugs.has(slug)) {
+    throw new Error('windows_native_workspace_requires_native_route');
+  }
   const compatibility = analyzeWorkspace(machine, manifest);
   if (compatibility.state !== 'READY' && compatibility.state !== 'LIMITED') {
     throw new Error(`${slug}_workspace_incompatible`);
