@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+  "testedVirtualMerge": "898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+  "result": "PASS_DOWNLOADED_ARTIFACT_INTEGRITY_AND_SCOPE",
+  "host": [
+    {
+      "artifactId": 14726565428,
+      "result": "PASS",
+      "hostTestsPassed": 17,
+      "publicRecoveryCases": 1636,
+      "wireRecords": 38
+    },
+    {
+      "artifactId": 14726162637,
+      "result": "PASS",
+      "hostTestsPassed": 17,
+      "publicRecoveryCases": 1636,
+      "wireRecords": 38
+    },
+    {
+      "artifactId": 14725938930,
+      "result": "PASS",
+      "hostTestsPassed": 17,
+      "publicRecoveryCases": 1636,
+      "wireRecords": 38
+    }
+  ],
+  "sbf": {
+    "artifactId": 14726223194,
+    "result": "PASS",
+    "baselineTests": 6,
+    "candidateTests": 6,
+    "instructions": 11,
+    "binaries": {
+      "baseline": {
+        "bytes": 242136,
+        "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+        "lockSha256": "af9bb9a1fef24b84a616f1c8b5017a99f4cb3aea57134fd8fdc393e336b7611d",
+        "sha256": "3a251cfe910c752663b4cab0d78534f5038c28d52d66cb9b31064148af2eeef3"
+      },
+      "candidate": {
+        "bytes": 216408,
+        "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+        "lockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf",
+        "sha256": "123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125"
+      }
+    },
+    "optionalPrecompiles": "NOT_QUALIFIED",
+    "realNetworkConsensus": "NOT_TESTED"
+  },
+  "installers": [
+    {
+      "artifactId": 14726511216,
+      "result": "PASS",
+      "bundleFilesChecked": 1,
+      "workspaceLockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf",
+      "metadataPackages": 564,
+      "officialGtkPinsChecked": 15,
+      "versions": {
+        "glib": [
+          "0.22.11"
+        ],
+        "gtk": [
+          "0.19.0"
+        ],
+        "borsh": [
+          "1.8.0"
+        ],
+        "anchor-lang": [
+          "1.2.2"
+        ],
+        "rand": [],
+        "libsecp256k1": []
+      },
+      "unsignedDevelopmentBuild": true
+    },
+    {
+      "artifactId": 14726322586,
+      "result": "PASS",
+      "bundleFilesChecked": 5,
+      "workspaceLockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf",
+      "metadataPackages": 564,
+      "officialGtkPinsChecked": 15,
+      "versions": {
+        "glib": [
+          "0.22.11"
+        ],
+        "gtk": [
+          "0.19.0"
+        ],
+        "borsh": [
+          "1.8.0"
+        ],
+        "anchor-lang": [
+          "1.2.2"
+        ],
+        "rand": [],
+        "libsecp256k1": []
+      },
+      "unsignedDevelopmentBuild": true
+    },
+    {
+      "artifactId": 14726267664,
+      "result": "PASS",
+      "bundleFilesChecked": 8,
+      "workspaceLockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf",
+      "metadataPackages": 564,
+      "officialGtkPinsChecked": 15,
+      "versions": {
+        "glib": [
+          "0.22.11"
+        ],
+        "gtk": [
+          "0.19.0"
+        ],
+        "borsh": [
+          "1.8.0"
+        ],
+        "anchor-lang": [
+          "1.2.2"
+        ],
+        "rand": [],
+        "libsecp256k1": []
+      },
+      "unsignedDevelopmentBuild": true
+    }
+  ],
+  "windowsPreflight": {
+    "artifactId": 14726144105,
+    "result": "PASS",
+    "peFilesWithManifestChecked": 3
+  },
+  "scope": "Integrity inspection of existing CI artifacts; no additional test execution, installation, deployment or native DOGE RPC"
+}

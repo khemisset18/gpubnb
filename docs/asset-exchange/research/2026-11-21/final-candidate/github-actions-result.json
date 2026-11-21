@@ -1,0 +1,406 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+  "sourceTree": "4fb75f3aab95895b8d841e240932cad083687fc6",
+  "testedVirtualMerge": "898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+  "virtualMergeTreeEqual": true,
+  "workflows": [
+    {
+      "id": 44952572254,
+      "name": "Asset Exchange G5 Foundation",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 248,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572254/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572254/logs",
+      "workflow_id": 375995688,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572254",
+      "jobs": [
+        {
+          "id": 136993512025,
+          "name": "Zero-dependency foundation safety tests",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572272,
+      "name": "workspace-reliability",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1534,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572272/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572272/logs",
+      "workflow_id": 333150789,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572272",
+      "jobs": [
+        {
+          "id": 136993512642,
+          "name": "Workspace API contract soak (10 clean passes)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512850,
+          "name": "Workspace Agent soak (25 clean passes)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993513691,
+          "name": "doge-rbf-boundaries-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 136993513866,
+          "name": "doge-source-audit-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 136993539104,
+          "name": "doge-recovery-consistency-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 136993544688,
+          "name": "doge-recovery-multinode-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 136993547206,
+          "name": "doge-d3-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "id": 44952572307,
+      "name": "artifact-storage-s3-integration",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 357,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572307/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572307/logs",
+      "workflow_id": 352443312,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572307",
+      "jobs": [
+        {
+          "id": 136993512192,
+          "name": "minio-roundtrip",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572281,
+      "name": "api-mining-ci",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1902,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572281/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572281/logs",
+      "workflow_id": 324160980,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572281",
+      "jobs": [
+        {
+          "id": 136993512312,
+          "name": "Prisma, TypeScript and tests",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572257,
+      "name": "deployment-readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2273,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572257/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572257/logs",
+      "workflow_id": 319610584,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572257",
+      "jobs": [
+        {
+          "id": 136993512386,
+          "name": "Deployment configuration safety",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512543,
+          "name": "Netlify static site",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512563,
+          "name": "API container",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512608,
+          "name": "Runtime process topology",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572246,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 8322,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572246/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572246/logs",
+      "workflow_id": 317159751,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572246",
+      "jobs": [
+        {
+          "id": 136993511782,
+          "name": "desktop-security",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993511942,
+          "name": "security-static-analysis",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993511981,
+          "name": "contract",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512039,
+          "name": "production-gates",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512045,
+          "name": "dependency-audit",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512108,
+          "name": "api",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512128,
+          "name": "agent",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572205,
+      "name": "Solana host recovery compatibility",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 16,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572205/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572205/logs",
+      "workflow_id": 416685016,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572205",
+      "jobs": [
+        {
+          "id": 136993511802,
+          "name": "public-host-recovery (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993511843,
+          "name": "public-host-recovery (windows-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993511935,
+          "name": "public-host-recovery (macos-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572232,
+      "name": "Rust compatible backport workspace qualification",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 18,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572232/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572232/logs",
+      "workflow_id": 415241705,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572232",
+      "jobs": [
+        {
+          "id": 136993512105,
+          "name": "actual-workspace",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572290,
+      "name": "host-desktop",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1031,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572290/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572290/logs",
+      "workflow_id": 319427076,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572290",
+      "jobs": [
+        {
+          "id": 136993513090,
+          "name": "pinned miner provenance",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993513323,
+          "name": "production security gate",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993513327,
+          "name": "frontend typecheck and build",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993513364,
+          "name": "rust tests and lint (windows-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993513376,
+          "name": "rust tests and lint (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993513464,
+          "name": "rust tests and lint (macos-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572222,
+      "name": "Anchor SDK private compatibility",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572222/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572222/logs",
+      "workflow_id": 425861061,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572222",
+      "jobs": [
+        {
+          "id": 136993511838,
+          "name": "host-wire-and-recovery (windows-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512141,
+          "name": "host-wire-and-recovery (macos-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512172,
+          "name": "host-wire-and-recovery (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512627,
+          "name": "private-sbf-baseline-and-candidate",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572210,
+      "name": "host-desktop-dev-installers",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 819,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572210/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572210/logs",
+      "workflow_id": 320017575,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572210",
+      "jobs": [
+        {
+          "id": 136993512035,
+          "name": "Public release policy",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512272,
+          "name": "Linux x64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512285,
+          "name": "Windows x64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 136993512408,
+          "name": "macOS arm64",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 44952572199,
+      "name": "host-windows-preflight",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1736,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572199/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44952572199/logs",
+      "workflow_id": 322929859,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44952572199",
+      "jobs": [
+        {
+          "id": 136993512064,
+          "name": "windows-installer",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "note": "The five manual native DOGE jobs are deliberately unselected; skipped is not pass. Separate unchanged successful private-lab evidence is indexed in the report."
+}

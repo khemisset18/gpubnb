@@ -1,0 +1,35 @@
+{
+  "sourceCommit": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+  "sourceTree": "4fb75f3aab95895b8d841e240932cad083687fc6",
+  "result": "PASS_LOCAL_REPRODUCIBLE_SOURCE_SCOPE",
+  "files": {
+    "gpu.k.p2p-asset-exchange-source-v1.tar.gz": {
+      "sha256": "0cc2947df3c311329725c3d78e42be0bb30709965c63cea0309a082fa4246ded",
+      "bytes": 1974611
+    },
+    "gpu.k.p2p-asset-exchange-source-v1.spdx.json": {
+      "sha256": "90ed2943e0b58e85004ca29d94da1fe11c898e674eac6950fdccbe4890b3aec7",
+      "bytes": 518276
+    },
+    "SHA256SUMS": {
+      "sha256": "2ad6cd94473e30e8aac41bc14f37dfe837e575e0ce333c1439841a56b3aae4b3",
+      "bytes": 219
+    }
+  },
+  "scope": [
+    "asset-exchange/**",
+    "docs/asset-exchange/**",
+    ".github/workflows/asset-exchange-*.yml",
+    ".github/workflows/workspace-reliability.yml"
+  ],
+  "newGithubAttestation": "NOT_PERFORMED",
+  "independentAudit": "NOT_PERFORMED",
+  "sourceDateEpoch": 1795297092,
+  "sourceFileCount": 721,
+  "reproductionCommands": [
+    "bash asset-exchange/release/source-bundle/build-reproducible-source.sh ./fresh-source-a 17bb3e2e7774d97538305759e706de6f6a8da0d1 1795297092",
+    "bash asset-exchange/release/source-bundle/build-reproducible-source.sh ./fresh-source-b 17bb3e2e7774d97538305759e706de6f6a8da0d1 1795297092",
+    "bash asset-exchange/release/source-bundle/verify-source-artifact.sh ./fresh-source-a/dist 17bb3e2e7774d97538305759e706de6f6a8da0d1"
+  ],
+  "outputsAreFreshDisposableDirectories": true
+}

@@ -1,5 +1,8 @@
 # DOGE — qualification technique interne du 17 novembre 2026
 
+> Instantané historique. Voir le [bilan du 21 novembre](DOGE_INTERNAL_CANDIDATE_2026-11-21.md)
+> pour les corrections publiées, la sécurité PASS et les conditions D2/D8 restantes.
+
 **DOGE — VALIDATION TECHNIQUE INTERNE : FAIL.** Les contrôles de sécurité
 obligatoires ont été exécutés et échouent encore sur trois dépendances.
 Les observations DOGE réussies ci-dessous restent valides dans leur périmètre

@@ -1,0 +1,81 @@
+[
+  {
+    "id": 14725898440,
+    "zipSha256": "3ed4b21113fc1716567f9247bf13274e4a04ec0ee56eda1ac2a8ba0fe7334f5f",
+    "entries": [
+      {
+        "path": "trivy-results.json",
+        "sha256": "f7ce3136a91c335bc930dc701c2921e962621bcb76e8afc89427682b2922cf81",
+        "bytes": 1017974,
+        "vulnerabilities": 0
+      }
+    ]
+  },
+  {
+    "id": 14725719592,
+    "zipSha256": "cc12d5a588c66cf569fd914ea414c7ff327343a3ce73e389223e69f67c74df49",
+    "entries": [
+      {
+        "path": "npm-audit-root.json",
+        "sha256": "22659f649088e25f16ec41ffdcb2473d9d04f190ed452d78408e0277e0bc92e4",
+        "bytes": 364,
+        "auditCounts": {
+          "info": 0,
+          "low": 0,
+          "moderate": 0,
+          "high": 0,
+          "critical": 0,
+          "total": 0
+        }
+      },
+      {
+        "path": "npm-audit-api.json",
+        "sha256": "22659f649088e25f16ec41ffdcb2473d9d04f190ed452d78408e0277e0bc92e4",
+        "bytes": 364,
+        "auditCounts": {
+          "info": 0,
+          "low": 0,
+          "moderate": 0,
+          "high": 0,
+          "critical": 0,
+          "total": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": 14725918816,
+    "zipSha256": "00afac6e225d4412e4e27a5347946a34577b27488f2a58f0a750fd329521bb26",
+    "entries": [
+      {
+        "path": "api-test.log",
+        "sha256": "181db622cd0931637354aeb1f57c131817afe21348a0035b8ee7d27890f71e35",
+        "bytes": 156508,
+        "testSummary": [
+          [
+            "tests",
+            "708"
+          ],
+          [
+            "pass",
+            "706"
+          ],
+          [
+            "fail",
+            "0"
+          ],
+          [
+            "skipped",
+            "2"
+          ]
+        ]
+      },
+      {
+        "path": "integration-preflight.log",
+        "sha256": "97d17f5223f5d381ef731365dbbf1a21de7cd349342acd0ec857b057d7608a9a",
+        "bytes": 49,
+        "testSummary": []
+      }
+    ]
+  }
+]

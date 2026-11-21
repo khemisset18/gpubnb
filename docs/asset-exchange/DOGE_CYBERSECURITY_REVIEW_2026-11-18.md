@@ -1,5 +1,9 @@
 # DOGE — revue interne de cybersécurité, finalisée le 18 novembre 2026
 
+> Instantané historique. Les alertes ci-dessous sont résolues dans le
+> [candidat consolidé du 21 novembre](DOGE_INTERNAL_CANDIDATE_2026-11-21.md),
+> dont les 12 workflows réussissent. L'ancien échec reste conservé à son SHA.
+
 **DOGE — VALIDATION TECHNIQUE INTERNE : FAIL.** Un nouveau défaut de cohérence
 RPC a été corrigé et testé, en logiciel et dans le laboratoire privé existant.
 Les trois constats du scanner strict restent bloquants. Aucun résultat interne

@@ -1,5 +1,11 @@
 # DOGE D7–D8: process-crash evidence and physical test procedure
 
+> Clarification du 21 novembre : les H7.* sont des essais supplémentaires préparés.
+> La grille D7 exige les frontières crash/restart, pas une coupure secteur physique.
+> L'absence de coupure secteur ne constitue donc pas un nouveau gate obligatoire.
+> Voir le [bilan consolidé](DOGE_INTERNAL_CANDIDATE_2026-11-21.md) pour les preuves
+> acquises et les prérequis D2/D8 encore manquants.
+
 Scope: internal qualification of the existing Dogecoin1.14.9 private-Regtest
 candidate, based on published commit
 `ac28d513abd8084842c14de7cdc92765164bbc8a`. No native node was launched for
