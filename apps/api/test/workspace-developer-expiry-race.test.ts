@@ -34,7 +34,7 @@ test('workspace/developer atomically re-verifies the booking (status + endsAt) i
 
   const transactionStart = compact.indexOf('db.$transaction(asynctx=>{');
   assert.ok(transactionStart >= 0, 'route must create the session inside a transaction');
-  const recheckIndex = compact.indexOf('tx.booking.updateMany(', transactionStart);
+  const recheckIndex = compact.indexOf('if(!awaitlockSelectedWorkspaceBooking(tx,bookingId,session.userId,\'developer\'))', transactionStart);
   const createIndex = compact.indexOf('tx.workspaceSession.create(', transactionStart);
   assert.ok(recheckIndex >= 0, 'transaction must atomically re-verify the booking before creating a session');
   assert.ok(createIndex >= 0, 'transaction must still create the workspace session');
@@ -46,24 +46,24 @@ test('workspace/developer atomically re-verifies the booking (status + endsAt) i
   const recheckCall = compact.slice(recheckIndex, createIndex);
   assert.match(
     recheckCall,
-    /status:\{in:activeBookings\}/,
+    /lockSelectedWorkspaceBooking\(tx,bookingId,session\.userId,'developer'\)/,
     'the atomic re-check must gate on the same FUNDED\\/STARTING\\/ACTIVE set as the pre-transaction read and the frontend\'s eligibility set',
   );
   assert.match(
     recheckCall,
-    /endsAt:\{gt:newDate\(\)\}/,
-    'the atomic re-check must reject a booking whose rental window has already elapsed, even if its status row has not been swept to COMPLETED yet',
-  );
-  assert.match(
-    recheckCall,
-    /buyerId:session\.userId/,
-    'the atomic re-check must stay scoped to the requesting renter - not just any booking by this id',
-  );
-  assert.match(
-    recheckCall,
-    /if\(stillEligible\.count!==1\)thrownewBookingNoLongerEligibleForWorkspaceError\(\)/,
+    /if\(!awaitlockSelectedWorkspaceBooking\(tx,bookingId,session\.userId,'developer'\)\)\{thrownewBookingNoLongerEligibleForWorkspaceError\(\);\}/,
     'losing the race must throw a distinguishable, typed error - not silently proceed to create an orphaned session',
   );
+
+  const sourceCompact = source.replace(/\s+/g, '');
+  const helperStart = sourceCompact.indexOf('asyncfunctionlockSelectedWorkspaceBooking(');
+  const helperEnd = sourceCompact.indexOf('exportfunctionpreparationPhase', helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'shared selection lock must remain a complete helper');
+  const helper = sourceCompact.slice(helperStart, helperEnd);
+  assert.match(helper, /status:\{in:activeBookings\}/);
+  assert.match(helper, /endsAt:\{gt:newDate\(\)\}/);
+  assert.match(helper, /buyerId:renterId/);
+  assert.match(helper, /OR:\[\{requestedWorkspaceSlug:null\},\{requestedWorkspaceSlug:slug\}\]/);
 
   // The catch block must turn that typed error into a clean, documented rejection. Only a
   // P2002 uniqueness collision is the expected auto/manual double-click race and may recover

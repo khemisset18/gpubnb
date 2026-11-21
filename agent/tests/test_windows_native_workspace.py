@@ -39,7 +39,9 @@ class WindowsNativeWorkspaceTests(unittest.TestCase):
             frozenset({"cloud-desktop", "creator", "cad", "gaming"}),
         )
         self.assertEqual(set(native.WINDOWS_NATIVE_WORKSPACE_PROFILES), native.WINDOWS_NATIVE_WORKSPACE_SLUGS)
-        self.assertIsNone(native.profile_for_slug("cloud-desktop").application)
+        cloud_desktop = native.profile_for_slug("cloud-desktop")
+        self.assertIsNone(cloud_desktop.application)
+        self.assertTrue(cloud_desktop.requires_audio)
         self.assertEqual(native.profile_for_slug("creator").application, "Blender")
         self.assertEqual(native.profile_for_slug("cad").application, "FreeCAD")
         gaming = native.profile_for_slug("gaming")

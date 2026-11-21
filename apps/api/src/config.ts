@@ -36,6 +36,11 @@ const schema = z.object({
   // Exists to unblock the private-beta two-machine test protocol (BETA_PRIVATE_TEST_PLAN.md)
   // without weakening the NODE_ENV==='production' guard on DEV_PAYMENT_BYPASS below.
   BETA_TEST_DEV_BYPASS: z.enum(['true', 'false']).default('false'),
+  // Windows-native desktop rentals are deliberately dark until the exact GPU,
+  // dedicated renter session, signed helper, isolation and STOP model have an
+  // independent formal security approval. NEVER infer permission from a
+  // successful CI run or the presence of a Windows display/encoder.
+  WINDOWS_NATIVE_RENTALS_ENABLED: z.enum(['true', 'false']).default('false'),
   DEV_DIAGNOSTIC_IMAGE: z.string().regex(/^ghcr\.io\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/).optional(),
   // Clock-skew check on the heartbeat submission's OWN embedded timestamp
   // (agent's Date.now() at signing time vs the server's Date.now() at receipt) -

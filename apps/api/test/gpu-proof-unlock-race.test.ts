@@ -203,10 +203,10 @@ test('Test F: a genuinely expired ACTIVE booking with no live Developer session 
     const where = query.args.where as {
       status: BookingStatus;
       endsAt: { lt: Date };
-      workspaceSessions: { none: { machineWorkspace: { workspace: { slug: string } } } };
+      workspaceSessions: { none: { machineWorkspace: { workspace: { slug: { not: string } } } } };
     };
     assert.equal(where.status, BookingStatus.ACTIVE);
-    assert.equal(where.workspaceSessions.none.machineWorkspace.workspace.slug, 'developer');
+    assert.deepEqual(where.workspaceSessions.none.machineWorkspace.workspace.slug, { not: 'compute' });
     const bookingUpdate = calls.find((call) => call.area === 'tx.booking.updateMany');
     assert.ok(bookingUpdate);
     assert.equal((bookingUpdate.args.data as { status: BookingStatus }).status, BookingStatus.COMPLETED);

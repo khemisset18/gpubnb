@@ -23,7 +23,7 @@ function rememberBooking(userId,listing,workspace,bookingId){
 }
 function forgetBooking(){try{sessionStorage.removeItem(pendingBookingKey)}catch{}}
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-async function createBooking(listing,minutes){const startsAt=new Date(Date.now()+60_000);const endsAt=new Date(startsAt.getTime()+minutes*60_000);return request('/bookings',{method:'POST',body:JSON.stringify({listingId:listing.id,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString(),idempotencyKey:crypto.randomUUID()})})}
+async function createBooking(listing,minutes,workspace){const startsAt=new Date(Date.now()+60_000);const endsAt=new Date(startsAt.getTime()+minutes*60_000);return request('/bookings',{method:'POST',body:JSON.stringify({listingId:listing.id,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString(),idempotencyKey:crypto.randomUUID(),workspaceSlug:workspace.slug})})}
 function workspacePreparationRequest(bookingId,workspace){
   if(workspace.slug==='compute')return request(`/bookings/${bookingId}/workspace-sessions`,{method:'POST',body:JSON.stringify({workspaceSlug:'compute'})});
   return request(`/bookings/${bookingId}/workspace/${encodeURIComponent(workspace.slug)}`,{method:'POST'});
@@ -42,16 +42,18 @@ async function prepareSelected(listing,workspace,button){
       const requested=prompt(`Durée de ${workspace.name}, en minutes (5 à 1440) :`,'60');
       if(requested===null){button.disabled=false;button.textContent='Choisir cet espace';return}
       const minutes=Math.max(5,Math.min(1440,parseInt(requested,10)||60));
-      booking=await createBooking(listing,minutes);
+      booking=await createBooking(listing,minutes,workspace);
       bookingRemembered=rememberBooking(user.id,listing,workspace,booking.id);
     }
     bookingCreated=true;
     for(let attempt=0;attempt<40;attempt++){
       try{await workspacePreparationRequest(booking.id,workspace);forgetBooking();location.href='bookings.html';return}
-      catch(error){if(error.code!=='funded_booking_required')throw error}
+      catch(error){if(error.code!=='funded_booking_required'&&error.code!=='windows_native_host_still_starting')throw error}
       await wait(3000);
     }
-    throw new Error('Le financement bêta prend plus de temps que prévu.');
+    // The paid booking already exists. Do not create a second one just because
+    // host preparation is delayed. Leave its session visible on the dashboard.
+    forgetBooking();location.href='bookings.html';return;
   }catch(error){
     button.disabled=false;button.textContent='Réessayer';
     if(error.status===401){

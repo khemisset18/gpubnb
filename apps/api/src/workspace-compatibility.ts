@@ -1,4 +1,5 @@
 import type { WorkspaceManifest } from './workspace-manifests.js';
+import { windowsNativeWorkspaceCandidate } from './windows-native-workspace-policy.js';
 
 // desktopGpuRenderingAvailable is deliberately a separate, independently-measured
 // field from cudaVersion/nvidiaRuntimeAvailable: CUDA compute capability does not
@@ -14,6 +15,9 @@ export type MachineCapabilities = {
   operatingSystem: string | null;
   virtualizationAvailable: boolean;
   desktopGpuRenderingAvailable: boolean;
+  gpuUuid?: string | null;
+  nativeDesktopStreamingAvailable?: boolean;
+  nativeDesktopStreamingGpuUuid?: string | null;
 };
 
 export type CompatibilityReasonCode =
@@ -60,6 +64,22 @@ type FlagDefinition = {
 };
 
 export function analyzeWorkspace(machine: MachineCapabilities, manifest: WorkspaceManifest): CompatibilityResult {
+  // A Windows desktop is NOT a Linux container. Do not demand Docker or
+  // /dev/dri on Windows and, conversely, do not accept CUDA availability alone
+  // as proof of the native renter stream. The signed helper's native capability
+  // is screened on the exact machine GPU and reverified at commercial booking.
+  const os = (machine.operatingSystem ?? '').trim().toLowerCase();
+  if (manifest.minimum.desktopGpuRendering && os.startsWith('windows')) {
+    const native = windowsNativeWorkspaceCandidate(machine, manifest, machine.gpuUuid);
+    return {
+      score: native.score,
+      state: native.state,
+      reasons: native.reasons,
+      missing: native.missing,
+      reasonCodes: [],
+      missingCodes: [],
+    };
+  }
   let score = 100;
   const reasons: string[] = [];
   const missing: string[] = [];

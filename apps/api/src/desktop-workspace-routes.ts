@@ -23,6 +23,8 @@ import {
 import type { Redis } from 'ioredis';
 
 import { requireSession } from './auth.js';
+import { nativeRentalEligibility } from './windows-native-rental-eligibility.js';
+import { windowsNativeCommercialReleaseEnabled } from './windows-native-release-flag.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import { config } from './config.js';
 import { ensureCompatibleMachineWorkspace, type ExecutableWorkspaceSlug } from './machine-workspace-catalog.js';
@@ -33,7 +35,7 @@ import {
   allocateWindowsNativeQualificationBookingResources,
   ResourceAllocationError,
 } from './resource-allocation-service.js';
-import { preparationPhase, safeConnection } from './workspace-renter-routes.js';
+import { preparationPhase, safeConnection, selectedWorkspaceSessionScope } from './workspace-renter-routes.js';
 import { WINDOWS_NATIVE_GPU_UUID_RE } from './windows-native-capability.js';
 import { privateConsoleAgentCommit, privateConsoleSessionMarker } from './windows-native-private-console.js';
 import { qualificationNativeSource } from './windows-native-private-console-proof.js';
@@ -1039,6 +1041,176 @@ async function createWindowsNativeQualificationSession(
   }
 }
 
+
+/**
+ * A commercial Windows-native desktop is a different backend from Docker and
+ * from the private console qualification. It is always an IddCx renter source,
+ * never the owner's console. The local signed helper must prove capture,
+ * media, exact GPU and cleanup independently before a stream is openable.
+ *
+ * The API stages an internal PREPARING session for the v10 agent. The gateway
+ * does not expose it to renter traffic; only the native helper may register it
+ * after its per-session preflight succeeds. This keeps billing and browser
+ * access blocked until an authenticated upstream frame reaches the renter.
+ */
+async function createWindowsNativeRentalSession(
+  db: PrismaClient,
+  bookingId: string,
+  renterId: string,
+  slug: DesktopWorkspaceSlug,
+) {
+  if (!windowsNativeCommercialReleaseEnabled()) {
+    return { error: 'windows_native_release_not_approved' as const };
+  }
+
+  try {
+    const session = await runBookingTransaction(db, async (tx) => {
+      const now = new Date();
+      // The requested Workspace is immutable since creation of the booking.
+      // A renter must not switch from a cheap profile to a different Windows
+      // application after the commercial reservation has been accepted.
+      const booking = await tx.booking.findFirst({
+        where: {
+          id: bookingId,
+          buyerId: renterId,
+          requestedWorkspaceSlug: slug,
+          status: { in: activeBookings },
+          endsAt: { gt: now },
+        },
+        select: { id: true, listingId: true, startsAt: true, endsAt: true, listing: { select: { machineId: true } } },
+      });
+      if (!booking) throw new Error('funded_selected_native_booking_required');
+
+      // Row lock / exclusive transaction boundary against another concurrent
+      // Workspace POST or a booking state transition during native session
+      // creation, while the resource allocation is still the same booking.
+      const locked = await tx.booking.updateMany({
+        where: {
+          id: bookingId, buyerId: renterId, requestedWorkspaceSlug: slug,
+          status: { in: activeBookings }, endsAt: { gt: now },
+        },
+        data: { buyerId: renterId },
+      });
+      if (locked.count !== 1) throw new Error('funded_selected_native_booking_required');
+
+      const eligibility = await nativeRentalEligibility(tx, booking.listingId, slug, now);
+      if (!eligibility.eligible || eligibility.machineId !== booking.listing.machineId) {
+        throw new Error(eligibility.reason || 'native_host_authority_unavailable');
+      }
+
+      const [allocation, selectedGpu] = await Promise.all([
+        tx.acceleratorAllocation.findMany({
+          where: { bookingId, status: { in: activeAllocations } },
+          select: { accelerator: { select: { machineId: true, hardwareUuid: true } } },
+          take: 2,
+        }),
+        tx.gpuListing.findFirst({
+          where: { id: booking.listingId, resourceMode: ListingResourceMode.SELECTED_ACCELERATORS },
+          select: { accelerators: { take: 2, select: { accelerator: { select: { hardwareUuid: true } } } } },
+        }),
+      ]);
+      // Never infer entitlement to the machine's first GPU; the physically
+      // leased accelerator must exactly match this selected listing's UUID.
+      if (allocation.length !== 1 || !selectedGpu
+          || selectedGpu.accelerators.length !== 1
+          || allocation[0]!.accelerator.machineId !== booking.listing.machineId
+          || allocation[0]!.accelerator.hardwareUuid.toLowerCase()
+             !== selectedGpu.accelerators[0]!.accelerator.hardwareUuid.toLowerCase()) {
+        throw new Error('native_exact_accelerator_allocation_required');
+      }
+
+      const existing = await tx.workspaceSession.findFirst({
+        where: { bookingId, machineWorkspace: { workspace: { slug } } },
+        select: { id: true, status: true, runtimeBackend: true, preparationProgress: true, preparationStep: true },
+      });
+      if (existing) {
+        if (existing.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE
+            && liveWorkspaceSessions.includes(existing.status)) return existing;
+        throw new Error('native_session_already_terminal');
+      }
+      const liveCount = await tx.workspaceSession.count({
+        where: { bookingId, status: { in: liveWorkspaceSessions } },
+      });
+      if (liveCount !== 0) throw new Error('native_other_workspace_already_active');
+
+      const ownerWorkspace = await tx.machineWorkspace.findFirst({
+        where: {
+          machineId: booking.listing.machineId,
+          workspace: { slug },
+          enabledByOwner: true,
+          state: { in: [MachineWorkspaceState.READY, MachineWorkspaceState.LIMITED] },
+        },
+        select: { id: true },
+      });
+      if (!ownerWorkspace) throw new Error('native_workspace_not_enabled_by_owner');
+
+      const spec = workspaceSpec[slug];
+      return tx.workspaceSession.create({
+        data: {
+          bookingId, renterId,
+          machineId: booking.listing.machineId,
+          machineWorkspaceId: ownerWorkspace.id,
+          status: WorkspaceSessionStatus.PREPARING,
+          runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+          isolationType: 'WINDOWS_NATIVE',
+          // Never carry a privateConsoleQualification marker into a rental.
+          resourceLimits: {
+            maxRamMiB: spec.maxRamMiB,
+            maxCpuCores: spec.maxCpuCores,
+            storageQuotaMiB: spec.storageQuotaMiB,
+            networkAccess: 'RESTRICTED',
+            autoStopMinutes: 60,
+          },
+          connectionType: 'GPUBNB_GATEWAY',
+          preparationProgress: 5,
+          preparationStep: 'WINDOWS_NATIVE_START_AUTHORIZED',
+          preparationRequestedAt: now,
+          readyDeadlineAt: new Date(Math.min(booking.endsAt.getTime(), now.getTime() + 15 * 60_000)),
+          expiresAt: booking.endsAt,
+          events: {
+            create: {
+              actorType: 'RENTER',
+              actorId: renterId,
+              action: 'WINDOWS_NATIVE_RENTAL_REQUESTED',
+              details: { workspaceSlug: slug },
+            },
+          },
+        },
+        select: { id: true, status: true, preparationProgress: true, preparationStep: true },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 10_000 });
+    return { session };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    const knownErrors = new Set([
+      'funded_selected_native_booking_required',
+      'native_exact_accelerator_allocation_required',
+      'native_session_already_terminal',
+      'native_other_workspace_already_active',
+      'native_workspace_not_enabled_by_owner',
+      'native_host_authority_unavailable',
+      'native_exact_gpu_listing_required',
+      'native_gpu_or_host_not_healthy',
+      'native_hardware_or_helper_not_ready',
+      'windows_native_release_not_approved',
+    ]);
+    if (knownErrors.has(code)) return { error: code };
+    // A unique session constraint may race a double click. Return the session
+    // created by the other request, but never a different runtime or owner.
+    const raced = await db.workspaceSession.findFirst({
+      where: {
+        bookingId, renterId,
+        runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
+        machineWorkspace: { workspace: { slug } },
+        status: { in: liveWorkspaceSessions },
+      },
+      select: { id: true, status: true, preparationProgress: true, preparationStep: true },
+    });
+    if (raced) return { session: raced };
+    throw error;
+  }
+}
+
 async function createDesktopWorkspaceSession(
   db: PrismaClient,
   bookingId: string,
@@ -1046,7 +1218,13 @@ async function createDesktopWorkspaceSession(
   slug: DesktopWorkspaceSlug,
 ) {
   const booking = await db.booking.findFirst({
-    where: { id: bookingId, buyerId: renterId, status: { in: activeBookings } },
+    where: {
+      id: bookingId,
+      buyerId: renterId,
+      status: { in: activeBookings },
+      endsAt: { gt: new Date() },
+      OR: [{ requestedWorkspaceSlug: null }, { requestedWorkspaceSlug: slug }],
+    },
     include: { listing: { select: { machineId: true } } },
   });
   if (!booking) return { error: 'funded_booking_required' as const };
@@ -1070,7 +1248,13 @@ async function createDesktopWorkspaceSession(
       // Same race boundary as the already-qualified renter routes: re-check the
       // commercial booking inside the transaction before creating a runtime.
       const eligible = await tx.booking.updateMany({
-        where: { id: bookingId, buyerId: renterId, status: { in: activeBookings }, endsAt: { gt: new Date() } },
+        where: {
+          id: bookingId,
+          buyerId: renterId,
+          requestedWorkspaceSlug: booking.requestedWorkspaceSlug,
+          status: { in: activeBookings },
+          endsAt: { gt: new Date() },
+        },
         data: { buyerId: renterId },
       });
       if (eligible.count !== 1) throw new Error('funded_booking_required');
@@ -1284,9 +1468,32 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         (request.query as { qualification?: string }).qualification || '',
       );
 
+      if (qualification && (qualification !== 'windows-native' || slug !== 'cloud-desktop')) {
+        return reply.code(400).send({ error: 'unsupported_private_qualification' });
+      }
+      const selected = await db.booking.findFirst({
+        where: { id: bookingId, buyerId: session.userId },
+        select: {
+          requestedWorkspaceSlug: true,
+          listing: { select: { machine: { select: { operatingSystem: true } } } },
+        },
+      });
+      if (!selected) return reply.code(409).send({ error: 'funded_booking_required' });
+      const isWindowsHost = selected.listing.machine.operatingSystem?.trim().toLowerCase().startsWith('windows') ?? false;
+      // A paid native booking can never silently open another Workspace
+      // or fall back to the Linux Docker launch path.
+      if (selected.requestedWorkspaceSlug && selected.requestedWorkspaceSlug !== slug) {
+        return reply.code(409).send({ error: 'workspace_not_selected_for_booking' });
+      }
+      if (isWindowsHost && qualification !== 'windows-native' && selected.requestedWorkspaceSlug !== slug) {
+        return reply.code(409).send({ error: 'windows_native_selection_required' });
+      }
+
       const result = slug === 'cloud-desktop' && qualification === 'windows-native'
         ? await createWindowsNativeQualificationSession(db, bookingId, session.userId, redis)
-        : await createDesktopWorkspaceSession(db, bookingId, session.userId, slug);
+        : isWindowsHost
+          ? await createWindowsNativeRentalSession(db, bookingId, session.userId, slug)
+          : await createDesktopWorkspaceSession(db, bookingId, session.userId, slug);
 
       if ('error' in result) return reply.code(409).send({ error: result.error });
       return result.session;
@@ -1297,7 +1504,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       if (!session) return;
       const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
       const row = await db.workspaceSession.findFirst({
-        where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
+        where: { ...selectedWorkspaceSessionScope(slug), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
         select: {
           id: true,
           status: true,
@@ -1368,7 +1575,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       if (!session) return;
       const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
       const row = await db.workspaceSession.findFirst({
-        where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
+        where: { ...selectedWorkspaceSessionScope(slug), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
         select: {
           id: true,
           renterId: true,

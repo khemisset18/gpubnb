@@ -319,6 +319,13 @@ test('DOM binding blocks browser handling only for events accepted by the native
     code: 'KeyA',
     preventDefault() { prevented += 1; },
   });
+  assert.equal(accepted.length, 0, 'no remote typing before the renter focuses the canvas');
+  assert.equal(prevented, 0, 'ordinary page keys must not be captured');
+  canvas.emit('pointerdown', { clientX: 20, clientY: 30, button: 0, pointerId: 1 });
+  keyboard.listeners.get('keydown')({
+    code: 'KeyA',
+    preventDefault() { prevented += 1; },
+  });
   keyboard.listeners.get('keydown')({
     code: 'Unidentified',
     preventDefault() { prevented += 1; },
@@ -575,4 +582,133 @@ test('browser clears displayed renter frame on local stop and policy revocation'
       { x: 0, y: 0, width: 1280, height: 720 }, action);
     assert.equal(client.key('KeyA'), false, action);
   }
+});
+
+
+test('native viewer releases renter input on focus loss, hidden tab and lost pointer capture', async () => {
+  const socket = new FakeSocket();
+  const canvas = fakeCanvas();
+  const keyboard = {
+    hidden: false,
+    listeners: new Map(),
+    addEventListener(name, callback) { this.listeners.set(name, callback); },
+    removeEventListener(name, callback) {
+      if (this.listeners.get(name) === callback) this.listeners.delete(name);
+    },
+    emit(name, event = {}) { this.listeners.get(name)?.(event); },
+  };
+  const keys = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas,
+    webSocketFactory: () => socket,
+    mediaFactory: ({ output }) => ({
+      async push() {
+        output(
+          { displayWidth: 1280, displayHeight: 720, close() {} },
+          { streamEpoch: 49n, frameSequence: 1n, width: 1280, height: 720,
+            keyframe: true, codec: 'avc1.640028' },
+        );
+        return true;
+      },
+      close() {},
+    }),
+    inputFactory: () => ({
+      key(code, up) { keys.push([code, up]); return true; },
+      mouseAbsolute() { return false; },
+      mouseButton() { return false; },
+      mouseWheel() { return false; },
+    }),
+  });
+  client.start('/workspace-gateway/session-1/native-stream', 'https://gpubnb.test/');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  const unbind = client.bindDom({ keyboardTarget: keyboard, pointerTarget: canvas });
+  const keyEvent = { code: 'KeyW', preventDefault() {} };
+
+  keyboard.emit('keydown', keyEvent);
+  assert.deepEqual(keys, [], 'unfocused document cannot inject into rented Windows');
+  canvas.emit('focus');
+  keyboard.emit('keydown', keyEvent);
+  keyboard.emit('focusin', { target: {} });
+  assert.deepEqual(keys, [['KeyW', false], ['KeyW', true]],
+    'switching to a site control releases the held Windows key');
+  keyboard.emit('keydown', keyEvent);
+  assert.equal(keys.length, 2, 'no input after site control receives focus');
+
+  canvas.emit('focus');
+  keyboard.emit('keydown', keyEvent);
+  keyboard.hidden = true;
+  keyboard.emit('visibilitychange');
+  assert.deepEqual(keys.slice(-2), [['KeyW', false], ['KeyW', true]],
+    'hidden browser tab cannot strand a held remote key');
+  keyboard.emit('keydown', keyEvent);
+  assert.equal(keys.length, 4, 'hidden tab remains disarmed');
+  keyboard.hidden = false;
+
+  canvas.emit('focus');
+  keyboard.emit('keydown', keyEvent);
+  canvas.emit('lostpointercapture');
+  assert.deepEqual(keys.slice(-2), [['KeyW', false], ['KeyW', true]],
+    'lost pointer capture releases remote input');
+  unbind();
+  assert.equal(keyboard.listeners.has('focusin'), false);
+  assert.equal(keyboard.listeners.has('visibilitychange'), false);
+});
+
+
+test('unfocused remote canvas cannot receive mouse movement or wheel actions', async () => {
+  const socket = new FakeSocket();
+  const canvas = fakeCanvas();
+  const keyboard = {
+    listeners: new Map(),
+    addEventListener(name, handler) { this.listeners.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (this.listeners.get(name) === handler) this.listeners.delete(name);
+    },
+  };
+  const actions = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas,
+    webSocketFactory: () => socket,
+    mediaFactory: ({ output }) => ({
+      async push() {
+        output(
+          { displayWidth: 1280, displayHeight: 720, close() {} },
+          { streamEpoch: 50n, frameSequence: 1n, width: 1280, height: 720,
+            keyframe: true, codec: 'avc1.640028' },
+        );
+      },
+      close() {},
+    }),
+    inputFactory: () => ({
+      key() { return false; },
+      mouseAbsolute() { actions.push('move'); return true; },
+      mouseButton() { return false; },
+      mouseWheel() { actions.push('wheel'); return true; },
+    }),
+  });
+  client.start('/workspace-gateway/session-1/native-stream', 'https://gpubnb.test/');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  const unbind = client.bindDom({ keyboardTarget: keyboard, pointerTarget: canvas });
+  const move = { clientX: 50, clientY: 60, preventDefault() {} };
+  const wheel = { deltaY: 120, preventDefault() {} };
+
+  canvas.emit('pointermove', move);
+  canvas.emit('wheel', wheel);
+  assert.deepEqual(actions, [], 'hovering without an explicit focus is not remote control');
+
+  canvas.emit('pointerdown', { ...move, pointerId: 2, button: 0 });
+  canvas.emit('pointermove', move);
+  canvas.emit('wheel', wheel);
+  assert.deepEqual(actions, ['move', 'move', 'wheel']);
+
+  canvas.emit('blur');
+  canvas.emit('pointermove', move);
+  canvas.emit('wheel', wheel);
+  assert.deepEqual(actions, ['move', 'move', 'wheel'],
+    'remote pointer and wheel are disabled immediately after focus loss');
+  unbind();
 });

@@ -3,7 +3,10 @@ import { Prisma, PrismaClient } from '@prisma/client';
 // Business rejections from inside the /bookings transaction (see server.ts). These must
 // never be retried and must never be replaced by a generic error — the caller maps them
 // straight to a 409 with this exact message.
-export const BOOKING_BUSINESS_ERRORS = new Set(['time_slot_unavailable', 'listing_unavailable', 'quote_too_small']);
+export const BOOKING_BUSINESS_ERRORS = new Set(['time_slot_unavailable', 'listing_unavailable', 'quote_too_small', 'booking_workspace_mismatch',
+  'windows_native_release_not_approved', 'native_exact_gpu_listing_required', 'native_gpu_or_host_not_healthy',
+  'native_workspace_unknown', 'native_hardware_or_helper_not_ready', 'native_workspace_not_enabled_by_owner',
+  'windows_native_workspace_choice_required']);
 
 // Postgres SQLSTATEs for the exact same transient condition P2034 represents for a
 // normal Prisma-generated query: 40001 serialization_failure, 40P01 deadlock_detected.

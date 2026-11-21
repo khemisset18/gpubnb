@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import { analyzeWorkspace } from '../src/workspace-compatibility.js';import { workspaceManifest } from '../src/workspace-manifests.js';
-const capable={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'12.8',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true,desktopGpuRenderingAvailable:true};
+const capable={ramTotalMiB:65536,diskTotalMiB:2_000_000,vramMiB:24576,cudaVersion:'12.8',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Linux',virtualizationAvailable:true,desktopGpuRenderingAvailable:true};
 test('high-end machine receives an explainable AI score',()=>{const result=analyzeWorkspace(capable,workspaceManifest('ai')!);assert.equal(result.score,100);assert.equal(result.state,'READY');assert.ok(result.reasons.some(x=>x.includes('CUDA')))});
 test('missing requirements produce explicit incompatibility',()=>{const result=analyzeWorkspace({...capable,ramTotalMiB:4096,vramMiB:2048,cudaVersion:null},workspaceManifest('ai')!);assert.equal(result.state,'INCOMPATIBLE');assert.ok(result.missing.length>=3)});
 test('catalogue contains exactly thirteen unique workspaces',async()=>{const {workspaceManifests}=await import('../src/workspace-manifests.js');assert.equal(workspaceManifests.length,13);assert.equal(new Set(workspaceManifests.map(x=>x.slug)).size,13)});
@@ -10,7 +10,7 @@ test('catalogue contains exactly thirteen unique workspaces',async()=>{const {wo
 // The "low" tier below is not a synthetic number: it is this exact development
 // machine's real, measured GPU during this project (NVIDIA GeForce GTX 1650,
 // 4096 MiB total VRAM, driver 592.82, confirmed live via nvidia-smi).
-const lowTierRealMachine={ramTotalMiB:12_353_652/1024,diskTotalMiB:500_000,vramMiB:4096,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Windows',virtualizationAvailable:true};
+const lowTierRealMachine={ramTotalMiB:12_353_652/1024,diskTotalMiB:500_000,vramMiB:4096,cudaVersion:'13.1',dockerAvailable:true,nvidiaRuntimeAvailable:true,operatingSystem:'Linux',virtualizationAvailable:true};
 // Below AI's recommended tier on two axes (VRAM 16GB, RAM 32GB) but above its
 // minimum on both (8GB, 16GB) - the engine scores each recommended-but-not-met
 // axis as a partial penalty, not a hard failure.

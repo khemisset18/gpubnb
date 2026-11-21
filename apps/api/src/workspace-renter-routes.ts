@@ -32,6 +32,59 @@ const retryableSessions: WorkspaceSessionStatus[]=[WorkspaceSessionStatus.FAILED
 // which must still fall through to the existing raced-session recovery in the catch block.
 class BookingNoLongerEligibleForWorkspaceError extends Error {}
 
+async function findSelectedWorkspaceBooking(
+  db: PrismaClient,
+  bookingId: string,
+  renterId: string,
+  slug: string,
+) {
+  return db.booking.findFirst({
+    where: {
+      id: bookingId,
+      buyerId: renterId,
+      status: { in: activeBookings },
+      endsAt: { gt: new Date() },
+      // NULL is the legacy pre-selection contract. Once a renter selected a
+      // Workspace, every preparation endpoint is bound to that exact slug.
+      OR: [{ requestedWorkspaceSlug: null }, { requestedWorkspaceSlug: slug }],
+    },
+    include: { listing: { select: { machineId: true } } },
+  });
+}
+
+/** Serialize session creation with expiry/STOP transitions and re-check the
+ * immutable Workspace selection inside the transaction that creates runtime. */
+async function lockSelectedWorkspaceBooking(
+  tx: Prisma.TransactionClient,
+  bookingId: string,
+  renterId: string,
+  slug: string,
+): Promise<boolean> {
+  const eligible = await tx.booking.updateMany({
+    where: {
+      id: bookingId,
+      buyerId: renterId,
+      status: { in: activeBookings },
+      endsAt: { gt: new Date() },
+      OR: [{ requestedWorkspaceSlug: null }, { requestedWorkspaceSlug: slug }],
+    },
+    data: { buyerId: renterId },
+  });
+  return eligible.count === 1;
+}
+
+/** Status and grant routes must be fenced by the same booking selection as
+ * create routes. NULL remains visible only for historical bookings created
+ * before `requestedWorkspaceSlug` existed. */
+export function selectedWorkspaceSessionScope(slug: string) {
+  return {
+    OR: [
+      { booking: { requestedWorkspaceSlug: slug } },
+      { booking: { requestedWorkspaceSlug: null } },
+    ],
+  } satisfies Prisma.WorkspaceSessionWhereInput;
+}
+
 export function preparationPhase(status: WorkspaceSessionStatus, step: string | null, jobStatus: JobStatus | null, connectionReady: boolean): string {
   // The container/runtime finishing (status READY) is not the same fact as the
   // gateway tunnel being registered and openable (connectionReady). Reporting
@@ -63,7 +116,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/developer', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'developer');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     // Publishing an ACTIVE listing is the owner's global consent to secure rentals.
     // The renter chooses the compatible workspace; there is no per-workspace owner
@@ -88,11 +141,9 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         // first determines what the other sees. Self-assigning buyerId is a deliberate no-op
         // write: Booking has no @updatedAt field, so only taking the lock and re-evaluating
         // the WHERE (status and endsAt included) matters here, not the value written.
-        const stillEligible=await tx.booking.updateMany({
-          where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings},endsAt:{gt:new Date()}},
-          data:{buyerId:session.userId},
-        });
-        if(stillEligible.count!==1) throw new BookingNoLongerEligibleForWorkspaceError();
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'developer')) {
+          throw new BookingNoLongerEligibleForWorkspaceError();
+        }
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -129,18 +180,21 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/retry', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    // Not scoped to a single slug: a booking can carry a Developer session, a
-    // Data session, a Compute session, or (Developer specifically) both alongside
-    // its Compute one - retry just needs to find whichever session on this booking
-    // is actually retryable right now, then re-enqueue the right job type for it.
-    // 'compute' included: a real live incident showed a FAILED GPU_PROOF job had no
-    // recovery path at all - ensureComputePreparation only ever returns the existing
-    // (broken) session instead of creating a fresh job, and this route used to
-    // exclude 'compute' entirely, even though the underlying GPU verification can
-    // genuinely still be worth re-running (e.g. after a transient server error, not
-    // a real hardware problem).
+    const booking=await db.booking.findFirst({
+      where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings},endsAt:{gt:new Date()}},
+      select:{requestedWorkspaceSlug:true},
+    });
+    if(!booking)return reply.code(409).send({error:'workspace_retry_not_available'});
+    const retryableWorkspaceSlugs: string[]=['compute','developer','data','ai','video','audio','api','mobile','security-lab'];
+    // A selected native desktop has its own helper lifecycle and cannot be
+    // retried by the Docker/GPU_PROOF job route. Legacy NULL bookings retain
+    // their prior retry set; explicit bookings match exactly one selected slug.
+    if(booking.requestedWorkspaceSlug&&!retryableWorkspaceSlugs.includes(booking.requestedWorkspaceSlug)){
+      return reply.code(409).send({error:'workspace_retry_not_available'});
+    }
+    const requestedSlug=booking.requestedWorkspaceSlug;
     const row=await db.workspaceSession.findFirst({
-      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:{in:['compute','developer','data','ai','video','audio','api','mobile','security-lab']}}},booking:{status:{in:activeBookings},endsAt:{gt:new Date()}}},
+      where:{bookingId,renterId:session.userId,status:{in:retryableSessions},machineWorkspace:{workspace:{slug:requestedSlug??{in:retryableWorkspaceSlugs}}},booking:{requestedWorkspaceSlug:requestedSlug,status:{in:activeBookings},endsAt:{gt:new Date()}}},
       select:{id:true,machineId:true,machineWorkspaceId:true,booking:{select:{endsAt:true,expectedSeconds:true}},machineWorkspace:{select:{workspace:{select:{slug:true}}}}},
     });
     if(!row)return reply.code(409).send({error:'workspace_retry_not_available'});
@@ -171,7 +225,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/data', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'data');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     let machineWorkspace;
     try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'data'); }
@@ -180,6 +234,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'data')) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -195,6 +250,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
@@ -209,7 +265,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // surface instead of Developer - kept as a parallel route (not a shared
     // :slug param) so neither surface's locked behavior can regress the other.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'data' } } },
+      where: { ...selectedWorkspaceSessionScope('data'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'data' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -269,7 +325,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'data' } } },
+      where: { ...selectedWorkspaceSessionScope('data'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'data' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
@@ -299,7 +355,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/ai', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'ai');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     let machineWorkspace;
     try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'ai'); }
@@ -308,6 +364,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'ai')) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -323,6 +380,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
@@ -336,7 +394,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // Mirrors GET /bookings/:bookingId/workspace/data/status above, scoped to
     // the AI surface - kept as its own parallel route for the same reason.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'ai' } } },
+      where: { ...selectedWorkspaceSessionScope('ai'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'ai' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -396,7 +454,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'ai' } } },
+      where: { ...selectedWorkspaceSessionScope('ai'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'ai' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
@@ -426,7 +484,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/video', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'video');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     let machineWorkspace;
     try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'video'); }
@@ -435,6 +493,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'video')) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -447,6 +506,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
@@ -460,7 +520,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // Mirrors GET /bookings/:bookingId/workspace/ai/status above, scoped to
     // the Video surface - kept as its own parallel route for the same reason.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'video' } } },
+      where: { ...selectedWorkspaceSessionScope('video'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'video' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -520,7 +580,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'video' } } },
+      where: { ...selectedWorkspaceSessionScope('video'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'video' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
@@ -550,7 +610,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/audio', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'audio');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     let machineWorkspace;
     try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'audio'); }
@@ -559,6 +619,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'audio')) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -571,6 +632,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
@@ -584,7 +646,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // Mirrors GET /bookings/:bookingId/workspace/video/status above, scoped
     // to the Audio surface - kept as its own parallel route for the same reason.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'audio' } } },
+      where: { ...selectedWorkspaceSessionScope('audio'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'audio' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -644,7 +706,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'audio' } } },
+      where: { ...selectedWorkspaceSessionScope('audio'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'audio' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
@@ -674,7 +736,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/api', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'api');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     let machineWorkspace;
     try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'api'); }
@@ -683,6 +745,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'api')) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -695,6 +758,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
@@ -708,7 +772,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // Mirrors GET /bookings/:bookingId/workspace/audio/status above, scoped
     // to the API surface - kept as its own parallel route for the same reason.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'api' } } },
+      where: { ...selectedWorkspaceSessionScope('api'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'api' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -768,7 +832,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'api' } } },
+      where: { ...selectedWorkspaceSessionScope('api'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'api' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
@@ -798,7 +862,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/mobile', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'mobile');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     let machineWorkspace;
     try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'mobile'); }
@@ -807,6 +871,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'mobile')) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -822,6 +887,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
@@ -835,7 +901,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // Mirrors GET /bookings/:bookingId/workspace/api/status above, scoped to
     // the Mobile surface - kept as its own parallel route for the same reason.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'mobile' } } },
+      where: { ...selectedWorkspaceSessionScope('mobile'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'mobile' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -895,7 +961,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'mobile' } } },
+      where: { ...selectedWorkspaceSessionScope('mobile'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'mobile' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
@@ -925,7 +991,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
   app.post('/bookings/:bookingId/workspace/security-lab', async (request, reply) => {
     const session=await requireSession(request,reply,redis); if(!session)return;
     const bookingId=String((request.params as {bookingId?:string}).bookingId||'');
-    const booking=await db.booking.findFirst({where:{id:bookingId,buyerId:session.userId,status:{in:activeBookings}},include:{listing:{select:{machineId:true}}}});
+    const booking=await findSelectedWorkspaceBooking(db,bookingId,session.userId,'security-lab');
     if(!booking)return reply.code(409).send({error:'funded_booking_required'});
     let machineWorkspace;
     try { machineWorkspace=await ensureCompatibleMachineWorkspace(db,booking.listing.machineId,'security-lab'); }
@@ -934,6 +1000,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if(existing)return existing;
     try{
       return await db.$transaction(async tx=>{
+        if(!await lockSelectedWorkspaceBooking(tx,bookingId,session.userId,'security-lab')) throw new BookingNoLongerEligibleForWorkspaceError();
         const created=await tx.workspaceSession.create({data:{
           bookingId,renterId:session.userId,machineId:booking.listing.machineId,machineWorkspaceId:machineWorkspace.id,
           status:WorkspaceSessionStatus.PREPARING,isolationType:'DOCKER',runtimeBackend:WorkspaceRuntimeBackend.CONTAINER,
@@ -946,6 +1013,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
         return tx.workspaceSession.update({where:{id:created.id},data:{jobId:job.id,preparationAttempts:{increment:1}},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       });
     }catch(error){
+      if(error instanceof BookingNoLongerEligibleForWorkspaceError)return reply.code(409).send({error:'funded_booking_required'});
       const raced=await db.workspaceSession.findFirst({where:{bookingId,renterId:session.userId,machineWorkspaceId:machineWorkspace.id},select:{id:true,status:true,preparationProgress:true,preparationStep:true}});
       if(raced)return raced;
       throw error;
@@ -960,7 +1028,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // to the Security Lab surface - kept as its own parallel route for the
     // same reason.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'security-lab' } } },
+      where: { ...selectedWorkspaceSessionScope('security-lab'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'security-lab' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -1020,7 +1088,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'security-lab' } } },
+      where: { ...selectedWorkspaceSessionScope('security-lab'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'security-lab' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
@@ -1056,7 +1124,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     // (ensureComputePreparation); scoping by workspace slug keeps that unrelated
     // session from ever being returned here.
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
+      where: { ...selectedWorkspaceSessionScope('developer'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
       select: {
         id: true, status: true, expiresAt: true, preparationProgress: true, preparationStep: true,
         preparationAttempts: true, preparationRequestedAt: true, preparationStartedAt: true,
@@ -1116,7 +1184,7 @@ export function registerWorkspaceRenterRoutes(app: FastifyInstance, db: PrismaCl
     if (!session) return;
     const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
     const row = await db.workspaceSession.findFirst({
-      where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
+      where: { ...selectedWorkspaceSessionScope('developer'), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug: 'developer' } } },
       select: {
         id: true, renterId: true, status: true, expiresAt: true, connectionMetadata: true, gatewayLastSeenAt: true,
         machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
