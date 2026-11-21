@@ -306,7 +306,7 @@ mod windows_impl {
     use super::{
         RenterSessionIsolationProof, RenterSessionToken, validate_exclusive_active_session,
         validate_input_desktop_name, validate_local_console_session,
-        validate_unlocked_renter_session, validate_non_administrator_renter_token,
+        validate_non_administrator_renter_token, validate_unlocked_renter_session,
     };
     use crate::PlatformError;
     use std::ffi::c_void;
