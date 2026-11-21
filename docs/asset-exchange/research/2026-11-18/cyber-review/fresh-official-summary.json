@@ -1,0 +1,204 @@
+[
+  {
+    "name": "picomatch-registry",
+    "url": "https://registry.npmjs.org/picomatch",
+    "sha256": "9a8e64f1208fef4d18c27f48267e00c639b65743484cf3f5e788d018195b6fbb",
+    "checkedAtUtc": "2026-11-18T18:30:45.392871+00:00",
+    "observation": {
+      "distTags": {
+        "latest": "4.0.7"
+      },
+      "publishedLatest": "2026-08-24T14:36:23.690Z"
+    }
+  },
+  {
+    "name": "picomatch-advisory",
+    "url": "https://api.github.com/advisories/GHSA-fc5q-39xc-vjpf",
+    "sha256": "950bc94462ab85fe75e94c37864d3c1ed711059f3edd07885e10f10bd225d8be",
+    "checkedAtUtc": "2026-11-18T18:30:45.565755+00:00",
+    "observation": {
+      "updated_at": "2026-11-18T15:38:58Z",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": "<= 4.0.7",
+          "first_patched_version": null,
+          "vulnerable_functions": []
+        }
+      ],
+      "withdrawn_at": "2026-11-18T15:38:56Z",
+      "summary": "Withdrawn Advisory: picomatch vulnerable to ReDoS through single-branch repeated extglobs"
+    }
+  },
+  {
+    "name": "borsh-advisory",
+    "url": "https://raw.githubusercontent.com/github/advisory-database/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+    "sha256": "4c3aadc6d50891c8915216904db59d7f3cfaef21f0766ab802caf4a539312447",
+    "checkedAtUtc": "2026-11-18T18:30:45.445280+00:00",
+    "observation": [
+      {
+        "package": {
+          "ecosystem": "crates.io",
+          "name": "borsh"
+        },
+        "ranges": [
+          {
+            "type": "ECOSYSTEM",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "1.0.0-alpha.1"
+              }
+            ]
+          }
+        ],
+        "database_specific": {
+          "last_known_affected_version_range": "<= 0.10.3"
+        }
+      }
+    ]
+  },
+  {
+    "name": "borsh-osv",
+    "url": "https://api.osv.dev/v1/vulns/RUSTSEC-2023-0033",
+    "sha256": "f4392f75e9522635637db924396f0df150edf566a4f20214997fcc8f9c26688a",
+    "checkedAtUtc": "2026-11-18T18:30:45.135053+00:00",
+    "observation": [
+      {
+        "package": {
+          "name": "borsh",
+          "ecosystem": "crates.io",
+          "purl": "pkg:cargo/borsh"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0.0.0-0"
+              },
+              {
+                "fixed": "0.10.4"
+              },
+              {
+                "introduced": "0.11.0-0"
+              },
+              {
+                "fixed": "1.0.0-alpha.1"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "affected_functions": null,
+          "affects": {
+            "os": [],
+            "arch": [],
+            "functions": []
+          }
+        },
+        "database_specific": {
+          "categories": [
+            "memory-corruption"
+          ],
+          "cvss": null,
+          "informational": "unsound",
+          "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2023-0033.json"
+        }
+      }
+    ]
+  },
+  {
+    "name": "borsh-registry",
+    "url": "https://crates.io/api/v1/crates/borsh",
+    "sha256": "b6a9af864cb558cf41de6986e57e43b0b36d5764d38650b868b6d8009053f7d0",
+    "checkedAtUtc": "2026-11-18T18:30:45.402129+00:00",
+    "observation": {
+      "latestStable": "1.8.1",
+      "latestCompatible": [
+        "0.10.4",
+        "0.10.3",
+        "0.10.2",
+        "0.10.1",
+        "0.10.0"
+      ]
+    }
+  },
+  {
+    "name": "glib-registry",
+    "url": "https://crates.io/api/v1/crates/glib",
+    "sha256": "07f66c5441d2734398591e3d5838da8d956dbe649cd04ec311be3583d6672e52",
+    "checkedAtUtc": "2026-11-18T18:30:45.496256+00:00",
+    "observation": {
+      "latestStable": "0.22.11",
+      "latestCompatible": [
+        "0.18.5",
+        "0.18.4",
+        "0.18.3",
+        "0.18.2",
+        "0.18.1",
+        "0.18.0"
+      ]
+    }
+  },
+  {
+    "name": "tauri-registry",
+    "url": "https://crates.io/api/v1/crates/tauri",
+    "sha256": "7c0b8d16dc939779cebac5ee53d277e4b56dea3e21748a80e626ec199d17b678",
+    "checkedAtUtc": "2026-11-18T18:30:51.605227+00:00",
+    "observation": {
+      "latestStable": "2.12.7",
+      "latestCompatible": [
+        "0.10.0"
+      ]
+    }
+  },
+  {
+    "name": "tauri-migration",
+    "url": "https://api.github.com/repos/tauri-apps/tauri/pulls/16170",
+    "sha256": "3aebcc18c2e6d8c8d35c6c454e8c3659c29404deda881747cb8832f0fccad24a",
+    "checkedAtUtc": "2026-11-18T18:30:49.684432+00:00",
+    "observation": {
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "merged_at": null,
+      "updated_at": "2026-11-18T14:50:52Z",
+      "head": "899ca2105ffd06293013b6d2bff4416987d99010"
+    }
+  },
+  {
+    "name": "wry-migration",
+    "url": "https://api.github.com/repos/tauri-apps/wry/pulls/1843",
+    "sha256": "cc6c4887dc7013eb7482e03a41e216db25ab78fdbc3f4951e89df1f309b7f675",
+    "checkedAtUtc": "2026-11-18T18:30:49.785518+00:00",
+    "observation": {
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "merged_at": null,
+      "updated_at": "2026-10-18T20:25:20Z",
+      "head": "327242ae73301c5e34dcc158e31ae453e8afe837"
+    }
+  },
+  {
+    "name": "tao-migration",
+    "url": "https://api.github.com/repos/tauri-apps/tao/pulls/1332",
+    "sha256": "47e5ccacb54675077ca8b664999dc65ee8b7ad284f0438b2ed5677a0ed001cf8",
+    "checkedAtUtc": "2026-11-18T18:30:49.870369+00:00",
+    "observation": {
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "merged_at": null,
+      "updated_at": "2026-11-18T15:25:59Z",
+      "head": "08660027c723e09a45b10badf60a73a661c94a95"
+    }
+  }
+]

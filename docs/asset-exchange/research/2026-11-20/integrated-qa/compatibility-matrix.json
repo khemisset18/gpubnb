@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-11-20T01:12:41.609899+00:00",
+  "qualification": "Internal QA only, not external independent audit",
+  "candidate": {
+    "commit": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+    "tree": "ecba7bcbae006f2850b3cfeae636a1a92284a60c",
+    "nativeRecovery": "PASS_BOUNDED, see native-44400212431-result.json",
+    "rustStrict": "FAIL_Borsh_and_GLib_in_retained_PR_run",
+    "npmDesktop": "PASS in retained PR run"
+  },
+  "gtkExperimental": {
+    "publishedCommit": "2da57f2d6f5446bf6f750b5c951b1db9055e8dcd",
+    "localEquivalentCommit": "a4c7d28ac4f6bee976dca1f0e157db16a7f3667c",
+    "wholeTree": "23584cf540be9c431493b951535ec1f2bef039ed",
+    "wholeTreeMatchesRemoteCommit": true,
+    "precedingPublishedCommit": "99b4448135148083ff675bdab6f6ed3bd41b604e",
+    "precedingTree": "4dfc9337ff49699ff1953a39d74480e70696c67d",
+    "newDeltaFromPrecedingCandidate": [
+      ".github/workflows/gtk-migration-native.yml"
+    ],
+    "officialImmutablePatchCount": 15,
+    "officialGitRepositoryCount": 7,
+    "glib": "0.22.11",
+    "gtk": "0.19.0",
+    "financialGraphPackagesCompared": 223,
+    "financialGraphIdentityChecksumEdgesEqual": true,
+    "financialSourceVendorCiAndTrivyGuardsIdenticalToCandidate": true,
+    "legacyGlibActive": false,
+    "unsafeRand07LibsecpReintroduced": false,
+    "strictActualCiRun": 44401173504,
+    "strictFindings": [
+      "borsh 0.10.4 GHSA-fjx5-qpf4-xjf2 MEDIUM"
+    ],
+    "guiFirstRun": 44401173888,
+    "guiFirstRunStatus": "FAIL_package_name_libwebkit2gtk_driver_not_found",
+    "guiAffectedRetryRun": 44651069044,
+    "guiAffectedRetryStatus": "IN_PROGRESS_at_owner_observation",
+    "installer3OsAndNativeGuiQualification": "PENDING, not promoted to candidate",
+    "upstreamMigrationStableRelease": "NOT_PUBLISHED; immutable official PR snapshots are experimental"
+  },
+  "anchorPrototype": {
+    "integrationStatus": "NOT_INTEGRATED",
+    "owner": "security_resolution and critical_review",
+    "runtimeQualification": "PENDING_RECONSTRUCTION_AND_VERIFICATION",
+    "requiredBeforeAdoption": [
+      "Actual full active graph removes affected Borsh identity without scanner exceptions",
+      "Financial src/lib.rs exact source or reviewed minimal compatibility delta",
+      "Before/after golden wire/account/instruction/discriminator and error behavior",
+      "Actual exported Anchor trait ZST rejection with precise official ErrorKind",
+      "Public host secp oracle on 3OS",
+      "Pinned SBF build and real synthetic private runtime/CPI execution",
+      "Strict Trivy and integrated current candidate checks"
+    ],
+    "consolidationGuard": "GTK runner pins old 223-package financial graph. A later Anchor graph may replace that baseline only after explicit source-pinned golden/runtime qualification; never simply remove equality checks."
+  },
+  "coreApiAgentS3": "Unchanged successful evidence retained; no duplicate reruns requested by QA",
+  "hardwareD7D8": "NOT_TESTED, software validation separate",
+  "d9IndependentAudit": "NOT_PERFORMED_OUTSIDE_MISSION",
+  "newFinancialDeployment": false,
+  "mainOrDevMerge": false
+}

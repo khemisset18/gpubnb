@@ -1,0 +1,12 @@
+{
+  "vendor": "aquasecurity/trivy",
+  "tag": "v0.76.2",
+  "releaseUrl": "https://github.com/aquasecurity/trivy/releases/tag/v0.76.2",
+  "assetName": "trivy_0.76.2_Linux-64bit.tar.gz",
+  "assetUrl": "https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz",
+  "officialChecksumsUrl": "https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_checksums.txt",
+  "archiveSha256": "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf",
+  "binarySha256": "6a972c69606c7b3ea4c6bdcc6fc9332ea9ad38381624310c1e85cc77345909f3",
+  "downloadedAtUtc": "2026-11-18T18:39:44.724391+00:00",
+  "source": "official release and official checksum, no modified database"
+}

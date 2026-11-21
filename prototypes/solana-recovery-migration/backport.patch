@@ -1,0 +1,88 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -0,0 +1 @@
++# GPUbnb: host-only maintained k256 migration; see BACKPORT.md.
+@@ -75,7 +76,2 @@
+-[target.'cfg(not(target_os = "solana"))'.dependencies.libsecp256k1]
+-version = "0.6.0"
+-features = [
+-    "std",
+-    "static-context",
+-]
+-default-features = false
++[target.'cfg(not(target_os = "solana"))'.dependencies.k256]
++version = "=0.14.0"
+@@ -83,8 +79,3 @@
+-[target.'cfg(not(target_os = "solana"))'.dev-dependencies.libsecp256k1]
+-version = "0.6.0"
+-features = [
+-    "std",
+-    "static-context",
+-    "hmac",
+-]
+-default-features = false
++[target.'cfg(not(target_os = "solana"))'.dev-dependencies.k256]
++version = "=0.14.0"
++features = ["ecdsa-core"]
+--- a/Cargo.toml.orig
++++ b/Cargo.toml.orig
+@@ -0,0 +1 @@
++# GPUbnb: host-only maintained k256 migration; see BACKPORT.md.
+@@ -26 +27 @@
+-libsecp256k1 = { workspace = true }
++k256 = { version = "=0.14.0" }
+@@ -34 +35 @@
+-libsecp256k1 = { workspace = true, features = ["hmac"] }
++k256 = { version = "=0.14.0", features = ["ecdsa-core"] }
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -0,0 +1 @@
++// GPUbnb host-only compatibility backport, 2026-11-12. See BACKPORT.md.
+@@ -422,3 +423,5 @@
+-        let message = libsecp256k1::Message::parse_slice(hash)
+-            .map_err(|_| Secp256k1RecoverError::InvalidHash)?;
+-        let recovery_id = libsecp256k1::RecoveryId::parse(recovery_id)
++        const HASH_SIZE: usize = 32;
++        if hash.len() != HASH_SIZE {
++            return Err(Secp256k1RecoverError::InvalidHash);
++        }
++        let recovery_id = k256::ecdsa::RecoveryId::try_from(recovery_id)
+@@ -426 +429 @@
+-        let signature = libsecp256k1::Signature::parse_standard_slice(signature)
++        let signature = k256::ecdsa::Signature::from_slice(signature)
+@@ -428,3 +431,6 @@
+-        let secp256k1_key = libsecp256k1::recover(&message, &signature, &recovery_id)
+-            .map_err(|_| Secp256k1RecoverError::InvalidSignature)?;
+-        Ok(Secp256k1Pubkey::new(&secp256k1_key.serialize()[1..65]))
++        let secp256k1_key =
++            k256::ecdsa::VerifyingKey::recover_from_prehash(hash, &signature, recovery_id)
++                .map_err(|_| Secp256k1RecoverError::InvalidSignature)?;
++        Ok(Secp256k1Pubkey::new(
++            &secp256k1_key.to_sec1_point(false).as_bytes()[1..65],
++        ))
+--- /dev/null
++++ b/BACKPORT.md
+@@ -0,0 +1,23 @@
++# Host-only dependency backport for review
++
++Original published solana-secp256k1-recover2.2.1, Apache-2.0, source commit
++1c1d667f161666f12f5a43ebef8eda9470a8c6ee in anza-xyz/solana-sdk.
++GPUbnb modifies the host-only implementation and both manifests on 2026-11-12.
++It follows the official host k256 migration from commit
++1dd727d4754b22157ce2b890b0f6dfe5237bc0d1 (SDK PR258), using maintained
++k2560.14.0 and its to_sec1_point serialization API. The original Solana target
++syscall block, public types, constants, signatures and error codes are retained.
++The historical documentation outside the implementation is retained; its
++standalone examples describe separately supplied libsecp256k1 dependencies.
++Package version2.2.1 is the real upstream base, not a new upstream release.
++The unused upstream development Cargo.lock is not imported. Its exact hash,
++archive hash, modifications and all source/license hashes are recorded in
++prototypes/solana-recovery-migration/source-pins.json. The product root lock is
++resolved normally and remains subject to the strict scanner with no exemption.
++
++The historical k2560.13 graph is avoided because crypto-bigint<0.7.6 has
++RUSTSEC-2026-0387; ctutils is resolved to a published version>=0.4.4 for
++RUSTSEC-2026-0385. Exact selected versions must be checked in the real lock.
++This candidate must retain Solana2.2.1 host high-S acceptance and exact recovery
++error precedence under the independent public arithmetic oracle. A successful
++host comparison does not establish SBF/runtime financial compatibility.

@@ -1,0 +1,13 @@
+2026-11-09T01:04:59.5266449Z test test_id ... ok
+2026-11-09T01:04:59.5267562Z test tests::full_payment_at_90_percent ... ok
+2026-11-09T01:04:59.5268350Z test tests::handles_maximum_amount_without_overflow ... ok
+2026-11-09T01:04:59.5268759Z test tests::proportional_under_threshold ... ok
+2026-11-09T01:04:59.5269112Z test tests::rejects_usage_above_expected ... ok
+2026-11-09T01:04:59.5269477Z test tests::zero_usage_refunds_everything ... ok
+2026-11-09T01:04:59.5269892Z test tests::rejects_zero_expected_duration ... ok
+2026-11-09T01:04:59.5271326Z test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-11-09T01:04:59.5272685Z [1m[92m     Running[0m tests/borsh_zst_regression.rs (/home/runner/work/gpubnb/gpubnb/target/debug/deps/borsh_zst_regression-64185c499e478f41)
+2026-11-09T01:04:59.5284506Z test ordinary_vector_bytes_remain_compatible_and_truncation_is_rejected ... ok
+2026-11-09T01:04:59.5285477Z test rejects_zero_sized_vectors_before_deserializing_any_element ... ok
+2026-11-09T01:04:59.5286376Z test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-11-09T01:04:59.6553839Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

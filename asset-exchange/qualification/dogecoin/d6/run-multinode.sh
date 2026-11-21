@@ -6,13 +6,13 @@ if [[ ( "$#" -ne 3 && "$#" -ne 4 && "$#" -ne 6 ) || "$3" != AUTHORIZE_D6_PRIVATE
   exit 2
 fi
 LAB_SUITE="${4:-multinode}"
-[[ "$LAB_SUITE" == multinode || "$LAB_SUITE" == fee-pinning || "$LAB_SUITE" == recovery-handoff || "$LAB_SUITE" == recovery-independent || "$LAB_SUITE" == recovery-resume || "$LAB_SUITE" == auxpow-expanded ]]
+[[ "$LAB_SUITE" == multinode || "$LAB_SUITE" == fee-pinning || "$LAB_SUITE" == recovery-handoff || "$LAB_SUITE" == recovery-independent || "$LAB_SUITE" == recovery-resume || "$LAB_SUITE" == auxpow-expanded || "$LAB_SUITE" == recovery-funding-reorg ]]
 EXTRA_ARGUMENTS=()
 if [[ "$LAB_SUITE" == recovery-* || "$LAB_SUITE" == auxpow-expanded ]]; then
   [[ "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ ]]
   EXTRA_ARGUMENTS+=(--execution-commit "$GITHUB_SHA")
 fi
-if [[ "$LAB_SUITE" == recovery-independent || "$LAB_SUITE" == recovery-resume || "$LAB_SUITE" == auxpow-expanded ]]; then
+if [[ "$LAB_SUITE" == recovery-independent || "$LAB_SUITE" == recovery-resume || "$LAB_SUITE" == auxpow-expanded || "$LAB_SUITE" == recovery-funding-reorg ]]; then
   [[ "$#" -eq 6 && "$6" =~ ^[0-9a-f]{64}$ ]]
   EXTRA_ARGUMENTS+=(--handoff-directory "$(realpath -e "$5")" --handoff-sha256 "$6")
 else

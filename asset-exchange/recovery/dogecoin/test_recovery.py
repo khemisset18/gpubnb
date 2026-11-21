@@ -31,11 +31,13 @@ class FakeRpc:
         if method=='getnetworkinfo':return {'version':1140900,'relayfee':Decimal('0.001')}
         if method=='getpeerinfo':return []
         if method=='getblockhash':return self.genesis if params[0]==0 else ('aa'*32 if params[0]==1353 else 'bb'*32)
-        if method=='getblockheader':return {'height':1353 if params[0]=='aa'*32 else 1356,'confirmations':1}
+        if method=='getblockheader':
+            height=1353 if params[0]=='aa'*32 else 1356
+            return {'height':height,'confirmations':self.tip-height+1}
         if method=='getmempoolinfo':return {'mempoolminfee':Decimal(self.rate)}
         if method=='getrawtransaction':
             if params[0]==self.bundle['funding']['txid']:
-                return {'hex':self.bundle['funding']['transactionHex'],'confirmations':4,'blockhash':'aa'*32}
+                return {'hex':self.bundle['funding']['transactionHex'],'confirmations':self.tip-1353+1,'blockhash':'aa'*32}
             entry=self.bundle['refunds'][self.index]
             if params[0]==entry['txid'] and self.state in ('PENDING','CONFIRMED'):
                 return {'hex':entry['transactionHex'],'confirmations':1 if self.state=='CONFIRMED' else 0,

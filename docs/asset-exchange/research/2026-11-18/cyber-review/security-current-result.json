@@ -1,0 +1,83 @@
+[
+  {
+    "label": "Trivy strict",
+    "artifactId": 14458308588,
+    "zipSha256": "c10b19a6561e35863a2d28e5812c689af9575849652883a7d1dccc6a11ee8c5f",
+    "findings": [
+      {
+        "id": "GHSA-fjx5-qpf4-xjf2",
+        "package": "borsh",
+        "version": "0.10.4",
+        "severity": "MEDIUM",
+        "source": {
+          "ID": "ghsa",
+          "Name": "GitHub Security Advisory Rust",
+          "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Arust"
+        },
+        "fixed": "1.0.0-alpha.1"
+      },
+      {
+        "id": "GHSA-wrw7-89jp-8q8g",
+        "package": "glib",
+        "version": "0.18.5",
+        "severity": "MEDIUM",
+        "source": {
+          "ID": "ghsa",
+          "Name": "GitHub Security Advisory Rust",
+          "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Arust"
+        },
+        "fixed": "0.20.0"
+      },
+      {
+        "id": "CVE-2026-112366",
+        "package": "picomatch",
+        "version": "4.0.5",
+        "severity": "HIGH",
+        "source": {
+          "ID": "ghsa",
+          "Name": "GitHub Security Advisory npm",
+          "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Anpm"
+        },
+        "fixed": null
+      }
+    ],
+    "result": "FAIL",
+    "createdAt": "2026-11-18T18:33:11.765659379Z",
+    "metadataKeys": [
+      "RepoURL",
+      "Commit",
+      "CommitMsg",
+      "Author",
+      "Committer"
+    ],
+    "runId": 44184744507,
+    "head": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+    "verifiedAtUtc": "2026-11-18T18:39:46.191430+00:00"
+  },
+  {
+    "label": "npm and Desktop job",
+    "artifactId": 14458608583,
+    "zipSha256": "5aed6308313140c098917fa3cab4d5472e7fd9722dddd4a4f6f8ffbd3b4561de",
+    "npmAudit": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "nativeTests": {
+      "suites": 18,
+      "pass": 506,
+      "fail": 0,
+      "ignored": 0
+    },
+    "result": "PASS_JOB",
+    "sourceOrLockChange": false,
+    "withdrawnAdvisoryAt": "2026-11-18T15:38:56Z",
+    "doesNotEraseTrivyCveFinding": true,
+    "runId": 44184744507,
+    "head": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+    "verifiedAtUtc": "2026-11-18T18:39:46.359202+00:00"
+  }
+]

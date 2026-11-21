@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "logs": {
+    "nativeJob135140878860.log": {
+      "sha256": "98c87b7673ba414c0e956a3cc440eabdb35d7500c8071accead292d3874b4b1f",
+      "bytes": 119757
+    },
+    "gtkStrictJob135144265194.log": {
+      "sha256": "f54e06054c58a029b88e2552d838fe31c52435da2930635167f6076e591f0143",
+      "bytes": 111915
+    }
+  },
+  "source": "GitHub job log connector; read-only retrieval, no rerun",
+  "nativeRun": 44400212431,
+  "gtkCiRun": 44401173504
+}

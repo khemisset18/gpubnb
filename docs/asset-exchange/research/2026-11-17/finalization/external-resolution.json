@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "checkedDate": "2026-11-17",
+  "sources": {
+    "tauri-deps": {
+      "name": "tauri-deps",
+      "url": "https://crates.io/api/v1/crates/tauri/2.12.6/dependencies",
+      "sha256": "d5a650cb88f428872fa5a0ec566d6fc7da7836deb0d1258440c34ee9d8deb194",
+      "result": [
+        {
+          "crate_id": "gtk",
+          "req": "^0.18",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "crate_id": "tauri-runtime-wry",
+          "req": "~2.12.4",
+          "target": null,
+          "kind": "normal"
+        },
+        {
+          "crate_id": "webkit2gtk",
+          "req": "^2",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        }
+      ]
+    },
+    "wry-deps": {
+      "name": "wry-deps",
+      "url": "https://crates.io/api/v1/crates/wry/0.57.2/dependencies",
+      "sha256": "6f60f9715a6f8ce5965a7ccfbb9f0f96b19bbe11d6983927dbebce0e08aec983",
+      "result": [
+        {
+          "crate_id": "tao",
+          "req": "^0.37",
+          "target": null,
+          "kind": "dev"
+        },
+        {
+          "crate_id": "tao-macros",
+          "req": "^0.1.4",
+          "target": "cfg(target_os = \"android\")",
+          "kind": "normal"
+        },
+        {
+          "crate_id": "gtk",
+          "req": "^0.18",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "crate_id": "webkit2gtk",
+          "req": "=2.0.2",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "crate_id": "webkit2gtk-sys",
+          "req": "=2.0.2",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        }
+      ]
+    },
+    "tao-deps": {
+      "name": "tao-deps",
+      "url": "https://crates.io/api/v1/crates/tao/0.37.2/dependencies",
+      "sha256": "b988a5204b02189479cfae99e334db452844de0195f0abdf05163c657d1e787a",
+      "result": [
+        {
+          "crate_id": "gtk",
+          "req": "^0.18",
+          "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))",
+          "kind": "normal"
+        },
+        {
+          "crate_id": "tao-macros",
+          "req": "^0.1.4",
+          "target": "cfg(target_os = \"android\")",
+          "kind": "normal"
+        }
+      ]
+    },
+    "ghsa-machine": {
+      "name": "ghsa-machine",
+      "url": "https://raw.githubusercontent.com/github/advisory-database/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+      "sha256": "4c3aadc6d50891c8915216904db59d7f3cfaef21f0766ab802caf4a539312447",
+      "result": [
+        {
+          "package": {
+            "ecosystem": "crates.io",
+            "name": "borsh"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "1.0.0-alpha.1"
+                }
+              ]
+            }
+          ],
+          "database_specific": {
+            "last_known_affected_version_range": "<= 0.10.3"
+          }
+        }
+      ]
+    },
+    "borsh-osv": {
+      "name": "borsh-osv",
+      "url": "https://api.osv.dev/v1/vulns/RUSTSEC-2023-0033",
+      "sha256": "d2943c54c8232a5e57d15da1218553116708b50846b234cf56e2187b305306e8",
+      "result": [
+        {
+          "package": {
+            "name": "borsh",
+            "ecosystem": "crates.io",
+            "purl": "pkg:cargo/borsh"
+          },
+          "ranges": [
+            {
+              "type": "SEMVER",
+              "events": [
+                {
+                  "introduced": "0.0.0-0"
+                },
+                {
+                  "fixed": "0.10.4"
+                },
+                {
+                  "introduced": "0.11.0-0"
+                },
+                {
+                  "fixed": "1.0.0-alpha.1"
+                }
+              ]
+            }
+          ],
+          "ecosystem_specific": {
+            "affected_functions": null,
+            "affects": {
+              "functions": [],
+              "os": [],
+              "arch": []
+            }
+          },
+          "database_specific": {
+            "categories": [
+              "memory-corruption"
+            ],
+            "cvss": null,
+            "informational": "unsound",
+            "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2023-0033.json"
+          }
+        }
+      ]
+    },
+    "wry-pr": {
+      "name": "wry-pr",
+      "url": "https://api.github.com/repos/tauri-apps/wry/pulls/1843",
+      "sha256": "57e1fd01659d025ac91f123050a5fcbd2b1aa5c067c781d8f5e08df666924394",
+      "result": {
+        "state": "open",
+        "merged": false,
+        "merged_at": null,
+        "updated_at": "2026-10-18T20:25:20Z"
+      }
+    },
+    "tao-pr": {
+      "name": "tao-pr",
+      "url": "https://api.github.com/repos/tauri-apps/tao/pulls/1332",
+      "sha256": "1d2069ff1608e12bbec962431f3f643567efbd0a753d629279388a8c7f6f8730",
+      "result": {
+        "state": "open",
+        "merged": false,
+        "merged_at": null,
+        "updated_at": "2026-09-22T14:41:10Z"
+      }
+    },
+    "picomatch-registry": {
+      "url": "https://registry.npmjs.org/picomatch",
+      "sha256": "9a8e64f1208fef4d18c27f48267e00c639b65743484cf3f5e788d018195b6fbb",
+      "observed": {
+        "tags": {
+          "latest": "4.0.7"
+        }
+      }
+    },
+    "picomatch-issue": {
+      "url": "https://api.github.com/repos/micromatch/picomatch/issues/247",
+      "sha256": "1cf1f6a84b1bb81b97699c503992745785a0555847f8c1db900f4775def5b00c",
+      "observed": {
+        "state": "open",
+        "merged": null,
+        "updated_at": "2026-11-17T19:15:41Z"
+      }
+    },
+    "picomatch-fix": {
+      "url": "https://api.github.com/repos/micromatch/picomatch/pulls/194",
+      "sha256": "c10390bb07719dd09333b49beaab377f7882a10d90ddb2616fa7f22aeafe0d31",
+      "observed": {
+        "state": "open",
+        "merged": false,
+        "updated_at": "2026-11-09T08:42:00Z"
+      }
+    },
+    "glib-release": {
+      "url": "https://crates.io/api/v1/crates/glib",
+      "sha256": "020d7e404436165cb3127c67d521c21cee19804b29a85d98ffb2bbfc0cf47d61",
+      "observed": {
+        "latest": "0.22.11"
+      }
+    },
+    "tauri-release": {
+      "url": "https://crates.io/api/v1/crates/tauri",
+      "sha256": "c6bab85473b4b09ea9a79667c3e01799cd48c7ad373d9b2b994b2033a5ba6acf",
+      "observed": {
+        "latest": "2.12.6"
+      }
+    },
+    "tauri-pr": {
+      "url": "https://api.github.com/repos/tauri-apps/tauri/pulls/16170",
+      "sha256": "4edfce4ab79641779816ec0797a6cefe0e1f9a9d8c0e643dc544911f1ac7f083",
+      "observed": {
+        "state": "open",
+        "merged": false,
+        "updated_at": "2026-10-21T08:25:44Z"
+      }
+    }
+  },
+  "borsh": {
+    "selected": "0.10.4",
+    "anchor": "0.31.1",
+    "crateSha256": "115e54d64eb62cdebad391c19efc9dce4981c690c85a33a12199d99bb9546fee",
+    "decoderSha256": "6d4cb52550aac787186890ba6a0118157f8433d341c79118892bce1959d75fb2",
+    "sourceCheck": "src/de/mod.rs line380: reject zero-sized vectors with InvalidInput before element deserialization",
+    "existingRealAnchorTests": "programs/gpu_escrow/tests/borsh_zst_regression.rs; already PASS on candidate; unchanged",
+    "decision": "Source fix present. RustSec/OSV includes0.10.4 fixed; GitHub machine events only fixed1.0.0-alpha.1 while last_known_affected<=0.10.3. Strict scan remains BLOCKED until corrected official data or compatible qualified graph. No major Anchor migration."
+  },
+  "glib": {
+    "selected": "0.18.5 with verified vendor source fix retained",
+    "sourceSha256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc",
+    "latestCompatible018": "0.18.5",
+    "latestPublishedGlib": "0.22.11",
+    "latestPublishedTauri": "2.12.6",
+    "latestTauriGtk": "^0.18",
+    "latestWry": "0.57.2; gtk^0.18",
+    "latestTao": "0.37.2; gtk^0.18",
+    "coordinatedMigration": "tauri#16170, wry#1843 and tao#1332 remain open/unmerged",
+    "decision": "No published compatible patch eliminates the authentic flagged version. Preserve tested source backport and desktop PASS evidence; no unqualified coordinated GTK migration."
+  },
+  "picomatch": {
+    "selected": "4.0.5",
+    "latest": "4.0.7",
+    "publishedFixedCompatible": false,
+    "directConstraint": "Vite7.3.7 ^4.0.3; tinyglobby0.2.17 ^4.0.4; fdir6.5.0 peer^3||^4",
+    "sourceStatus": "Official latest registry and open upstream issue247 reviewed; PR194 remains open and is not a qualified published fix. Advisory updated2026-11-17.",
+    "decision": "BLOCKED_EXTERNAL; retain strict audit, do not downgrade Vite or use an invented version."
+  }
+}

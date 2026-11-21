@@ -1,0 +1,1249 @@
+{
+  "experimentStatus": "PASS",
+  "fundingReorg": {
+    "cases": [
+      {
+        "expectationScope": "exchange-protocol",
+        "fundingBlock": "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9",
+        "id": "pending-refund-after-funding-reorg",
+        "nativeActiveBlocks": 1355,
+        "nativeHeaders": 1356,
+        "nativeParentAndRefundPending": true,
+        "preexistingHeaderGuardRefusedFirst": true,
+        "refusalBroadcasts": 0,
+        "rollbackDepth": 1,
+        "standaloneRefusal": "node has an unresolved header lead; no broadcast",
+        "status": "PASS"
+      },
+      {
+        "bothNodesConfirmed": true,
+        "expectationScope": "exchange-protocol/native-chain",
+        "feeKoinu": "1000000",
+        "id": "same-refund-after-funding-restoration",
+        "identicalPendingBytesRebroadcast": true,
+        "refundTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+        "retainedKoinu": "98000000",
+        "status": "PASS"
+      }
+    ],
+    "feeKoinu": "1000000",
+    "fundingBlockExitedInitialDownload": true,
+    "keysCreated": 0,
+    "newFundingGuardIsolatedNatively": false,
+    "previousNativeSuitesRepeated": false,
+    "qualificationStatus": "BLOCKED",
+    "refundSha256": "22cab13f529699966d13c1d03d8c3d105aae34cacbbf56e7a33c80e5edd20677",
+    "refundTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+    "retainedBundleSha256": "cb4ec1fcb1dd59b477f4448fa272cea30ed3c6044468ab5ab735a9c124930d15",
+    "retainedKoinu": "98000000",
+    "seedInitialBlockDownload": {
+      "a": true,
+      "b": true
+    },
+    "transactionsSigned": 0
+  },
+  "generatedBlocks": 2,
+  "independentRecoveryCalls": [
+    {
+      "action": null,
+      "blockchainDisconnected": false,
+      "expectedRefusal": null,
+      "fundingConfirmed": true,
+      "isolationProof": {
+        "backendUnavailable": true,
+        "isolatedPython": true,
+        "networkNamespace": "net:[4026532269]",
+        "nodeADataUnavailable": true,
+        "originalSigningKeysUnavailable": true,
+        "separateMountNamespace": true,
+        "standalonePackageSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+        "walletKeysProvided": false
+      },
+      "labLabel": "funding-reorg",
+      "qualificationStatus": "BLOCKED",
+      "rpcCalls": [
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "0"
+          ]
+        },
+        {
+          "method": "getpeerinfo",
+          "params": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "1"
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9"
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "1356"
+          ]
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+            "1"
+          ]
+        },
+        {
+          "method": "getmempoolentry",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "0",
+            "true"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        }
+      ],
+      "selectedFeeKoinu": null,
+      "source": "a",
+      "state": "PENDING",
+      "transition": "PENDING",
+      "txid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+    },
+    {
+      "action": null,
+      "blockchainDisconnected": false,
+      "expectedRefusal": null,
+      "fundingConfirmed": false,
+      "isolationProof": {
+        "backendUnavailable": true,
+        "isolatedPython": true,
+        "networkNamespace": "net:[4026532269]",
+        "nodeADataUnavailable": true,
+        "originalSigningKeysUnavailable": true,
+        "separateMountNamespace": true,
+        "standalonePackageSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+        "walletKeysProvided": false
+      },
+      "labLabel": "funding-reorg",
+      "qualificationStatus": "BLOCKED",
+      "rpcCalls": [
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "0"
+          ]
+        },
+        {
+          "method": "getpeerinfo",
+          "params": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "1"
+          ]
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+            "1"
+          ]
+        },
+        {
+          "method": "getmempoolentry",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "0",
+            "true"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        }
+      ],
+      "selectedFeeKoinu": null,
+      "source": "a",
+      "state": "PENDING",
+      "transition": "PENDING",
+      "txid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+    },
+    {
+      "action": null,
+      "blockchainDisconnected": false,
+      "expectedRefusal": "node has an unresolved header lead; no broadcast",
+      "fundingConfirmed": null,
+      "isolationProof": {
+        "backendUnavailable": true,
+        "isolatedPython": true,
+        "networkNamespace": "net:[4026532269]",
+        "nodeADataUnavailable": true,
+        "originalSigningKeysUnavailable": true,
+        "separateMountNamespace": true,
+        "standalonePackageSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+        "walletKeysProvided": false
+      },
+      "labLabel": "funding-reorg",
+      "qualificationStatus": "BLOCKED",
+      "rpcCalls": [
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "0"
+          ]
+        },
+        {
+          "method": "getpeerinfo",
+          "params": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "1"
+          ]
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+            "1"
+          ]
+        },
+        {
+          "method": "getmempoolentry",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "0",
+            "true"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        }
+      ],
+      "selectedFeeKoinu": null,
+      "source": "a",
+      "state": "UNKNOWN",
+      "transition": "EXPECTED_REFUSAL",
+      "txid": null
+    },
+    {
+      "action": "REBROADCAST_IDENTICAL_PRESIGNED_BYTES",
+      "blockchainDisconnected": false,
+      "expectedRefusal": null,
+      "fundingConfirmed": true,
+      "isolationProof": {
+        "backendUnavailable": true,
+        "isolatedPython": true,
+        "networkNamespace": "net:[4026532269]",
+        "nodeADataUnavailable": true,
+        "originalSigningKeysUnavailable": true,
+        "separateMountNamespace": true,
+        "standalonePackageSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+        "walletKeysProvided": false
+      },
+      "labLabel": "funding-reorg",
+      "qualificationStatus": "BLOCKED",
+      "rpcCalls": [
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "0"
+          ]
+        },
+        {
+          "method": "getpeerinfo",
+          "params": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "1"
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9"
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "1356"
+          ]
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+            "1"
+          ]
+        },
+        {
+          "method": "getmempoolentry",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "0",
+            "true"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getmempoolinfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "sendrawtransaction",
+          "params": [
+            "0100000001846e59d0d677e1ff25f1ae82756a4ecadf3f8ebc8fb53c4c2683c1b10e3daeb600000000c1483045022100ec295aef011e295897be7c465921071f4311839f17cac0cb4e7989fc7d21619402207c39b8561a074d51f827c07cc03d1f34d1c1b2a90628468b003319285646deba01004c756382012088a820e1b9a684a0509084af767803635d564c486a2fc75a893743fb323189e27586a5882103683a7bc3a9cfd01fb8a92da200a0edce92f47f3eea4926432398339ef3dfee9bac67024b05b1752103e3e59aa03b738237a597bacee06146aab927f86060f41b8c378c8a2681984368ac68feffffff01805cd705000000001976a9147ddb6c8033fcaeb935324bd7ee94bbff73f1ffb488ac4b050000"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "0"
+          ]
+        },
+        {
+          "method": "getpeerinfo",
+          "params": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "1"
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9"
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "1356"
+          ]
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+            "1"
+          ]
+        },
+        {
+          "method": "getmempoolentry",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "0",
+            "true"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        }
+      ],
+      "selectedFeeKoinu": "1000000",
+      "source": "a",
+      "state": "PENDING",
+      "transition": "PENDING",
+      "txid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+    },
+    {
+      "action": null,
+      "blockchainDisconnected": false,
+      "expectedRefusal": null,
+      "fundingConfirmed": true,
+      "isolationProof": {
+        "backendUnavailable": true,
+        "isolatedPython": true,
+        "networkNamespace": "net:[4026532269]",
+        "nodeADataUnavailable": true,
+        "originalSigningKeysUnavailable": true,
+        "separateMountNamespace": true,
+        "standalonePackageSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+        "walletKeysProvided": false
+      },
+      "labLabel": "funding-reorg",
+      "qualificationStatus": "BLOCKED",
+      "rpcCalls": [
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "0"
+          ]
+        },
+        {
+          "method": "getpeerinfo",
+          "params": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "1"
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9"
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "1356"
+          ]
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+            "1"
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "c7bbd2ee3bc6d393f1d5bc88214b1628d0d5d294c5265307cdd409a9f0ab0207"
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "1357"
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "0",
+            "true"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        }
+      ],
+      "selectedFeeKoinu": null,
+      "source": "a",
+      "state": "CONFIRMED",
+      "transition": "CONFIRMED",
+      "txid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+    },
+    {
+      "action": null,
+      "blockchainDisconnected": false,
+      "expectedRefusal": null,
+      "fundingConfirmed": true,
+      "isolationProof": {
+        "backendUnavailable": true,
+        "isolatedPython": true,
+        "networkNamespace": "net:[4026532269]",
+        "nodeADataUnavailable": true,
+        "originalSigningKeysUnavailable": true,
+        "separateMountNamespace": true,
+        "standalonePackageSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+        "walletKeysProvided": false
+      },
+      "labLabel": "funding-reorg",
+      "qualificationStatus": "BLOCKED",
+      "rpcCalls": [
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        },
+        {
+          "method": "getnetworkinfo",
+          "params": []
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "0"
+          ]
+        },
+        {
+          "method": "getpeerinfo",
+          "params": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "1"
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9"
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "1356"
+          ]
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+            "1"
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "c7bbd2ee3bc6d393f1d5bc88214b1628d0d5d294c5265307cdd409a9f0ab0207"
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            "1357"
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84",
+            "0",
+            "true"
+          ]
+        },
+        {
+          "method": "getblockchaininfo",
+          "params": []
+        }
+      ],
+      "selectedFeeKoinu": null,
+      "source": "b",
+      "state": "CONFIRMED",
+      "transition": "CONFIRMED",
+      "txid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd"
+    }
+  ],
+  "initialIdentities": {
+    "a": {
+      "blockchain": {
+        "bestblockhash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+        "bip9_softforks": {
+          "csv": {
+            "since": 0,
+            "startTime": 0,
+            "status": "defined",
+            "timeout": 999999999999
+          },
+          "segwit": {
+            "since": 0,
+            "startTime": 0,
+            "status": "defined",
+            "timeout": 999999999999
+          }
+        },
+        "blocks": 0,
+        "chain": "regtest",
+        "chainwork": "0000000000000000000000000000000000000000000000000000000000000002",
+        "difficulty": "4.656542373906925E-10",
+        "headers": 0,
+        "initialblockdownload": true,
+        "mediantime": 1296688602,
+        "pruned": false,
+        "size_on_disk": 232,
+        "softforks": [
+          {
+            "id": "bip34",
+            "reject": {
+              "status": false
+            },
+            "version": 2
+          },
+          {
+            "id": "bip66",
+            "reject": {
+              "status": false
+            },
+            "version": 3
+          },
+          {
+            "id": "bip65",
+            "reject": {
+              "status": false
+            },
+            "version": 4
+          }
+        ],
+        "verificationprogress": 1,
+        "warnings": ""
+      },
+      "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+      "network": {
+        "connections": 0,
+        "harddustlimit": "0.00100000",
+        "incrementalfee": "0.00010000",
+        "localaddresses": [],
+        "localrelay": true,
+        "localservices": "000000000000000d",
+        "networkactive": true,
+        "networks": [
+          {
+            "limited": false,
+            "name": "ipv4",
+            "proxy": "",
+            "proxy_randomize_credentials": false,
+            "reachable": true
+          },
+          {
+            "limited": true,
+            "name": "ipv6",
+            "proxy": "",
+            "proxy_randomize_credentials": false,
+            "reachable": false
+          },
+          {
+            "limited": true,
+            "name": "onion",
+            "proxy": "",
+            "proxy_randomize_credentials": false,
+            "reachable": false
+          }
+        ],
+        "protocolversion": 70015,
+        "relayfee": "0.00100000",
+        "softdustlimit": "0.01000000",
+        "subversion": "/Shibetoshi:1.14.9/",
+        "timeoffset": 0,
+        "version": 1140900,
+        "warnings": ""
+      },
+      "peers": []
+    },
+    "b": {
+      "blockchain": {
+        "bestblockhash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+        "bip9_softforks": {
+          "csv": {
+            "since": 0,
+            "startTime": 0,
+            "status": "defined",
+            "timeout": 999999999999
+          },
+          "segwit": {
+            "since": 0,
+            "startTime": 0,
+            "status": "defined",
+            "timeout": 999999999999
+          }
+        },
+        "blocks": 0,
+        "chain": "regtest",
+        "chainwork": "0000000000000000000000000000000000000000000000000000000000000002",
+        "difficulty": "4.656542373906925E-10",
+        "headers": 0,
+        "initialblockdownload": true,
+        "mediantime": 1296688602,
+        "pruned": false,
+        "size_on_disk": 232,
+        "softforks": [
+          {
+            "id": "bip34",
+            "reject": {
+              "status": false
+            },
+            "version": 2
+          },
+          {
+            "id": "bip66",
+            "reject": {
+              "status": false
+            },
+            "version": 3
+          },
+          {
+            "id": "bip65",
+            "reject": {
+              "status": false
+            },
+            "version": 4
+          }
+        ],
+        "verificationprogress": 1,
+        "warnings": ""
+      },
+      "genesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+      "network": {
+        "connections": 0,
+        "harddustlimit": "0.00200000",
+        "incrementalfee": "0.00010000",
+        "localaddresses": [],
+        "localrelay": true,
+        "localservices": "000000000000000d",
+        "networkactive": true,
+        "networks": [
+          {
+            "limited": false,
+            "name": "ipv4",
+            "proxy": "",
+            "proxy_randomize_credentials": false,
+            "reachable": true
+          },
+          {
+            "limited": true,
+            "name": "ipv6",
+            "proxy": "",
+            "proxy_randomize_credentials": false,
+            "reachable": false
+          },
+          {
+            "limited": true,
+            "name": "onion",
+            "proxy": "",
+            "proxy_randomize_credentials": false,
+            "reachable": false
+          }
+        ],
+        "protocolversion": 70015,
+        "relayfee": "0.01000000",
+        "softdustlimit": "0.01000000",
+        "subversion": "/Shibetoshi:1.14.9/",
+        "timeoffset": 0,
+        "version": 1140900,
+        "warnings": ""
+      },
+      "peers": []
+    }
+  },
+  "keysRemoved": true,
+  "mainnetUsed": false,
+  "manifest": {
+    "acceptNonstandard": false,
+    "archiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+    "authorization": "AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST",
+    "externalNetwork": false,
+    "importedPublicBlocksMaximum": 1355,
+    "initialAuxpow": false,
+    "keys": "no signing keys created or provided",
+    "labSuite": "recovery-funding-reorg",
+    "librarySha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b",
+    "maxAddressSpaceMiBPerProcess": 2048,
+    "maxAuxpowFixtures": 0,
+    "maxAuxpowParentAttemptsPerFixture": 256,
+    "maxBroadcastFixtures": 2,
+    "maxCpuSecondsPerProcess": 600,
+    "maxDataMiB": 1024,
+    "maxFixtureBytes": 10000,
+    "maxForkDepth": 5,
+    "maxGeneratedBlocks": 2,
+    "maxObservedRollbackDepth": 3,
+    "maxRpc": 400,
+    "maxStandaloneInvocations": 8,
+    "maxWallSeconds": 900,
+    "network": "regtest",
+    "nodes": 2,
+    "notCovered": [
+      "independent external review",
+      "complete AuxPoW adversarial matrix beyond eight fixed fixtures",
+      "production watcher deployment",
+      "all D0-D9 requirements"
+    ],
+    "peerEndpoints": [
+      "127.0.0.1:18444",
+      "127.0.0.1:18445"
+    ],
+    "postActivationForkAuxpow": true,
+    "promiscuousMempoolFlags": null,
+    "qualificationStatus": "BLOCKED",
+    "repeatsPreviouslyQualifiedSuite": false,
+    "rpcAllowlist": [
+      "addnode",
+      "generatetoaddress",
+      "getblock",
+      "getblockchaininfo",
+      "getblockhash",
+      "getblockheader",
+      "getmempoolentry",
+      "getmempoolinfo",
+      "getnetworkinfo",
+      "getpeerinfo",
+      "getrawmempool",
+      "getrawtransaction",
+      "gettxout",
+      "invalidateblock",
+      "reconsiderblock",
+      "sendrawtransaction",
+      "setnetworkactive",
+      "stop"
+    ],
+    "rpcEndpoints": [
+      "127.0.0.1:18332",
+      "127.0.0.1:18333"
+    ],
+    "schemaVersion": 1,
+    "settlementAllowed": false,
+    "signingAllowed": false,
+    "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+    "walletEnabled": false
+  },
+  "members": {
+    "dogecoin-cli": {
+      "member": "dogecoin-1.14.9/bin/dogecoin-cli",
+      "sha256": "2d3c69c56db3c3c51f0f7540ce05e723f0df59b308a3d78e424b5dfff0a1b3b3"
+    },
+    "dogecoind": {
+      "member": "dogecoin-1.14.9/bin/dogecoind",
+      "sha256": "897494db97d4a0be43a712151dafd4b06d0a66339d55350457505506fd5a6aca"
+    },
+    "libdogecoinconsensus.so.0.0.0": {
+      "member": "dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0",
+      "sha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b"
+    }
+  },
+  "namespaceAfter": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "namespaceBefore": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "processStarts": [
+    {
+      "arguments": [
+        "-datadir=PRIVATE_DATADIR",
+        "-conf=PRIVATE_DATADIR/dogecoin.conf",
+        "-regtest=1",
+        "-testnet=0",
+        "-rpcport=18332",
+        "-server=1",
+        "-daemon=0",
+        "-listen=1",
+        "-connect=0",
+        "-port=18444",
+        "-bind=127.0.0.1",
+        "-onlynet=ipv4",
+        "-dnsseed=0",
+        "-dns=0",
+        "-discover=0",
+        "-upnp=0",
+        "-listenonion=0",
+        "-onion=0",
+        "-disablewallet=1",
+        "-debug=rpc",
+        "-txindex=1",
+        "-rpcbind=127.0.0.1",
+        "-rpcallowip=127.0.0.1",
+        "-printtoconsole=1",
+        "-dbcache=32",
+        "-par=1",
+        "-acceptnonstdtxn=0",
+        "-maxmempool=5",
+        "-harddustlimit=0.001",
+        "-minrelaytxfee=0.001"
+      ],
+      "source": "a"
+    },
+    {
+      "arguments": [
+        "-datadir=PRIVATE_DATADIR",
+        "-conf=PRIVATE_DATADIR/dogecoin.conf",
+        "-regtest=1",
+        "-testnet=0",
+        "-rpcport=18333",
+        "-server=1",
+        "-daemon=0",
+        "-listen=1",
+        "-connect=0",
+        "-port=18445",
+        "-bind=127.0.0.1",
+        "-onlynet=ipv4",
+        "-dnsseed=0",
+        "-dns=0",
+        "-discover=0",
+        "-upnp=0",
+        "-listenonion=0",
+        "-onion=0",
+        "-disablewallet=1",
+        "-debug=rpc",
+        "-txindex=1",
+        "-rpcbind=127.0.0.1",
+        "-rpcallowip=127.0.0.1",
+        "-printtoconsole=1",
+        "-dbcache=32",
+        "-par=1",
+        "-acceptnonstdtxn=0",
+        "-maxmempool=5",
+        "-harddustlimit=0.002",
+        "-minrelaytxfee=0.01"
+      ],
+      "source": "b"
+    },
+    {
+      "arguments": [
+        "-datadir=PRIVATE_DATADIR",
+        "-conf=PRIVATE_DATADIR/dogecoin.conf",
+        "-regtest=1",
+        "-testnet=0",
+        "-rpcport=18332",
+        "-server=1",
+        "-daemon=0",
+        "-listen=1",
+        "-connect=0",
+        "-port=18444",
+        "-bind=127.0.0.1",
+        "-onlynet=ipv4",
+        "-dnsseed=0",
+        "-dns=0",
+        "-discover=0",
+        "-upnp=0",
+        "-listenonion=0",
+        "-onion=0",
+        "-disablewallet=1",
+        "-debug=rpc",
+        "-txindex=1",
+        "-rpcbind=127.0.0.1",
+        "-rpcallowip=127.0.0.1",
+        "-printtoconsole=1",
+        "-dbcache=32",
+        "-par=1",
+        "-acceptnonstdtxn=0",
+        "-maxmempool=5",
+        "-harddustlimit=0.001",
+        "-minrelaytxfee=0.001",
+        "-loadblock=/home/runner/work/_temp/doge-public-seed/public-chain.dat"
+      ],
+      "source": "a"
+    },
+    {
+      "arguments": [
+        "-datadir=PRIVATE_DATADIR",
+        "-conf=PRIVATE_DATADIR/dogecoin.conf",
+        "-regtest=1",
+        "-testnet=0",
+        "-rpcport=18333",
+        "-server=1",
+        "-daemon=0",
+        "-listen=1",
+        "-connect=0",
+        "-port=18445",
+        "-bind=127.0.0.1",
+        "-onlynet=ipv4",
+        "-dnsseed=0",
+        "-dns=0",
+        "-discover=0",
+        "-upnp=0",
+        "-listenonion=0",
+        "-onion=0",
+        "-disablewallet=1",
+        "-debug=rpc",
+        "-txindex=1",
+        "-rpcbind=127.0.0.1",
+        "-rpcallowip=127.0.0.1",
+        "-printtoconsole=1",
+        "-dbcache=32",
+        "-par=1",
+        "-acceptnonstdtxn=0",
+        "-maxmempool=5",
+        "-harddustlimit=0.002",
+        "-minrelaytxfee=0.01",
+        "-loadblock=/home/runner/work/_temp/doge-public-seed/public-chain.dat"
+      ],
+      "source": "b"
+    }
+  ],
+  "publicReplay": {
+    "blocks": 1355,
+    "nodeDatabasesTransferred": false,
+    "streamSha256": "3416b8b69aea7cd1f690810e068954ac3132197bd2a1ed074a7b0c89c6e25309",
+    "tip": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a"
+  },
+  "qualificationStatus": "BLOCKED",
+  "realFundsUsed": false,
+  "rpcCalls": 175,
+  "settlementAllowed": false,
+  "stages": [
+    {
+      "label": "pending-confirmed-funding",
+      "observations": [
+        {
+          "blockHash": null,
+          "blockHeight": null,
+          "chainId": "dogecoin",
+          "confirmations": 0,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "PRESENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036785281,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-a",
+          "tipHash": "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9",
+          "tipHeight": 1356,
+          "transactionFound": true
+        },
+        {
+          "blockHash": null,
+          "blockHeight": null,
+          "chainId": "dogecoin",
+          "confirmations": 0,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "PRESENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036785305,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-b",
+          "tipHash": "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9",
+          "tipHeight": 1356,
+          "transactionFound": true
+        }
+      ]
+    },
+    {
+      "label": "funding-rolled-back",
+      "observations": [
+        {
+          "blockHash": null,
+          "blockHeight": null,
+          "chainId": "dogecoin",
+          "confirmations": 0,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "PRESENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036786705,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-a",
+          "tipHash": "e56b0cfbaae12ee9c1f531219195bb6b6262aec2856e7b1d42738092973abd8a",
+          "tipHeight": 1355,
+          "transactionFound": true
+        },
+        {
+          "blockHash": null,
+          "blockHeight": null,
+          "chainId": "dogecoin",
+          "confirmations": 0,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "PRESENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036786720,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-b",
+          "tipHash": "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9",
+          "tipHeight": 1356,
+          "transactionFound": true
+        }
+      ]
+    },
+    {
+      "label": "funding-restored",
+      "observations": [
+        {
+          "blockHash": null,
+          "blockHeight": null,
+          "chainId": "dogecoin",
+          "confirmations": 0,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "PRESENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036786966,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-a",
+          "tipHash": "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9",
+          "tipHeight": 1356,
+          "transactionFound": true
+        },
+        {
+          "blockHash": null,
+          "blockHeight": null,
+          "chainId": "dogecoin",
+          "confirmations": 0,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "PRESENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036786983,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-b",
+          "tipHash": "b3471713c4a1076bb423eedc264427c8b715b752558310eeaacfaba1e4feaaa9",
+          "tipHeight": 1356,
+          "transactionFound": true
+        }
+      ]
+    },
+    {
+      "label": "refund-confirmed",
+      "observations": [
+        {
+          "blockHash": "c7bbd2ee3bc6d393f1d5bc88214b1628d0d5d294c5265307cdd409a9f0ab0207",
+          "blockHeight": 1357,
+          "chainId": "dogecoin",
+          "confirmations": 1,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "ABSENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036788432,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-a",
+          "tipHash": "c7bbd2ee3bc6d393f1d5bc88214b1628d0d5d294c5265307cdd409a9f0ab0207",
+          "tipHeight": 1357,
+          "transactionFound": true
+        },
+        {
+          "blockHash": "c7bbd2ee3bc6d393f1d5bc88214b1628d0d5d294c5265307cdd409a9f0ab0207",
+          "blockHeight": 1357,
+          "chainId": "dogecoin",
+          "confirmations": 1,
+          "conflictStatus": "NONE",
+          "mempoolStatus": "ABSENT",
+          "networkId": "regtest",
+          "observedAtUnixMs": 1795036788450,
+          "observedTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+          "sourceId": "doge-b",
+          "tipHash": "c7bbd2ee3bc6d393f1d5bc88214b1628d0d5d294c5265307cdd409a9f0ab0207",
+          "tipHeight": 1357,
+          "transactionFound": true
+        }
+      ]
+    }
+  ]
+}

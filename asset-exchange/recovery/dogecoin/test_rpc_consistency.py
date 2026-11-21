@@ -1,0 +1,198 @@
+"""Untrusted RPC consistency and funding-reorg regressions; no native node."""
+from decimal import Decimal
+import unittest
+import test_recovery as fixture_tests
+import recovery_core as recovery
+
+
+class RpcConsistencyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        fixture_tests.RecoveryTests.setUpClass()
+        cls.bundle=fixture_tests.RecoveryTests.bundle
+
+    @classmethod
+    def tearDownClass(cls):
+        fixture_tests.RecoveryTests.tearDownClass()
+
+    def rpc(self,states,*,funding_confirmed=True,unspent=False):
+        base=fixture_tests.FakeRpc(self.bundle,'PENDING')
+        entries={e['txid']:e for e in self.bundle['refunds']}
+        by_txid={self.bundle['refunds'][index]['txid']:state for index,state in enumerate(states)}
+        def call(method,*params,**kwargs):
+            value=base(method,*params,**kwargs)
+            if method=='getrawtransaction':
+                if params[0]==self.bundle['funding']['txid']:
+                    if not funding_confirmed:return {'hex':self.bundle['funding']['transactionHex'],'confirmations':0}
+                elif params[0] in by_txid:
+                    state=by_txid[params[0]]
+                    return {'hex':entries[params[0]]['transactionHex'],'confirmations':int(state=='CONFIRMED'),
+                            **({'blockhash':'bb'*32} if state=='CONFIRMED' else {})}
+                else:return None
+            if method=='getmempoolentry':
+                return {'fee':Decimal('0.01')} if by_txid.get(params[0])=='PENDING' else None
+            if method=='gettxout' and unspent:
+                return {'value':Decimal(100),'scriptPubKey':{'hex':self.bundle['contract']['outputHex']}}
+            return value
+        return call,base.calls
+
+    def refusal(self,states,reason,**kwargs):
+        for operation in (recovery.observe,recovery.rebroadcast):
+            rpc,calls=self.rpc(states,**kwargs)
+            with self.assertRaisesRegex(ValueError,reason):operation(self.bundle,rpc)
+            self.assertFalse(any(method=='sendrawtransaction' for method,_ in calls))
+
+    def test_two_conflicting_pending_refunds_are_not_arbitrarily_selected(self):
+        self.refusal(['PENDING','PENDING'],'conflicting active refund')
+
+    def test_confirmed_and_conflicting_pending_cannot_be_reported_together(self):
+        self.refusal(['CONFIRMED','PENDING'],'conflicting active refund')
+
+    def test_two_confirmed_conflicts_remain_rejected(self):
+        self.refusal(['CONFIRMED','CONFIRMED'],'conflicting active refund')
+
+    def test_refund_observed_spending_an_unspent_funding_output_refuses(self):
+        self.refusal(['PENDING'],'refund and unspent funding',unspent=True)
+
+    def test_active_confirmed_refund_requires_active_confirmed_funding(self):
+        self.refusal(['CONFIRMED'],'confirmed refund without confirmed funding',funding_confirmed=False)
+
+    def test_pending_refund_after_funding_reorg_can_be_observed_but_not_rebroadcast(self):
+        rpc,calls=self.rpc(['PENDING'],funding_confirmed=False)
+        status=recovery.observe(self.bundle,rpc)
+        self.assertEqual(status['state'],'PENDING')
+        self.assertFalse(status['fundingConfirmed'])
+        self.assertFalse(status['automaticSettlement'])
+        with self.assertRaisesRegex(ValueError,'funding is not confirmed on active chain'):
+            recovery.rebroadcast(self.bundle,rpc)
+        self.assertFalse(any(method=='sendrawtransaction' for method,_ in calls))
+
+    def test_native_header_lead_keeps_priority_when_funding_is_also_unconfirmed(self):
+        underlying,calls=self.rpc(['PENDING'],funding_confirmed=False)
+        def rpc(method,*params,**kwargs):
+            value=underlying(method,*params,**kwargs)
+            if method=='getblockchaininfo':value={**value,'headers':value['blocks']+1}
+            return value
+        status=recovery.observe(self.bundle,rpc)
+        self.assertEqual(status['state'],'PENDING')
+        self.assertFalse(status['nodeSynchronized'])
+        self.assertFalse(status['fundingConfirmed'])
+        with self.assertRaisesRegex(ValueError,'node has an unresolved header lead; no broadcast'):
+            recovery.rebroadcast(self.bundle,rpc)
+        self.assertFalse(any(method=='sendrawtransaction' for method,_ in calls))
+
+    def test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip(self):
+        for target,state in [('funding','UTXO_AVAILABLE'),('refund','CONFIRMED')]:
+            for height in (-1,1357):
+                for operation in (recovery.observe,recovery.rebroadcast):
+                    with self.subTest(target=target,height=height,operation=operation.__name__):
+                        base=fixture_tests.FakeRpc(self.bundle,state)
+                        block=('aa' if target=='funding' else 'bb')*32
+                        def rpc(method,*params,**kwargs):
+                            value=base(method,*params,**kwargs)
+                            if method=='getblockheader' and params[0]==block:
+                                return {'height':height,'confirmations':1}
+                            if method=='getblockhash' and params[0]==height:return block
+                            return value
+                        with self.assertRaisesRegex(ValueError,'confirmation anchor outside observed chain height'):
+                            operation(self.bundle,rpc)
+                        self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_transaction_and_header_depths_must_match_the_same_observed_tip(self):
+        mutations=[('transaction',1),('transaction',5),('header',1),('header',5),
+                   ('header',True),('header',4.0),('header','4')]
+        for field,value in mutations:
+            for operation in (recovery.observe,recovery.rebroadcast):
+                with self.subTest(field=field,value=value,operation=operation.__name__):
+                    base=fixture_tests.FakeRpc(self.bundle)
+                    def rpc(method,*params,**kwargs):
+                        result=base(method,*params,**kwargs)
+                        if field=='transaction' and method=='getrawtransaction' and params[0]==self.bundle['funding']['txid']:
+                            return {**result,'confirmations':value}
+                        if field=='header' and method=='getblockheader' and params[0]=='aa'*32:
+                            return {**result,'confirmations':value}
+                        return result
+                    with self.assertRaisesRegex(ValueError,'inactive confirmation anchor|incoherent confirmation depth observation'):
+                        operation(self.bundle,rpc)
+                    self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_coherent_funding_depths_follow_the_observed_tip(self):
+        for tip in (1353,1354,1356):
+            with self.subTest(tip=tip):
+                rpc=fixture_tests.FakeRpc(self.bundle);rpc.tip=tip
+                result=recovery.observe(self.bundle,rpc)
+                self.assertEqual(result['state'],'UTXO_AVAILABLE')
+                self.assertTrue(result['fundingConfirmed'])
+                self.assertFalse(result['automaticSettlement'])
+
+    def test_chain_change_after_observation_refuses_before_broadcast(self):
+        changes=[{'blocks':1355,'headers':1355,'bestblockhash':'cc'*32},
+                 {'bestblockhash':'cc'*32},
+                 {'blocks':1357,'headers':1357,'bestblockhash':'cc'*32}]
+        for change in changes:
+            with self.subTest(change=change):
+                base=fixture_tests.FakeRpc(self.bundle)
+                reads=0
+                def rpc(method,*params,**kwargs):
+                    nonlocal reads
+                    value=base(method,*params,**kwargs)
+                    if method=='getblockchaininfo':
+                        reads+=1
+                        if reads==3:return {**value,**change}
+                    return value
+                with self.assertRaisesRegex(ValueError,'chain changed before rebroadcast'):
+                    recovery.rebroadcast(self.bundle,rpc)
+                self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_header_lead_after_observation_refuses_before_broadcast(self):
+        base=fixture_tests.FakeRpc(self.bundle)
+        reads=0
+        def rpc(method,*params,**kwargs):
+            nonlocal reads
+            value=base(method,*params,**kwargs)
+            if method=='getblockchaininfo':
+                reads+=1
+                if reads==3:return {**value,'headers':value['blocks']+1}
+            return value
+        with self.assertRaisesRegex(ValueError,'unresolved header lead; no broadcast'):
+            recovery.rebroadcast(self.bundle,rpc)
+        self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_header_lead_on_observation_readback_is_not_reported_synchronized(self):
+        for operation in (recovery.observe,recovery.rebroadcast):
+            with self.subTest(operation=operation.__name__):
+                base=fixture_tests.FakeRpc(self.bundle)
+                reads=0
+                def rpc(method,*params,**kwargs):
+                    nonlocal reads
+                    value=base(method,*params,**kwargs)
+                    if method=='getblockchaininfo':
+                        reads+=1
+                        if reads==2:return {**value,'headers':value['blocks']+1}
+                    return value
+                if operation==recovery.observe:
+                    self.assertFalse(operation(self.bundle,rpc)['nodeSynchronized'])
+                else:
+                    with self.assertRaisesRegex(ValueError,'unresolved header lead; no broadcast'):
+                        operation(self.bundle,rpc)
+                self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+    def test_observation_readback_rejects_invalid_header_observations(self):
+        for headers in (-1,1355,True,1356.0,'1356',None):
+            for operation in (recovery.observe,recovery.rebroadcast):
+                with self.subTest(headers=headers,operation=operation.__name__):
+                    base=fixture_tests.FakeRpc(self.bundle)
+                    reads=0
+                    def rpc(method,*params,**kwargs):
+                        nonlocal reads
+                        value=base(method,*params,**kwargs)
+                        if method=='getblockchaininfo':
+                            reads+=1
+                            if reads==2:return {**value,'headers':headers}
+                        return value
+                    with self.assertRaisesRegex(ValueError,'incoherent chain/header observation'):
+                        operation(self.bundle,rpc)
+                    self.assertFalse(any(method=='sendrawtransaction' for method,_ in base.calls))
+
+
+if __name__=='__main__':unittest.main()

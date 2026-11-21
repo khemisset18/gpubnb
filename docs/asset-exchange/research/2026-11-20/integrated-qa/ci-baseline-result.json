@@ -1,0 +1,730 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-20T01:10:10.058Z",
+  "repository": "khemisset18/gpubnb",
+  "candidateCommit": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+  "candidateTree": "ecba7bcbae006f2850b3cfeae636a1a92284a60c",
+  "qualification": "Internal only; no external independent audit",
+  "runs": [
+    {
+      "id": 44399837134,
+      "name": "host-windows-preflight",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1707,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837134/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837134/logs",
+      "workflow_id": 322929859,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837134"
+    },
+    {
+      "id": 44399837182,
+      "name": "host-desktop-dev-installers",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 815,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837182/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837182/logs",
+      "workflow_id": 320017575,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837182"
+    },
+    {
+      "id": 44399837214,
+      "name": "Rust compatible backport workspace qualification",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 14,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837214/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837214/logs",
+      "workflow_id": 415241705,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837214"
+    },
+    {
+      "id": 44399837142,
+      "name": "Asset Exchange G5 Foundation",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 243,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837142/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837142/logs",
+      "workflow_id": 375995688,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837142"
+    },
+    {
+      "id": 44399837325,
+      "name": "artifact-storage-s3-integration",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 337,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837325/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837325/logs",
+      "workflow_id": 352443312,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837325"
+    },
+    {
+      "id": 44399837246,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "failure",
+      "run_number": 8190,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837246/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837246/logs",
+      "workflow_id": 317159751,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837246"
+    },
+    {
+      "id": 44399837253,
+      "name": "workspace-reliability",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1498,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837253/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837253/logs",
+      "workflow_id": 333150789,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837253"
+    },
+    {
+      "id": 44399837191,
+      "name": "Solana host recovery compatibility",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 13,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837191/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837191/logs",
+      "workflow_id": 416685016,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837191"
+    },
+    {
+      "id": 44399837260,
+      "name": "host-desktop",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1028,
+      "jobs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837260/jobs",
+      "logs_url": "https://api.github.com/repos/khemisset18/gpubnb/actions/runs/44399837260/logs",
+      "workflow_id": 319427076,
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/44399837260"
+    }
+  ],
+  "count": {
+    "success": 8,
+    "failure": 1
+  },
+  "candidateNative": {
+    "run": 44400212431,
+    "head": "4ce481379a9355d5aa49e92ebe93df032e0a6906",
+    "status": "completed",
+    "conclusion": "success",
+    "attempt": 1,
+    "source": "Native evidence independently re-downloaded and verified in native-44400212431-result.json"
+  },
+  "experimentalGtk": {
+    "commit": "99b4448135148083ff675bdab6f6ed3bd41b604e",
+    "ciRun": 44401173504,
+    "ciConclusion": "failure",
+    "ciJobs": [
+      {
+        "id": 135144265052,
+        "name": "production-gates",
+        "status": "completed",
+        "conclusion": "success",
+        "run_id": 44401173504,
+        "logs_url": null,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Run python3 -m py_compile agent/agent.py",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Run node --check apps/web/app.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Run node --check apps/web/config.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Run node --check apps/web/account.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Run node --check apps/web/workspaces.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Run node --check apps/web/publish.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 8
+          },
+          {
+            "name": "Run node --check apps/web/choose-workspace.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9
+          },
+          {
+            "name": "Run node --check apps/web/rental-owner.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10
+          },
+          {
+            "name": "Run node scripts/devnet-doctor.mjs",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11
+          },
+          {
+            "name": "Validate qualification PowerShell syntax",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 12
+          },
+          {
+            "name": "Validate Developer Workspace manifest and shell",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13
+          },
+          {
+            "name": "Post Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 26
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 27
+          }
+        ]
+      },
+      {
+        "id": 135144265093,
+        "name": "desktop-security",
+        "status": "completed",
+        "conclusion": "success",
+        "run_id": 44401173504,
+        "logs_url": null,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Run actions/setup-node@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Install actual locked desktop tree with compatibility checks",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Require zero desktop vulnerabilities at every severity",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Source-map and Vite security regressions",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Strict TypeScript and actual frontend build",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Run dtolnay/rust-toolchain@1.97.1",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 8
+          },
+          {
+            "name": "Run Swatinem/rust-cache@v2",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9
+          },
+          {
+            "name": "Linux native host contracts and integration tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10
+          },
+          {
+            "name": "Retain desktop diagnostics including failures",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11
+          },
+          {
+            "name": "Post Run Swatinem/rust-cache@v2",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 20
+          },
+          {
+            "name": "Post Run actions/setup-node@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 21
+          },
+          {
+            "name": "Post Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 22
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 23
+          }
+        ]
+      },
+      {
+        "id": 135144265194,
+        "name": "security-static-analysis",
+        "status": "completed",
+        "conclusion": "failure",
+        "run_id": 44401173504,
+        "logs_url": null,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Gitleaks secret scan",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Trivy filesystem report",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Enforce Trivy gate on every reported vulnerability",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 5
+          },
+          {
+            "name": "Upload Trivy report",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Shell syntax",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 7
+          },
+          {
+            "name": "Python compile",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 8
+          },
+          {
+            "name": "Post Trivy filesystem report",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 15
+          },
+          {
+            "name": "Post Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 16
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 17
+          }
+        ]
+      },
+      {
+        "id": 135144265282,
+        "name": "dependency-audit",
+        "status": "completed",
+        "conclusion": "success",
+        "run_id": 44401173504,
+        "logs_url": null,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Run actions/setup-node@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Install both actual dependency trees with Node 22",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "npm audit both trees, all severities",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Upload npm audit report",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Post Run actions/setup-node@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11
+          },
+          {
+            "name": "Post Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 12
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13
+          }
+        ]
+      },
+      {
+        "id": 135144265347,
+        "name": "agent",
+        "status": "completed",
+        "conclusion": "success",
+        "run_id": 44401173504,
+        "logs_url": null,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Run actions/setup-python@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Run python -m pip install --disable-pip-version-check -e agent",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Run python -m py_compile agent/agent.py agent/gpubnb_agent/*.py",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Agent tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Run actions/upload-artifact@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Post Run actions/setup-python@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13
+          },
+          {
+            "name": "Post Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 14
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 15
+          }
+        ]
+      },
+      {
+        "id": 135144265743,
+        "name": "contract",
+        "status": "completed",
+        "conclusion": "success",
+        "run_id": 44401173504,
+        "logs_url": null,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Run dtolnay/rust-toolchain@stable",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Run Swatinem/rust-cache@v2",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Contract tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Run actions/upload-artifact@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Post Run Swatinem/rust-cache@v2",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11
+          },
+          {
+            "name": "Post Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 12
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13
+          }
+        ]
+      },
+      {
+        "id": 135144265862,
+        "name": "api",
+        "status": "completed",
+        "conclusion": "success",
+        "run_id": 44401173504,
+        "logs_url": null,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Initialize containers",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Generate ephemeral CI secrets",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Run actions/setup-node@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Run npm ci",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Run npx prisma generate",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Run npx prisma migrate deploy",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 8
+          },
+          {
+            "name": "Require isolated PostgreSQL and Redis before integration tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9
+          },
+          {
+            "name": "API tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10
+          },
+          {
+            "name": "Upload API test diagnostics",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11
+          },
+          {
+            "name": "Build API",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 12
+          },
+          {
+            "name": "Strict TypeScript check",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13
+          },
+          {
+            "name": "Upload API build diagnostics",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 14
+          },
+          {
+            "name": "Post Run actions/setup-node@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 26
+          },
+          {
+            "name": "Post Run actions/checkout@v6",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 27
+          },
+          {
+            "name": "Stop containers",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 28
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 29
+          }
+        ]
+      }
+    ],
+    "strictFindingCount": 1,
+    "strictFindingIds": [
+      "GHSA-fjx5-qpf4-xjf2"
+    ],
+    "strictRemainingPackage": "borsh 0.10.4",
+    "glibAndPicomatchFindingAbsentInThatActualCiRun": true,
+    "notAnIntegratedCandidatePass": true,
+    "guiRun44401173888": "FAIL: Ubuntu package libwebkit2gtk-driver unavailable; GTK owner corrects official package name and runs affected GUI workflow separately"
+  },
+  "regressionScope": "Recovery code changed only RPC observation/refusal; Core/API/Agent/Solana/MinIO sources preserved. Existing successful unchanged suites were read, not manually rerun by QA.",
+  "rerunsDispatchesPushesByQa": []
+}

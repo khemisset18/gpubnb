@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-20T01:09:15.908025+00:00",
+  "baseCommitPublished": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+  "baseTree": "ecba7bcbae006f2850b3cfeae636a1a92284a60c",
+  "restoredSourceMatchesHistoricalRecordedHashes": true,
+  "historicalMissingLogsRecreated": false,
+  "runtimeChanged": false,
+  "sourceSha256": {
+    "asset-exchange/recovery/dogecoin/test_process_crashes.py": "b6a070c7f9b32a01083b72ed3750f16174232cb6db54e445f2222fd7f82eb811",
+    "asset-exchange/wallet-agent/dogecoin/test_signer_boundaries.py": "2effaa7948bc9076d36adb5675e6eb1906d24f5b33041f4a65604fe070fb82f3",
+    "asset-exchange/recovery/dogecoin/recovery_core.py": "ab6221fb209ac05316a37d9b17beb26ad45317b125dd0c1866abf3d3240a1c8b",
+    "asset-exchange/recovery/dogecoin/test_rpc_consistency.py": "3ab24d89b3e128a2fe039f24b5cb93982ce02abf67d061ff46223652b2df7057",
+    "asset-exchange/recovery/dogecoin/transaction.py": "c791a4f92c63cb45b0fb5faad4c207a066e1be26fc010feebe8c01c3b79010fc",
+    "asset-exchange/recovery/dogecoin/package.py": "f51af99dd5ebd64afc63861307bcd3d23bcfcbe2249f7af3c3e5dc2ac78e04f8",
+    "asset-exchange/wallet-agent/dogecoin/refund_ladder.py": "3f285381488a19c1cd5c57b3e35d558a7279a9f8e57a7337a934c462bf5f5e56"
+  },
+  "zipappSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "openssl": "OpenSSL 3.5.7 9 Jun 2026 (Library: OpenSSL 3.5.7 9 Jun 2026)"
+  },
+  "results": {
+    "recovery": {
+      "count": 40,
+      "status": "PASS",
+      "failures": 0,
+      "skips": 0,
+      "exitCode": 0,
+      "log": "recovery-integrated.log"
+    },
+    "signer": {
+      "count": 16,
+      "status": "PASS",
+      "failures": 0,
+      "skips": 0,
+      "exitCode": 0,
+      "log": "signer-integrated.log"
+    }
+  },
+  "commands": {
+    "recovery": "TMPDIR=/workspace/scratch/44921c6f8796/evidence/doge-python-20261120/tmp python3 -m unittest discover -s asset-exchange/recovery/dogecoin -p 'test_*.py' -v",
+    "signer": "TMPDIR=/workspace/scratch/44921c6f8796/evidence/doge-python-20261120/tmp python3 -m unittest discover -s asset-exchange/wallet-agent/dogecoin -p 'test_*.py' -v"
+  },
+  "newTestMethods": 7,
+  "sigkillInterruptions": {
+    "bundle": 7,
+    "journal": 7,
+    "softwareRpcRestart": 3,
+    "total": 17
+  },
+  "newSignerSubcases": 19,
+  "newKeysInCrashChildren": 0,
+  "nativeDogeExecution": false,
+  "unchangedNativeRun44400212431Repeated": false,
+  "broadcastRestartEvidence": "SOFTWARE_RPC_MODEL_ONLY",
+  "physicalReboot": "NOT_TESTED",
+  "physicalPowerLoss": "NOT_TESTED",
+  "physicalHostIndependence": "NOT_TESTED",
+  "hardwareDeviceFirmwareDisplayDisconnect": "NOT_TESTED",
+  "externalTransportDeviceAdapterPairing": "NOT_IMPLEMENTED",
+  "wholeD7": "BLOCKED",
+  "wholeD8": "BLOCKED",
+  "independentAudit": "NOT_PERFORMED_OUTSIDE_MISSION"
+}

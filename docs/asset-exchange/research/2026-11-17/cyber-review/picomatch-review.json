@@ -1,0 +1,212 @@
+{
+  "assessmentKind": "INTERNAL_PROPOSED_PATCH_COMPATIBILITY_REVIEW",
+  "checkedAtUtc": "2026-11-17T21:49:45.470388+00:00",
+  "selectedVersion": "4.0.5",
+  "officialLatest": "4.0.7",
+  "officialAdvisory": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+  "officialAdvisoryPatchedVersions": null,
+  "publishedCompatibleFix": false,
+  "activeGraph": {
+    "vite": "7.3.7",
+    "tinyglobby": "0.2.17",
+    "fdir": "6.5.0"
+  },
+  "rawBoundedProbeSha256": "a6446ab599f48dc47fc31bf983d36e7eb42edf91b9015fd166e8f89d67d494e8",
+  "totalObservations": 21,
+  "method": "official4.0.5 tag source, proposed upstream parse patches applied with zero fuzz; isolated Node child per case;1.5second hard subprocess deadline;64MB V8 heap",
+  "sourcePatchProof": [
+    {
+      "pr": 237,
+      "appliedWithZeroFuzz": true,
+      "stdout": "patching file lib/parse.js\n",
+      "stderr": "",
+      "sourceVersionUnchanged": true,
+      "parseSha256": "c1e95f7b6d24d4c4ab14e66aead801fb4bf46785efc33c9679bc73f37af9e019"
+    },
+    {
+      "pr": 238,
+      "appliedWithZeroFuzz": true,
+      "stdout": "patching file lib/parse.js\n",
+      "stderr": "",
+      "sourceVersionUnchanged": true,
+      "parseSha256": "d76c57b4b9d6b3168b20b7501e363c441be0918a9a951ce6858af398dc9ba95b"
+    }
+  ],
+  "observations": [
+    {
+      "variant": "published405",
+      "case": "reported-leading-star",
+      "status": "DEADLINE_1500MS_PROCESS_KILLED",
+      "wallMs": 1503.63,
+      "matchResult": null
+    },
+    {
+      "variant": "published405",
+      "case": "bare-star-with-trailing-literal",
+      "status": "DEADLINE_1500MS_PROCESS_KILLED",
+      "wallMs": 1504.69,
+      "matchResult": null
+    },
+    {
+      "variant": "published405",
+      "case": "literal-prefix-star-trailing-literal",
+      "status": "DEADLINE_1500MS_PROCESS_KILLED",
+      "wallMs": 1504.8,
+      "matchResult": null
+    },
+    {
+      "variant": "published405",
+      "case": "capture-simple",
+      "status": "COMPLETED",
+      "wallMs": 100.14,
+      "matchResult": [
+        "aaa",
+        "aaa",
+        ""
+      ]
+    },
+    {
+      "variant": "published405",
+      "case": "quoted-star-literal",
+      "status": "COMPLETED",
+      "wallMs": 108.99,
+      "matchResult": [
+        "*a*a"
+      ]
+    },
+    {
+      "variant": "published405",
+      "case": "safeguard-opt-out",
+      "status": "COMPLETED",
+      "wallMs": 134.98,
+      "matchResult": null
+    },
+    {
+      "variant": "published405",
+      "case": "ordinary-glob",
+      "status": "COMPLETED",
+      "wallMs": 116.09,
+      "matchResult": [
+        "src/index.ts"
+      ]
+    },
+    {
+      "variant": "proposal237",
+      "case": "reported-leading-star",
+      "status": "COMPLETED",
+      "wallMs": 114.5,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal237",
+      "case": "bare-star-with-trailing-literal",
+      "status": "COMPLETED",
+      "wallMs": 121.54,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal237",
+      "case": "literal-prefix-star-trailing-literal",
+      "status": "COMPLETED",
+      "wallMs": 120.71,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal237",
+      "case": "capture-simple",
+      "status": "COMPLETED",
+      "wallMs": 118.21,
+      "matchResult": [
+        "aaa",
+        "aaa",
+        "aa"
+      ]
+    },
+    {
+      "variant": "proposal237",
+      "case": "quoted-star-literal",
+      "status": "COMPLETED",
+      "wallMs": 128.71,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal237",
+      "case": "safeguard-opt-out",
+      "status": "COMPLETED",
+      "wallMs": 100.57,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal237",
+      "case": "ordinary-glob",
+      "status": "COMPLETED",
+      "wallMs": 115.72,
+      "matchResult": [
+        "src/index.ts"
+      ]
+    },
+    {
+      "variant": "proposal238",
+      "case": "reported-leading-star",
+      "status": "COMPLETED",
+      "wallMs": 92.83,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal238",
+      "case": "bare-star-with-trailing-literal",
+      "status": "DEADLINE_1500MS_PROCESS_KILLED",
+      "wallMs": 1503.85,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal238",
+      "case": "literal-prefix-star-trailing-literal",
+      "status": "DEADLINE_1500MS_PROCESS_KILLED",
+      "wallMs": 1504.16,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal238",
+      "case": "capture-simple",
+      "status": "COMPLETED",
+      "wallMs": 95.88,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal238",
+      "case": "quoted-star-literal",
+      "status": "COMPLETED",
+      "wallMs": 91.34,
+      "matchResult": [
+        "*a*a"
+      ]
+    },
+    {
+      "variant": "proposal238",
+      "case": "safeguard-opt-out",
+      "status": "COMPLETED",
+      "wallMs": 100.41,
+      "matchResult": null
+    },
+    {
+      "variant": "proposal238",
+      "case": "ordinary-glob",
+      "status": "COMPLETED",
+      "wallMs": 103.39,
+      "matchResult": [
+        "src/index.ts"
+      ]
+    }
+  ],
+  "compatibilityFindings": {
+    "proposal237": "Removes the three sampled slow cases but changes quoted-literal matching and captures. Not a compatible drop-in as tested.",
+    "proposal238": "The specific leading-star sample completes, but two other repeated-extglob samples still exceed the bounded deadline. Changes capture semantics to literal fallback.",
+    "proposal246": "Open proposal for v2, not the required active v4 graph."
+  },
+  "notAdopted": true,
+  "repositoryModified": false,
+  "implementationConstraints": "postinstall alone is insufficient because authorized builds also use npm ci --ignore-scripts",
+  "strictScannerDisposition": "FAIL remains, no false version or exemption",
+  "externalAudit": false
+}

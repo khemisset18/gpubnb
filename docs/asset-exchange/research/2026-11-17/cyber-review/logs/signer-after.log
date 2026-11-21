@@ -1,0 +1,17 @@
+test_disconnected_signer_or_unavailable_verifier_never_falls_back_to_signing (test_refund_ladder.RefundLadderTests.test_disconnected_signer_or_unavailable_verifier_never_falls_back_to_signing) ... ok
+test_external_response_cannot_mutate_a_displayed_request (test_refund_ladder.RefundLadderTests.test_external_response_cannot_mutate_a_displayed_request) ... ok
+test_fee_cap_dust_amount_format_and_profile_input_guards (test_refund_ladder.RefundLadderTests.test_fee_cap_dust_amount_format_and_profile_input_guards) ... ok
+test_funding_malleability_and_wrong_utxo_metadata_refuse_old_refunds (test_refund_ladder.RefundLadderTests.test_funding_malleability_and_wrong_utxo_metadata_refuse_old_refunds) ... ok
+test_high_s_non_all_sighash_wrong_key_and_malformed_der_reject (test_refund_ladder.RefundLadderTests.test_high_s_non_all_sighash_wrong_key_and_malformed_der_reject) ... ok
+test_ladder_is_bounded_strictly_monotonic_and_does_not_change_destination (test_refund_ladder.RefundLadderTests.test_ladder_is_bounded_strictly_monotonic_and_does_not_change_destination) ... ok
+test_openssl_verified_ladder_binds_exact_bytes_and_distinct_fee_steps (test_refund_ladder.RefundLadderTests.test_openssl_verified_ladder_binds_exact_bytes_and_distinct_fee_steps) ... ok
+test_policy_runs_from_isolated_zipapp_with_only_public_helpers (test_refund_ladder.RefundLadderTests.test_policy_runs_from_isolated_zipapp_with_only_public_helpers) ... ok
+test_refund_mutations_and_extra_fields_reject (test_refund_ladder.RefundLadderTests.test_refund_mutations_and_extra_fields_reject) ... ok
+test_request_deadline_rejects_new_signature_but_does_not_expire_presigned_refund (test_refund_ladder.RefundLadderTests.test_request_deadline_rejects_new_signature_but_does_not_expire_presigned_refund) ... ok
+test_review_fields_show_exact_network_destination_amounts_and_each_fee (test_refund_ladder.RefundLadderTests.test_review_fields_show_exact_network_destination_amounts_and_each_fee) ... ok
+test_selects_cheapest_adequate_without_access_to_any_signing_key (test_refund_ladder.RefundLadderTests.test_selects_cheapest_adequate_without_access_to_any_signing_key) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.433s
+
+OK

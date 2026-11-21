@@ -1,0 +1,5 @@
+2026-11-18T19:40:37+01:00	INFO	Loaded	file_path="trivy.yaml"
+2026-11-18T19:40:37+01:00	INFO	[vulndb] Need to update DB
+2026-11-18T19:40:37+01:00	INFO	[vulndb] Downloading vulnerability DB...
+2026-11-18T19:40:37+01:00	INFO	[vulndb] Downloading artifact...	repo="mirror.gcr.io/aquasec/trivy-db:2"
+0 B / 133.93 MiB [__________________________________________________________________] 0.00% ? p/s 0s2026-11-18T19:40:43+01:00	FATAL	Fatal error	run error: init error: DB error: failed to download vulnerability DB: OCI artifact error: failed to download vulnerability DB: failed to download artifact from mirror.gcr.io/aquasec/trivy-db:2: oci download error: failed to create a temp dir: failed to create temp dir: stat /tmp: no such file or directory

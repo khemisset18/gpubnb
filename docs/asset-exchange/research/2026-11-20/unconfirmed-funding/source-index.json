@@ -1,0 +1,18 @@
+{
+  "candidateLocalCommit": "2dfd48e5e9ec16da45acfcf14ca3d096ff5dfdba",
+  "baseRemoteCommit": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+  "sourceFilesSha256": {
+    "asset-exchange/qualification/dogecoin/d6/funding_reorg.py": "216900cf3e8758c0ae67565f9f9eff47849d2f1d473c96ff0753b7a5c08d5fd8",
+    "asset-exchange/qualification/dogecoin/d6/multinode.py": "ae6ba8345f33e754e2edbb8da1eb001c8d5512d2db5fc188802ab2f1499f71c5",
+    "asset-exchange/qualification/dogecoin/d6/check-watcher-evidence.mjs": "0cd13b760768f535bd55d768bcd10773e27505d07a1cf5dfeb7bfe24edc61a88",
+    "asset-exchange/qualification/dogecoin/d6/test_funding_reorg.py": "99b4ae15cdfc49e498d7d17c2b94e744c907f22143e1ca281d768844af291075"
+  },
+  "unchangedSourceSha256": {
+    ".github/workflows/workspace-reliability.yml": "0535eeb4edcc02362036bad9ceeed37d178b291a323e8bebe5045aed7f109385",
+    ".github/workflows/asset-exchange-dogecoin-multinode.yml": "a0f27a874cdb3d62ff770192162e412dc5b58e956b0f65661f370e052b91d15b",
+    "asset-exchange/recovery/dogecoin/recovery_core.py": "ab6221fb209ac05316a37d9b17beb26ad45317b125dd0c1866abf3d3240a1c8b",
+    "asset-exchange/recovery/dogecoin/cleanroom.py": "af96b684e833c64fc763f0157bf601668d87f2b9fd233ada03da4caa5e2fdbb2",
+    "asset-exchange/recovery/dogecoin/package.py": "f51af99dd5ebd64afc63861307bcd3d23bcfcbe2249f7af3c3e5dc2ac78e04f8",
+    "asset-exchange/wallet-agent/dogecoin/refund_ladder.py": "3f285381488a19c1cd5c57b3e35d558a7279a9f8e57a7337a934c462bf5f5e56"
+  }
+}

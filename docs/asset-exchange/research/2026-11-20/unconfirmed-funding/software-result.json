@@ -1,0 +1,66 @@
+{
+  "decision": "SOFTWARE_PREFLIGHT_PASS_NATIVE_NOT_YET_EXECUTED",
+  "role": "internal Dogecoin cryptography/recovery review",
+  "nativeCase": "unconfirmed-funding-refuses-rebroadcast",
+  "candidateLocalCommit": "2dfd48e5e9ec16da45acfcf14ca3d096ff5dfdba",
+  "codeCommits": [
+    "fa55bca9b2dc7e0b837533abe96f9390e3f8d9ac",
+    "2dfd48e5e9ec16da45acfcf14ca3d096ff5dfdba"
+  ],
+  "software": {
+    "command": "TMPDIR=\"$PWD/evidence/crypto-unconfirmed-20261120/tmp\" python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d6 -p 'test_*.py' -v",
+    "pass": 51,
+    "fail": 0,
+    "skip": 0,
+    "newTestMethods": 6,
+    "adversarialEvidenceMutations": 14,
+    "logSha256": "b951b13a835345012b781024e98afa68351f86d1d75ef20a4166ebe6456f38ea",
+    "bashSyntaxPassed": [
+      "asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh",
+      "asset-exchange/qualification/dogecoin/d6/run-multinode.sh"
+    ],
+    "diffCheckPassed": true
+  },
+  "closedEvidenceContractBug": "checker-fix-result.json",
+  "priorNativeEvidenceStillAccepted": {
+    "run": 44400212431,
+    "artifactId": 14472149211,
+    "artifactSha256": "7191906e1af4543fc0bd53885f1d2ab0e8534a02bad85f10b5b5da3359cecfe4",
+    "checkCommand": "node asset-exchange/qualification/dogecoin/d6/check-watcher-evidence.mjs /workspace/scratch/44921c6f8796/evidence/integrated-qa-20261120/native-44400212431/lab/evidence/multinode-report.json evidence/crypto-unconfirmed-20261120/prior-native-checker-review.json",
+    "newNodeOrRpcExecution": false,
+    "sourceCoreSha256": "ab6221fb209ac05316a37d9b17beb26ad45317b125dd0c1866abf3d3240a1c8b",
+    "zipappSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73"
+  },
+  "plannedNativeEffects": {
+    "labBranch": "asset-exchange/doge-recovery-consistency-20261112",
+    "labSuite": "recovery-funding-reorg",
+    "selectedCases": [
+      "unconfirmed-funding-refuses-rebroadcast"
+    ],
+    "oldTwoQualifiedCasesSelected": false,
+    "loopbackNodes": 2,
+    "importedPublicBlocks": 1355,
+    "generatedBlocks": 0,
+    "knownPresignedFixtureAdmissions": 2,
+    "standaloneInvocations": 2,
+    "createdKeys": 0,
+    "createdSignatures": 0,
+    "expectedRefusal": "funding is not confirmed on active chain; no broadcast",
+    "refusalBroadcastsRequired": 0
+  },
+  "unchangedExistingLimits": {
+    "maxRpc": 400,
+    "maxGeneratedBlocks": 2,
+    "maxBroadcastFixtures": 2,
+    "maxStandaloneInvocations": 8,
+    "maxImportedPublicBlocks": 1355
+  },
+  "nativeStatus": "NOT_EXECUTED_BY_THIS_AGENT; parent freezes H/E and dispatches existing private lab only",
+  "independentAudit": "NON_REALISE_HORS_MISSION",
+  "notClaimed": [
+    "Atomic RPC snapshot between all observations and broadcast",
+    "New native injection of the observe-to-final-chain-read race",
+    "Full D2-D9 qualification",
+    "Mainnet, real funds, activation or financial deployment"
+  ]
+}

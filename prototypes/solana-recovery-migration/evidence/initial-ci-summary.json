@@ -1,0 +1,134 @@
+{
+  "SbfRuntime": "NOT_TESTED",
+  "developmentInstallers": "Linux/Windows build PASS; macOS CANCELLED on run43327949214",
+  "generalCi": {
+    "gitleaks": "FAIL; public expected.key fixture values matched generic-api-key",
+    "run": "https://github.com/khemisset18/gpubnb/actions/runs/43327949219",
+    "sixOtherJobs": "PASS",
+    "trivy": "NOT_EXECUTED after Gitleaks stop; no vulnerability report exists"
+  },
+  "headCommit": "0c065e8863bf5abab4a9e3c7646237fa5b1f2b86",
+  "hostDesktopThreePlatformJobs": "PASS run43327949283",
+  "platforms": [
+    {
+      "artifactId": 13994175710,
+      "baseline": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "gpu_escrow",
+          "--test",
+          "secp256k1_host_compatibility",
+          "--",
+          "--nocapture"
+        ],
+        "logSha256": "0c1417a3c2d8731f9a2d727848d7e9cd6ae1a32be780cfc58865567b23af388c",
+        "publicRecoveryCases": 1636,
+        "result": "PASS",
+        "tests": 2
+      },
+      "candidate": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "gpu_escrow",
+          "--test",
+          "secp256k1_host_compatibility",
+          "--",
+          "--nocapture"
+        ],
+        "logSha256": "210ddee0c74e5cdf601d24e071000f51a4f2f92c136fd67bf6ce6b6ff0ac9e20",
+        "publicRecoveryCases": 1636,
+        "result": "PASS",
+        "tests": 2
+      },
+      "executionCommit": "059bdd0a5b0b08b9b890cda26d556d5ee8529902",
+      "filesSha256": {
+        "baseline-recovery.log": "0c1417a3c2d8731f9a2d727848d7e9cd6ae1a32be780cfc58865567b23af388c",
+        "candidate-metadata.json": "c4e4aeac1953ae01b17e6d8c120e3de87457375cce0c6e712f80c0d3beb0dc93",
+        "candidate-metadata.log": "0061cf3953b3b6d73372dff608bf73c8e4dc20fcb4d9f904db89b714e848e80a",
+        "candidate-recovery.log": "210ddee0c74e5cdf601d24e071000f51a4f2f92c136fd67bf6ce6b6ff0ac9e20",
+        "public-recovery-fixtures.json": "ba44e059b1a554936bfe3aee624fba0bb1d903a784f46979ebd99a0654b98e44",
+        "report.json": "108ef8ccabb480ab4a85288c2091196171749fe377a3472f4ad369b9c438b1c1"
+      },
+      "platform": "linux",
+      "result": "PASS_HOST_RECOVERY_COMPATIBILITY",
+      "sourceReconstruction": "PASS",
+      "zipSha256": "5e4b0c9bebdb6dbecaf9119cef5115d77b78b8363023413f2f32e309a9f87131"
+    },
+    {
+      "artifactId": 13992982981,
+      "baseline": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "gpu_escrow",
+          "--test",
+          "secp256k1_host_compatibility",
+          "--",
+          "--nocapture"
+        ],
+        "logSha256": "4d734034f366822a3921670f871637e025134fcc20ce7a00860145707811b6df",
+        "publicRecoveryCases": 1636,
+        "result": "PASS",
+        "tests": 2
+      },
+      "candidate": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "gpu_escrow",
+          "--test",
+          "secp256k1_host_compatibility",
+          "--",
+          "--nocapture"
+        ],
+        "logSha256": "c909dac70f63b39526b235d5a97921c93d010d9bdf3a72906c2714f1041f1bef",
+        "publicRecoveryCases": 1636,
+        "result": "PASS",
+        "tests": 2
+      },
+      "executionCommit": "059bdd0a5b0b08b9b890cda26d556d5ee8529902",
+      "filesSha256": {
+        "baseline-recovery.log": "4d734034f366822a3921670f871637e025134fcc20ce7a00860145707811b6df",
+        "candidate-metadata.json": "5211904816fe6a06a21c013a17d16233c4c4b081f2b3ad4269d551cd82571cfe",
+        "candidate-metadata.log": "eb9b740ab7a5ddf0d1043af9fb727592101ebc76868dc6e70f79324e38a9fff3",
+        "candidate-recovery.log": "c909dac70f63b39526b235d5a97921c93d010d9bdf3a72906c2714f1041f1bef",
+        "public-recovery-fixtures.json": "ba44e059b1a554936bfe3aee624fba0bb1d903a784f46979ebd99a0654b98e44",
+        "report.json": "84afd91739b07c83fc4fc3a4190c062d17004a40a93b2191ff7cf5f2e643c560"
+      },
+      "platform": "macos",
+      "result": "PASS_HOST_RECOVERY_COMPATIBILITY",
+      "sourceReconstruction": "PASS",
+      "zipSha256": "1930f8478569f845dab84dce1f79f0813bca4f461c3355989f724f2a09f1f604"
+    },
+    {
+      "artifactId": 13993158445,
+      "executionCommit": "059bdd0a5b0b08b9b890cda26d556d5ee8529902",
+      "filesSha256": {
+        "candidate-metadata.json": "092176981974768b34f8fa2ff7f0db48ee9397cedb46963c6f8b2d97bc472eee",
+        "candidate-metadata.log": "acbd13ea44f54b4592d1766e840ca801224cd556d68c10c83dabc6c930781c58",
+        "public-recovery-fixtures.json": "ba44e059b1a554936bfe3aee624fba0bb1d903a784f46979ebd99a0654b98e44",
+        "report.json": "93c57ea6e799a1a84ea7fb8cd27288e025f07f3929ee61548acf480ed1e56399"
+      },
+      "hostComparisons": "NOT_TESTED; stopped on Windows cp1252 decoding of Cargo UTF-8 metadata",
+      "platform": "windows",
+      "result": "FAIL",
+      "sourceReconstruction": "PASS",
+      "zipSha256": "9175cfcff06ffd1abd26e1bb8ac42c9f11a30208ad8098cc6ab77deef576631f"
+    }
+  ],
+  "qualificationStatus": "BLOCKED",
+  "run": "https://github.com/khemisset18/gpubnb/actions/runs/43327949450",
+  "schemaVersion": 1,
+  "tree": "0dac15af870e81d2cae98da7db059f225b770d86",
+  "windowsPreflight": "PASS run43327949305"
+}

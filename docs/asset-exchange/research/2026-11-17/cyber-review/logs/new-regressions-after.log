@@ -1,0 +1,8 @@
+test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_confirmation_anchors_cannot_be_before_genesis_or_above_the_observed_tip) ... ok
+test_transaction_and_header_depths_must_match_the_same_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_transaction_and_header_depths_must_match_the_same_observed_tip) ... ok
+test_coherent_funding_depths_follow_the_observed_tip (test_rpc_consistency.RpcConsistencyTests.test_coherent_funding_depths_follow_the_observed_tip) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.491s
+
+OK

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "run": 44652078768,
+  "job": 136009177982,
+  "jobUrl": "https://github.com/khemisset18/gpubnb/actions/runs/44652078768/job/136009177982",
+  "logSha256": "65544e6e2efdd6ab2e245b76186e4dd21ef43f9d4a35185a383331debdf29fc8",
+  "logBytes": 121938,
+  "rawLogRewritten": false,
+  "preflights": {
+    "d6": {
+      "tests": 51,
+      "status": "PASS"
+    },
+    "softwareSigner": {
+      "tests": 12,
+      "status": "PASS"
+    },
+    "recovery": {
+      "tests": 37,
+      "status": "PASS"
+    },
+    "watchers": {
+      "tests": 24,
+      "status": "PASS",
+      "fail": 0,
+      "skipped": 0
+    }
+  },
+  "fullD7D8SupplementsIncludedInThisNativeJob": false,
+  "source": "Decoded GitHub job log retrieved read-only; native run not repeated."
+}
