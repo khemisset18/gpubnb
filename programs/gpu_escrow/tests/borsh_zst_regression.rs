@@ -25,7 +25,9 @@ fn rejects_zero_sized_vectors_before_deserializing_any_element() {
     for count in [0_u32, 1, 1_000, u32::MAX] {
         let result = Vec::<NonCloneZeroSized>::try_from_slice(&count.to_le_bytes());
         let error = result.expect_err("ZST vector must fail closed");
-        assert_eq!(error.kind(), ErrorKind::InvalidInput);
+        // Borsh 1 reports malformed serialized data as InvalidData. The
+        // rejection must still happen before any attacker-sized iteration.
+        assert_eq!(error.kind(), ErrorKind::InvalidData);
         assert_eq!(DESERIALIZER_CALLS.load(Ordering::SeqCst), 0);
     }
 }

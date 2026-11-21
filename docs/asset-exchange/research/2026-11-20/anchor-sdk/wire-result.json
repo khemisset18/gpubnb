@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS",
+  "verifiedAt": "2026-11-20T01:12:53.695630+00:00",
+  "baselineCommit": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+  "baselineAnchor": "0.31.1",
+  "candidateAnchor": "1.2.2",
+  "testCommit": "f41718bdb8e56fb901dea1267790d24d5184b4e4",
+  "candidateWorkingTreeNotCommitted": true,
+  "testSha256": "17452ee04dbb6f1120a898681c112991580c2696beef9eaaf5fc52cbd828636b",
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "baselineWireTests": 7,
+  "candidateWireTests": 7,
+  "wireFailures": 0,
+  "wireIgnored": 0,
+  "recordCounts": {
+    "baseline": 38,
+    "candidate": 38
+  },
+  "recordsByteEqual": true,
+  "canonicalRecordsSha256": {
+    "baseline": "a071dc6e64629ddf7155001a92acfb593761bacbcc1ab03a28a9b080a88e3700",
+    "candidate": "a071dc6e64629ddf7155001a92acfb593761bacbcc1ab03a28a9b080a88e3700"
+  },
+  "lockSha256": {
+    "baseline": "af9bb9a1fef24b84a616f1c8b5017a99f4cb3aea57134fd8fdc393e336b7611d",
+    "candidate": "b1135274f50de9e02fd4e193115fe88e75b9c53bb4f9d2457f871e38f8a16cd7"
+  },
+  "candidateLogOrigin": "/workspace/scratch/44921c6f8796/evidence/security-resolution-20261120/host-candidate.log",
+  "candidateCompleteHostTests": 17,
+  "candidateTestsReexecutedForComparison": false,
+  "filesSha256": {
+    "inputs.json": "6fdcd6d33483e5f41c8adc8a36d31cec0da8a9f8215efbf5b13b34ea4b24248c",
+    "baseline-command.json": "93b7abad667df7a304d853d09311ea6ec820635a3e4bfe0a148606c729cf8d25",
+    "baseline.log": "efe410be64f56549ed3f77001fc54762652f9f4e5c52da92b4943862da22edb9",
+    "candidate.log": "a4b81c5a103aabb36d306f6ff311ab091916ad7708f94d4bfb294c4eeb5273ce"
+  },
+  "scope": "Offline host wire only; CPI instruction shape checked, no actual CPI/SBF, wallet or financial effects"
+}

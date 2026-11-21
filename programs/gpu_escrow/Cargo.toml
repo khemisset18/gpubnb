@@ -10,7 +10,8 @@ no-entrypoint=[]
 cpi=["no-entrypoint"]
 default=[]
 [dependencies]
-anchor-lang="0.31.1"
+anchor-lang="=1.2.2"
 
 [dev-dependencies]
 serde_json = "=1.0.151"
+solana-secp256k1-recover = "=2.2.1"

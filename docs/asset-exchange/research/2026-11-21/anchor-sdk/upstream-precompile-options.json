@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "verifiedOn": "2026-11-21",
+  "sources": [
+    {
+      "repository": "anza-xyz/agave",
+      "ref": "v4.4.1",
+      "path": "precompiles/Cargo.toml",
+      "blobSha": "499422daf8c97fa9a9a52eccd229f0744ee46a2c",
+      "url": "https://github.com/anza-xyz/agave/blob/v4.4.1/precompiles/Cargo.toml",
+      "activeEd25519Dependency": "ed25519-dalek = \"=1.0.1\"",
+      "fixedForThisIssue": false
+    },
+    {
+      "repository": "anza-xyz/agave",
+      "ref": "master",
+      "path": "precompiles/Cargo.toml",
+      "blobSha": "f58814083379ab6b585e93ba4cfc318cc5d0d046",
+      "url": "https://github.com/anza-xyz/agave/blob/master/precompiles/Cargo.toml",
+      "activeEd25519Dependency": "solana-ed25519",
+      "legacyDalekOnlyDevDependency": true
+    },
+    {
+      "repository": "anza-xyz/agave",
+      "ref": "master",
+      "path": "Cargo.toml",
+      "blobSha": "0af35281797aac1eb7525e5d6dea3dfb7e168ab2",
+      "url": "https://github.com/anza-xyz/agave/blob/master/Cargo.toml",
+      "workspaceVersion": "5.0.0-alpha.1",
+      "rustVersion": "1.99.1"
+    },
+    {
+      "repository": "LiteSVM/litesvm",
+      "ref": "master",
+      "path": "Cargo.toml",
+      "blobSha": "34e986a0ac6b55447552a2afaee46634ada1e741",
+      "url": "https://github.com/LiteSVM/litesvm/blob/master/Cargo.toml",
+      "workspaceVersion": "0.18.2",
+      "rustVersion": "1.97.1",
+      "agaveFeatureSetConstraint": "~4.3.2",
+      "agavePrecompileConstraint": "~4.3.2"
+    }
+  ],
+  "conclusion": "Official current development source removes the legacy active verifier, but the examined stable tag v4.4.1 retains it; LiteSVM 0.18.2 pins the 4.3 dependency family. This research does not establish a published compatible precompile upgrade. The reviewed GPUbnb program uses no precompile, so the bounded minimal test profile can omit the newly added extension without omitting program security checks.",
+  "limits": [
+    "Default-branch references are time-specific; blob identities are retained.",
+    "No prerelease upgrade, Cargo version spoofing, scanner exception or crypto verification bypass was adopted."
+  ]
+}

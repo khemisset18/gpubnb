@@ -1,0 +1,29 @@
+[package]
+name = "gpubnb-anchor-sbf-qualification"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+anchor-lang = "=1.2.2"
+gpu_escrow = { path = "../../../programs/gpu_escrow", features = ["no-entrypoint"] }
+# The complete GPUbnb program uses System CPI, not the optional VM precompile
+# extension. Ordinary transaction signature and blockhash checks stay enabled.
+litesvm = { version = "=0.18.2", default-features = false }
+sha2 = "=0.10.9"
+solana-account = "=4.5.0"
+solana-address = "~2.7.0"
+solana-clock = "~3.2.0"
+solana-instruction = "~3.5.0"
+solana-keypair = "=3.1.2"
+solana-message = "4.2.4"
+solana-signer = "3.0.1"
+solana-transaction = "4.1.5"
+
+[profile.dev]
+debug = 0
+
+[profile.test]
+debug = 0

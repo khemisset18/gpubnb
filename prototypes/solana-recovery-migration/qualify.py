@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Qualify public host recovery through the actual unchanged Anchor/Solana API."""
+"""Qualify public host recovery through the locked vetted Solana wrapper."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -15,6 +16,20 @@ import urllib.request
 import oracle
 
 HERE = Path(__file__).resolve().parent
+
+
+def anchor_migration_profile(repo):
+    manifest = tomllib.loads((repo/'programs/gpu_escrow/Cargo.toml').read_text(encoding='utf-8'))
+    if manifest['dependencies']['anchor-lang'] != '=1.2.2':
+        return None
+    module_path = repo/'prototypes/anchor-sdk-migration/integrity.py'
+    spec = importlib.util.spec_from_file_location('gpubnb_anchor_integrity', module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    # This profile pins the entire replacement financial dependency closure,
+    # every program/test source, and the separate private VM qualification tool.
+    module.validate_candidate(repo)
+    return json.loads((module_path.parent/'source-pins.json').read_text(encoding='utf-8'))
 
 
 def sha(path):
@@ -48,6 +63,9 @@ def validate_committed(repo, pins):
     assert sha(HERE/'backport.patch') == pins['patchSha256'], 'backport patch mismatch'
     assert sha(HERE/'public-recovery-fixtures.json') == pins['publicFixtureSha256'], 'public fixture mismatch'
     assert sha(repo/'programs/gpu_escrow/src/lib.rs') == pins['financialSourceSha256'], 'financial source changed'
+    if anchor_migration_profile(repo) is not None:
+        assert hashes(repo/pins['glibBackport']['vendorPath']) == pins['glibBackport']['vendorFiles'], 'committed GLib backport source mismatch'
+        return
     assert sha(repo/'Cargo.lock') == pins['activeCargoLockSha256'], 'active lock changed'
     base = pins['baseCommit']
     original_manifest = git(repo, 'show', base+':Cargo.toml').decode()
@@ -147,6 +165,7 @@ def main():
         write_json(work/'report.json', report)
     save()
     validate_committed(repo, pins)
+    migration = anchor_migration_profile(repo)
     report['executionCommit'] = git(repo, 'rev-parse', 'HEAD').decode().strip()
     report['financialSourceSha256'] = pins['financialSourceSha256']
     report['unchangedSolanaSyscallBlockSha256'] = pins['unchangedSolanaSyscallBlockSha256']
@@ -181,7 +200,12 @@ def main():
         assert sha(baseline/'programs/gpu_escrow/src/lib.rs') == pins['financialSourceSha256']
         for path in ['programs/gpu_escrow/Cargo.toml', 'programs/gpu_escrow/tests/secp256k1_host_compatibility.rs', 'prototypes/solana-recovery-migration/public-recovery-fixtures.json']:
             destination = baseline/path;destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(repo/path, destination)
+            if migration and path.startswith('programs/gpu_escrow/'):
+                # Compare the old real Anchor re-export with the new explicit
+                # vetted SDK dependency; do not force the new SDK into baseline.
+                destination.write_bytes(git(repo, 'show', migration['baselineCommit']+':'+path))
+            else:
+                shutil.copyfile(repo/path, destination)
         lock = (baseline/'Cargo.lock').read_text(encoding='utf-8')
         old = 'name = "gpu_escrow"\nversion = "0.2.0"\ndependencies = [\n "anchor-lang",\n]'
         assert lock.count(old) == 1
@@ -190,7 +214,8 @@ def main():
         report['candidate'] = run_recovery(repo, 'candidate', work, env);save()
         validate_committed(repo, pins)
         report.update(result='PASS_HOST_RECOVERY_COMPATIBILITY', hostRecovery='PASS',
-                      financialSourceAndWrapperVersionRetained=True, anchorVersionRetained=True,
+                      financialSourceAndWrapperVersionRetained=True, anchorVersionRetained=migration is None,
+                      anchorMigrationProfile='reviewed exact dependency/source pins' if migration else 'original locked graph',
                       scannerDisposition='BLOCKED pending actual strict scan; no exemption')
         save();print(json.dumps(report, indent=2))
     finally:

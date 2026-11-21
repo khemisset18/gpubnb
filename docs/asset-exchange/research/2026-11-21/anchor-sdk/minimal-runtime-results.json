@@ -1,0 +1,22 @@
+{
+  "scope": "Private SBF VM covering the complete GPUbnb program; optional precompiles NOT_QUALIFIED",
+  "sourceFinancialSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "rootLockSha256": "b1135274f50de9e02fd4e193115fe88e75b9c53bb4f9d2457f871e38f8a16cd7",
+  "runtimeLockSha256": "a49195e74e78d0932bf81427b0a27750d1c51937664b28a453822204856bce09",
+  "cases": [
+    {
+      "label": "baseline",
+      "exit_code": 0,
+      "elf_sha256": "3a251cfe910c752663b4cab0d78534f5038c28d52d66cb9b31064148af2eeef3",
+      "elf_bytes": 242136,
+      "log_sha256": "964fac08161b9d71f83fef3f74c379cac6afd8fa7f96227275cfa821405b371b"
+    },
+    {
+      "label": "candidate",
+      "exit_code": 0,
+      "elf_sha256": "123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125",
+      "elf_bytes": 216408,
+      "log_sha256": "6ebf4093faaeffb127b01008a71e390c1cc970876dd9894bba4eb54db6fe2c39"
+    }
+  ]
+}
