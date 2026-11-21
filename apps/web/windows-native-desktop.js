@@ -304,7 +304,7 @@ export class WindowsNativeDesktopClient {
       keyboardArmed = false;
       this.#releasePressedInput();
     };
-    const focusCanvas = () => { keyboardArmed = true; };
+    const focusCanvas = () => { if (keyboardTarget.hidden !== true) keyboardArmed = true; };
     const focusMoved = (event) => {
       if (event?.target === this.canvas) focusCanvas();
       else disarmKeyboard();
@@ -319,7 +319,7 @@ export class WindowsNativeDesktopClient {
       if (keyboardArmed && this.key(event.code, true)) event.preventDefault?.();
     };
     const pointermove = (event) => {
-      if (this.pointerAbsolute(event.clientX, event.clientY)) event.preventDefault?.();
+      if (keyboardArmed && this.pointerAbsolute(event.clientX, event.clientY)) event.preventDefault?.();
     };
     const pointerdown = (event) => {
       this.canvas.focus?.({ preventScroll: true });
@@ -331,10 +331,10 @@ export class WindowsNativeDesktopClient {
       }
     };
     const pointerup = (event) => {
-      if (this.pointerButton(event.button, true)) event.preventDefault?.();
+      if (keyboardArmed && this.pointerButton(event.button, true)) event.preventDefault?.();
     };
     const wheel = (event) => {
-      if (this.wheel(event.deltaY)) event.preventDefault?.();
+      if (keyboardArmed && this.wheel(event.deltaY)) event.preventDefault?.();
     };
     const contextmenu = (event) => event.preventDefault?.();
     const blur = () => disarmKeyboard();
