@@ -5,3 +5,8 @@ header strong{flex:1}
 button{font:inherit;padding:7px 12px}
 main{flex:1;display:grid;place-items:center;overflow:hidden}
 canvas{max-width:100%;max-height:calc(100vh - 58px);outline:none;background:#000;touch-action:none}
+
+/* Make remote-input focus obvious; the viewer never captures site controls. */
+canvas:focus-visible,canvas:focus{outline:2px solid #7bc7ff;outline-offset:3px}
+.remote-help{margin:8px 16px;max-width:65ch;text-align:center;color:#c7d3dc;font-size:.875rem;line-height:1.4}
+@media(max-width:740px){header{flex-wrap:wrap;gap:10px}header strong{flex-basis:100%}canvas{max-height:calc(100vh - 170px)}}
