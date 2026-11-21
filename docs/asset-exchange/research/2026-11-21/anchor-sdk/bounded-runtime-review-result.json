@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-11-21T10:00:55.731753+00:00",
+  "reviewKind": "internal critical source/evidence review, not independent external audit",
+  "decision": "PASS for the bounded Anchor migration runtime profile; eligible for integrated candidate CI validation",
+  "globalSecurityDecision": "FAIL until remaining whole-repository findings are resolved",
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "rootLockSha256": "b1135274f50de9e02fd4e193115fe88e75b9c53bb4f9d2457f871e38f8a16cd7",
+  "runtimeSourceSha256": "8a42c79f15a0440d6f74bc09ea5035e70e07c3beeb0d93e16148feffe3c32d13",
+  "runtimeManifestSha256": "550ae9a420e6baf782bbd59df60c770a5c1b21f8f9d27d652c767fab8f494397",
+  "runtimeLockSha256": "a49195e74e78d0932bf81427b0a27750d1c51937664b28a453822204856bce09",
+  "scopeOnlyDiffVerifiedByReverseHashes": {
+    "executableTestLogicAndAssertionsUnchanged": true,
+    "onlyRuntimeCommentsAndPrintedScopeChanged": true,
+    "onlyManifestOptionalExtensionAndCommentsChanged": true,
+    "oldSourceSha256": "53818116000283fd7bcb933d5326019329067effe773350ef4a023064a33e644",
+    "oldManifestSha256": "718713e55501e8900e8beddcaa3c948bcc97135e7a35582c82e5d245ba77f1bc"
+  },
+  "runtimeLegacyDependencyCount": 0,
+  "runtimeTests": [
+    {
+      "label": "baseline",
+      "testsPassed": 6,
+      "testsFailed": 0,
+      "testsIgnored": 0,
+      "logSha256": "964fac08161b9d71f83fef3f74c379cac6afd8fa7f96227275cfa821405b371b",
+      "elfSha256": "3a251cfe910c752663b4cab0d78534f5038c28d52d66cb9b31064148af2eeef3",
+      "elfBytes": 242136,
+      "loggedSystemCpiInvocations": 15,
+      "loggedSystemCpiSuccesses": 15,
+      "caseLabels": [
+        "SBF_CASE_PASS=admin_transfer_config_and_authority_refusals",
+        "SBF_CASE_PASS=dispute_authority_pause_and_conservation",
+        "SBF_CASE_PASS=full_partial_settlements_and_repeated_instruction_after_close",
+        "SBF_CASE_PASS=funding_cpi_refund_and_repeated_instruction_after_close",
+        "SBF_CASE_PASS=identical_signed_transaction_replay_refused_without_fee",
+        "SBF_CASE_PASS=signature_and_blockhash_checks_fail_closed"
+      ]
+    },
+    {
+      "label": "candidate",
+      "testsPassed": 6,
+      "testsFailed": 0,
+      "testsIgnored": 0,
+      "logSha256": "6ebf4093faaeffb127b01008a71e390c1cc970876dd9894bba4eb54db6fe2c39",
+      "elfSha256": "123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125",
+      "elfBytes": 216408,
+      "loggedSystemCpiInvocations": 15,
+      "loggedSystemCpiSuccesses": 15,
+      "caseLabels": [
+        "SBF_CASE_PASS=admin_transfer_config_and_authority_refusals",
+        "SBF_CASE_PASS=dispute_authority_pause_and_conservation",
+        "SBF_CASE_PASS=full_partial_settlements_and_repeated_instruction_after_close",
+        "SBF_CASE_PASS=funding_cpi_refund_and_repeated_instruction_after_close",
+        "SBF_CASE_PASS=identical_signed_transaction_replay_refused_without_fee",
+        "SBF_CASE_PASS=signature_and_blockhash_checks_fail_closed"
+      ]
+    }
+  ],
+  "precompiles": "NOT_QUALIFIED",
+  "retainedProtections": [
+    "ordinary transaction signature verification",
+    "recent blockhash verification",
+    "same signed transaction replay refusal",
+    "SystemProgram builtins and actual SBF execution",
+    "independent Rent expectation",
+    "complete party/config/escrow account snapshots on refusal",
+    "principal/rent/commission/refund conservation and authority checks"
+  ],
+  "programInstructionCoverage": 11,
+  "wireEvidenceResult": "../anchor-wire-review-20261120/result.json",
+  "primarySourceScopeReviewSha256": "013c09d4981463ce39e2981926248abe1f913111f258f14373778b84c3d9c54f",
+  "upstreamOptionsReviewSha256": "a2af60e232ac6a86ee3ba5e3829a97153033eb06b0b2e371f4bd7c67ca6dea59",
+  "strictWholeRepositoryScanner": {
+    "reportSha256": "d2ca08636da299097ae20cf6f7cc65266b1858ec998ea26014dbb88c95665b58",
+    "runtimeFindings": 0,
+    "borshFindings": 0,
+    "remainingFindings": [
+      {
+        "target": "Cargo.lock",
+        "id": "GHSA-wrw7-89jp-8q8g",
+        "package": "glib",
+        "version": "0.18.5",
+        "severity": "MEDIUM"
+      },
+      {
+        "target": "apps/api/package-lock.json",
+        "id": "CVE-2026-121707",
+        "package": "effect",
+        "version": "3.21.0",
+        "severity": "HIGH"
+      },
+      {
+        "target": "package-lock.json",
+        "id": "CVE-2026-121707",
+        "package": "effect",
+        "version": "3.21.0",
+        "severity": "HIGH"
+      }
+    ]
+  },
+  "limits": [
+    "No physical signer or machine qualification.",
+    "No general Solana network consensus or precompile assurance.",
+    "No deployment, real funds, user keys or merge performed.",
+    "The exact integrated candidate still requires its own GitHub checks; this is not full DOGE D0-D9 or external D9 approval."
+  ]
+}
