@@ -238,12 +238,7 @@ test('host guidance and mandatory profile completion retain their previous purpo
 
 const privateReplies={
   '/auth/me':{user:{id:'renter-1'}},
-  '/qualification/windows-native/preflight':{privateNoPaymentMode:true,allowed:true,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'},
-  '/qualification/windows-native/booking':{bookingId:'booking-1'},
-  '/dashboard':{tenant:{bookings:[{id:'booking-1',status:'FUNDED'}]}},
-  '/bookings/booking-1/workspace/cloud-desktop?qualification=windows-native':{},
-  '/bookings/booking-1/workspace/cloud-desktop/status':{status:'READY',canOpen:true},
-  '/bookings/booking-1/workspace/cloud-desktop/access':{openPath:'/workspace-gateway/session-1?grant=simulated-one-use-grant'},
+  '/qualification/windows-native/preflight':{privateNoPaymentMode:true,allowed:false,code:'windows_native_browser_audio_unimplemented'},
 };
 async function privateRun(override=()=>null){
   const box=browser({route:'/stage3-windows-native.html',fetcher:path=>{
@@ -251,30 +246,34 @@ async function privateRun(override=()=>null){
     assert.ok(Object.hasOwn(privateReplies,path),path);return response(200,privateReplies[path]);
   }});
   box.load('stage3-windows-native.js');assert.equal(box.calls.length,0);
+  box.nodes.get('#stage3-check').events.get('click')();await settle();
   box.nodes.get('#stage3-start').events.get('click')();await settle();return box;
 }
-test('private desktop opens only after server authentication, booking, funding, readiness and access grant',async()=>{
-  const box=await privateRun();assert.deepEqual(box.calls.map(c=>c.path),Object.keys(privateReplies));
-  assert.equal(box.location.href,privateReplies['/bookings/booking-1/workspace/cloud-desktop/access'].openPath);
+test('private Cloud Desktop remains closed when browser audio is not implemented',async()=>{
+  const box=await privateRun();
+  assert.deepEqual(box.calls.map(c=>c.path),['/auth/me','/qualification/windows-native/preflight']);
+  assert.equal(box.nodes.get('#stage3-start').disabled,true);
+  assert.match(box.nodes.get('#stage3-status').textContent,/audio/i);
+  assert.ok(!box.calls.some(c=>c.options.method==='POST'));
   assert.equal(box.window.solana,undefined);
 });
-for(const phase of Object.keys(privateReplies))test(`private flow expiry at ${phase} returns to Web login`,async()=>{
+for(const phase of ['/auth/me','/qualification/windows-native/preflight'])test(`private preflight expiry at ${phase} returns to Web login`,async()=>{
   const box=await privateRun(path=>path===phase?response(401,{error:'unauthorized'}):null);
   assert.equal(box.location.href,'auth.html?next=stage3-windows-native.html');
   assert.equal(box.calls.at(-1).path,phase);
 });
-for(const phase of Object.keys(privateReplies).slice(1))for(const status of [403,409])test(`private server refusal ${status} at ${phase} stops without opening`,async()=>{
+for(const phase of ['/qualification/windows-native/preflight'])for(const status of [403,409])test(`private server refusal ${status} at ${phase} stops without opening`,async()=>{
   const box=await privateRun(path=>path===phase?response(status,{error:'private_access_denied'}):null);
   assert.equal(box.location.href,'/stage3-windows-native.html');assert.equal(box.calls.at(-1).path,phase);
   assert.match(box.nodes.get('#stage3-status').textContent,/private_access_denied/);
 });
-test('private flow cannot open a desktop before funding or when readiness denies access',async()=>{
-  for(const [phase,value] of [['/dashboard',{tenant:{bookings:[{id:'booking-1',status:'AWAITING_DEPOSIT'}]}}],
-    ['/bookings/booking-1/workspace/cloud-desktop/status',{status:'PREPARING',canOpen:false}]]){
-    const box=await privateRun(path=>path===phase?response(200,value):null);
-    assert.equal(box.location.href,'/stage3-windows-native.html');assert.equal(box.timers.length,1);
-    assert.ok(!box.calls.some(call=>call.path.endsWith('/access')));
-  }
+test('stale positive PC1 preflight cannot launch a Workspace lacking browser audio',async()=>{
+  const box=await privateRun(path=>path==='/qualification/windows-native/preflight'
+    ?response(200,{privateNoPaymentMode:true,allowed:true,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'}):null);
+  assert.equal(box.location.href,'/stage3-windows-native.html');
+  assert.equal(box.nodes.get('#stage3-start').disabled,true);
+  assert.deepEqual(box.calls.map(c=>c.path),['/auth/me','/qualification/windows-native/preflight']);
+  assert.ok(!box.calls.some(call=>call.options.method==='POST'));
 });
 test('booking UI follows only the purchased Workspace and never offers Compute for an explicit selection',()=>{
   const script=source('workspace-bookings.js');
@@ -288,10 +287,37 @@ test('booking UI follows only the purchased Workspace and never offers Compute f
   assert.match(account,/!item\.requestedWorkspaceSlug\|\|item\.requestedWorkspaceSlug==='compute'/);
   assert.match(account,/Suivre le Workspace sélectionné/);
 });
-test('terminal private session refusal never requests an access grant',async()=>{
-  const box=await privateRun(path=>path.endsWith('/status')?response(200,{status:'QUARANTINED',canOpen:false}):null);
-  assert.equal(box.location.href,'/stage3-windows-native.html');assert.ok(!box.calls.some(call=>call.path.endsWith('/access')));
-  assert.match(box.nodes.get('#stage3-status').textContent,/QUARANTINED/);
+test('four private workspace choices map to distinct profiles and none can launch before end-to-end qualification',async()=>{
+  const choices=['cloud-desktop','creator','cad','gaming'].map(slug=>{
+    const button=node();button.dataset.privateWorkspace=slug;button.textContent=slug;return button;
+  });
+  const box=browser({route:'/stage3-windows-native.html',groups:{'[data-private-workspace]':choices},fetcher:path=>{
+    if(path==='/auth/me')return response(200,{user:{id:'renter-1'}});
+    if(path==='/qualification/windows-native/preflight')return response(200,{privateNoPaymentMode:true,allowed:true});
+    throw new Error(`Unexpected request for non-launchable profile: ${path}`);
+  }});
+  box.load('stage3-windows-native.js');
+  assert.deepEqual(choices.map(button=>button.dataset.privateWorkspace),['cloud-desktop','creator','cad','gaming']);
+  assert.equal(box.nodes.get('#stage3-start').disabled,true);
+  for(const [index,label] of [[1,'Creator / Blender'],[2,'CAD / FreeCAD'],[3,'Gaming / Steam']]){
+    choices[index].events.get('click')();
+    box.nodes.get('#stage3-check').events.get('click')();await settle();
+    assert.equal(box.nodes.get('#stage3-start').disabled,true);
+    assert.ok(box.nodes.get('#stage3-workspace-info').textContent.includes(label.split(' / ')[1]));
+    assert.ok(box.nodes.get('#stage3-status').textContent.includes(label));
+  }
+  choices[0].events.get('click')();
+  assert.equal(box.nodes.get('#stage3-start').disabled,true);
+  box.nodes.get('#stage3-check').events.get('click')();await settle();
+  assert.equal(box.nodes.get('#stage3-start').disabled,true);
+  assert.deepEqual(box.calls.map(call=>call.path),[
+    '/auth/me','/qualification/windows-native/preflight',
+    '/auth/me','/qualification/windows-native/preflight',
+    '/auth/me','/qualification/windows-native/preflight',
+    '/auth/me','/qualification/windows-native/preflight',
+  ]);
+  box.nodes.get('#stage3-start').events.get('click')();await settle();
+  assert.equal(box.calls.length,8,'the disabled launcher cannot create a booking or workspace session');
 });
 
 test('browser pages load the validated return helper before consumers and hide owner-only dashboard blocks initially',()=>{

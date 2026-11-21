@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { sanitizeAccelerators, type AcceleratorTelemetry } from './accelerator-telemetry.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 type SqlClient = Pick<PrismaClient, '$queryRaw' | '$executeRaw'>;
 
@@ -168,7 +169,8 @@ export async function syncMachineAcceleratorsTransactionally(
   machineId: string,
   rawAccelerators: unknown,
 ): Promise<InventorySyncResult> {
-  return db.$transaction(
+  return runBookingTransaction(
+    db,
     (tx: Prisma.TransactionClient) => syncMachineAccelerators(tx as unknown as SqlClient, machineId, rawAccelerators),
     { isolationLevel: 'Serializable' },
   );

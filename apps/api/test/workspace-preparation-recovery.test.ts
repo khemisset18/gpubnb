@@ -56,7 +56,8 @@ test('workspace retry now covers a failed Compute/GPU_PROOF session too, creatin
   const source = await readFile(new URL('../src/workspace-renter-routes.ts', import.meta.url), 'utf8');
   const start = source.indexOf("app.post('/bookings/:bookingId/workspace/retry'");
   const body = source.slice(start, source.indexOf("app.get('/bookings/:bookingId/workspace'", start));
-  assert.match(body, /slug:\{in:\['compute','developer','data','ai','video','audio','api','mobile','security-lab'\]\}/, 'compute must be retry-eligible alongside every other workspace type');
+  assert.match(body, /const retryableWorkspaceSlugs: string\[\]=\['compute','developer','data','ai','video','audio','api','mobile','security-lab'\]/, 'compute must be retry-eligible alongside every other workspace type');
+  assert.match(body, /workspace:\{slug:requestedSlug\?\?\{in:retryableWorkspaceSlugs\}\}/, 'the shared retry allowlist must constrain the queried session slug');
   assert.match(body, /const isCompute=workspaceSlug==='compute'/, 'the branch must be keyed off the actual session slug, not assumed');
   assert.match(body, /type:JobType\.GPU_PROOF,parameters:\{durationSeconds:Math\.max\(30,Math\.min\(600,row\.booking\.expectedSeconds\)\),workspaceSlug:'compute'\}/, 'a compute retry must create a real GPU_PROOF job shaped exactly like ensureComputePreparation\'s, not a WORKSPACE_PREPARE job the agent would never treat as GPU_PROOF');
   assert.match(body, /const activeJobType=isCompute\?JobType\.GPU_PROOF:JobType\.WORKSPACE_PREPARE/, 'the "already active" guard must check the right job type per slug, or a stuck WORKSPACE_PREPARE could never block a duplicate GPU_PROOF retry and vice versa');

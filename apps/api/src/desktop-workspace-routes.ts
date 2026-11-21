@@ -54,6 +54,18 @@ const qualificationBookingStatuses: BookingStatus[] = [
 
 const WINDOWS_NATIVE_QUALIFICATION_SECONDS = 30 * 60;
 
+/**
+ * Private Cloud Desktop qualification stays closed until renter-scoped audio
+ * is proven end to end by the Windows helper, gateway and browser. The
+ * current transport only proves H.264 video and keyboard/mouse; a silent
+ * desktop is not a complete Workspace and must not create a booking/session.
+ */
+const WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON = 'windows_native_browser_audio_unimplemented' as const;
+
+function windowsNativePrivateMediaReady(): boolean {
+  return false;
+}
+
 const activeAllocations: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.HELD,
   ResourceAllocationStatus.CONFIRMED,
@@ -396,6 +408,9 @@ async function createWindowsNativeQualificationBooking(
   if (!windowsNativePrivateQualificationEnabled()) {
     return { error: 'windows_native_qualification_disabled' as const };
   }
+  if (!windowsNativePrivateMediaReady()) {
+    return { error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON };
+  }
 
   // A never-opened private qualification deliberately leaves the Host DEGRADED.
   // Once its session has timed out and every live authority/resource is gone,
@@ -724,6 +739,9 @@ async function createWindowsNativeQualificationSession(
 ) {
   if (!windowsNativePrivateQualificationEnabled()) {
     return { error: 'windows_native_qualification_disabled' as const };
+  }
+  if (!windowsNativePrivateMediaReady()) {
+    return { error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON };
   }
 
   try {
@@ -1244,7 +1262,7 @@ async function createDesktopWorkspaceSession(
 
   const spec = workspaceSpec[slug];
   try {
-    const session = await db.$transaction(async (tx) => {
+    const session = await runBookingTransaction(db, async (tx) => {
       // Same race boundary as the already-qualified renter routes: re-check the
       // commercial booking inside the transaction before creating a runtime.
       const eligible = await tx.booking.updateMany({
@@ -1433,6 +1451,15 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       };
     }
 
+    if (!windowsNativePrivateMediaReady()) {
+      return {
+        privateNoPaymentMode: true,
+        allowed: false,
+        hostReady: true,
+        code: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON,
+      };
+    }
+
     return {
       privateNoPaymentMode: true,
       allowed: true,
@@ -1445,6 +1472,13 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
   }, async (request, reply) => {
     const session = await requireSession(request, reply, redis);
     if (!session) return;
+
+    if (!windowsNativePrivateQualificationEnabled()) {
+      return reply.code(409).send({ error: 'windows_native_qualification_disabled' });
+    }
+    if (!windowsNativePrivateMediaReady()) {
+      return reply.code(409).send({ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON });
+    }
 
     const result = await createWindowsNativeQualificationBooking(db, session.userId, redis);
     if ('error' in result) return reply.code(409).send({ error: result.error });
@@ -1470,6 +1504,12 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
 
       if (qualification && (qualification !== 'windows-native' || slug !== 'cloud-desktop')) {
         return reply.code(400).send({ error: 'unsupported_private_qualification' });
+      }
+      if (qualification === 'windows-native' && !windowsNativePrivateQualificationEnabled()) {
+        return reply.code(409).send({ error: 'windows_native_qualification_disabled' });
+      }
+      if (qualification === 'windows-native' && !windowsNativePrivateMediaReady()) {
+        return reply.code(409).send({ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON });
       }
       const selected = await db.booking.findFirst({
         where: { id: bookingId, buyerId: session.userId },
@@ -1508,6 +1548,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         select: {
           id: true,
           status: true,
+          runtimeBackend: true,
           expiresAt: true,
           preparationProgress: true,
           preparationStep: true,
@@ -1523,6 +1564,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
           machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
           booking: { select: { status: true, startsAt: true, endsAt: true } },
           machineWorkspace: { select: { workspace: { select: { slug: true, name: true } } } },
+          events: { where: { action: 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED' }, select: { id: true }, take: 1 },
         },
       });
       if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
@@ -1541,13 +1583,15 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       });
       const connection = safeConnection(row.connectionMetadata);
       const live = connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt);
+      const privateQualification = row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE
+        && row.events.length > 0;
       const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, live);
       const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
       const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
 
       return {
         sessionId: row.id,
-        status: row.status,
+        status: privateQualification ? 'BLOCKED' : row.status,
         workspace: row.machineWorkspace.workspace,
         gpu: { model: row.machine.gpuModel, vramMiB: row.machine.vramMiB },
         startsAt: row.booking.startsAt,
@@ -1556,15 +1600,17 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         preparation: {
           progress: row.preparationProgress,
           step: row.preparationStep,
-          phase,
+          phase: privateQualification ? 'BLOCKED' : phase,
           attempts: row.preparationAttempts,
           elapsedSeconds: Math.max(0, Math.round((preparationEnd.getTime() - preparationStart.getTime()) / 1000)),
           updatedAt: row.job?.updatedAt ?? row.updatedAt,
           jobStatus: row.job?.status ?? null,
           errorCode: row.job?.errorCode ?? null,
         },
-        canOpen: policy.allowed && live,
-        blockedReason: !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : live ? null : 'GATEWAY_STALE',
+        canOpen: !privateQualification && policy.allowed && live,
+        blockedReason: privateQualification
+          ? WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON.toUpperCase()
+          : !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : live ? null : 'GATEWAY_STALE',
       };
     });
 
@@ -1579,15 +1625,20 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         select: {
           id: true,
           renterId: true,
+          runtimeBackend: true,
           status: true,
           expiresAt: true,
           connectionMetadata: true,
           gatewayLastSeenAt: true,
           machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
           booking: { select: { status: true } },
+          events: { where: { action: 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED' }, select: { id: true }, take: 1 },
         },
       });
       if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
+      if (row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE && row.events.length > 0) {
+        return reply.code(409).send({ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON });
+      }
 
       const policy = evaluateWorkspaceAccess({
         authenticatedUserId: session.userId,

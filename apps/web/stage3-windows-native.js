@@ -10,8 +10,8 @@
   const profiles=Object.freeze({
     'cloud-desktop':{
       label:'Cloud Desktop',
-      info:"Test vidéo H.264 et clavier/souris en mode privé, si le helper Windows signé et le GPU exact sont prêts. L'audio navigateur est incomplet.",
-      canPrivateLaunch:true,
+      info:"Cloud Desktop : lancement bloqué. Le transport navigateur n'a pas encore de chemin audio Windows → navigateur qualifié ; le précontrôle PC1 reste en lecture seule.",
+      canPrivateLaunch:false,
     },
     creator:{
       label:'Creator / Blender',
@@ -25,7 +25,7 @@
     },
     gaming:{
       label:'Gaming / Steam',
-      info:"Gaming Windows : lancement bloqué tant que l'audio navigateur, la manette et la faible latence ne sont pas validés.",
+      info:"Steam sous Windows : lancement bloqué tant que l'audio navigateur, la manette et la faible latence ne sont pas validés.",
       canPrivateLaunch:false,
     },
   });
@@ -160,6 +160,7 @@
         const reason={
           PRIVATE_WINDOWS_HOST_NOT_READY:'PC1 ne prouve pas encore sa capacité Windows native.',
           PRIVATE_WINDOWS_HOST_RESERVED:'PC1 est déjà réservé par une autre session.',
+          windows_native_browser_audio_unimplemented:'Cloud Desktop reste bloqué : le streaming audio navigateur n’est pas implémenté et qualifié.',
         }[preflight.code]||'Préconditions privées manquantes.';
         throw new Error(reason+' Aucune réservation créée.');
       }
@@ -173,7 +174,8 @@
     }catch(error){
       privateReady=false;
       if(error.status===401){
-        setStatus('Veuillez vous connecter à votre compte GPUbnb pour effectuer la vérification.',true);
+        setStatus('Session absente ou expirée. Redirection vers la connexion GPUbnb…',true);
+        window.location.assign(window.GPUBNB_BROWSER_NAVIGATION.loginHref('stage3-windows-native.html'));
       }else{
         setStatus(error.message||'Vérification privée indisponible.',true);
       }
@@ -185,7 +187,7 @@
   }
 
   async function run(){
-    if(busy||selectedWorkspace!=='cloud-desktop'||!privateReady)return;
+    if(busy||selectedWorkspace!=='cloud-desktop'||!profiles[selectedWorkspace].canPrivateLaunch||!privateReady)return;
     busy=true;
     privateReady=false;
     showSelection();

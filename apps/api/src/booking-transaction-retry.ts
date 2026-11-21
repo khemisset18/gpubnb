@@ -36,7 +36,7 @@ export function isRetryableBookingTransactionError(e: unknown): boolean {
 }
 
 export async function runBookingTransaction<T>(
-  db: PrismaClient,
+  db: Pick<PrismaClient, '$transaction'>,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
   options: {
     maxAttempts?: number;

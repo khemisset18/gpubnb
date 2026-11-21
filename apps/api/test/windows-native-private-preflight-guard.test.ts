@@ -27,15 +27,23 @@ type PrivatePreflight = { privateNoPaymentMode: boolean; allowed: boolean; code:
 
 async function exerciseBrowser(preflight: PrivatePreflight): Promise<{ calls: string[]; message: string }> {
   const calls: string[] = [];
-  let click: (() => void) | undefined;
   const button = {
     disabled: false,
-    addEventListener: (_name: string, handler: () => void) => { click = handler; },
+    addEventListener: (_name: string, handler: () => void) => { if(_name==='click')startClick=handler; },
   };
+  let startClick: (() => void) | undefined;
+  let checkClick: (() => void) | undefined;
+  const checkButton={disabled:false,addEventListener:(_name:string,handler:()=>void)=>{checkClick=handler;}};
   const status = { textContent: '', style: { color: '' } };
+  const info = { textContent: '' };
   const browserContext = {
     window: { GPUBNB_API_URL: 'https://private.test.invalid', location: { origin: 'https://private.test.invalid' } },
-    document: { querySelector: (selector: string) => selector === '#stage3-start' ? button : status },
+    document: {
+      querySelector: (selector: string) => selector === '#stage3-start' ? button
+        : selector === '#stage3-check' ? checkButton
+          : selector === '#stage3-workspace-info' ? info : status,
+      querySelectorAll: () => [],
+    },
     fetch: async (url: string, options: { method?: string }) => {
       const path = new URL(url).pathname;
       calls.push(`${options.method ?? 'GET'} ${path}`);
@@ -53,8 +61,11 @@ async function exerciseBrowser(preflight: PrivatePreflight): Promise<{ calls: st
     setTimeout,
   };
   vm.runInNewContext(browser, browserContext, { timeout: 1000 });
-  assert.ok(click, 'browser did not attach the private test button');
-  click();
+  assert.ok(startClick, 'browser did not attach the private launcher');
+  assert.ok(checkClick, 'browser did not attach the read-only PC1 preflight');
+  checkClick();
+  await new Promise<void>(resolve => setTimeout(resolve, 20));
+  startClick();
   await new Promise<void>(resolve => setTimeout(resolve, 20));
   return { calls, message: status.textContent };
 }
@@ -73,12 +84,11 @@ test('PC2 refuses to create booking when PC1 is not ready or occupied', async ()
   }
 });
 
-test('PC2 may only attempt the booking after positive private readiness proof', async () => {
+test('positive PC1 preflight alone cannot create a booking while media capability is incomplete', async () => {
   const result = await exerciseBrowser({ privateNoPaymentMode: true, allowed: true, code: 'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED' });
   assert.deepEqual(result.calls, [
     'GET /auth/me',
     'GET /qualification/windows-native/preflight',
-    'POST /qualification/windows-native/booking',
   ]);
-  assert.match(result.message, /test_halt_before_mutation/);
+  assert.match(result.message, /Aucune réservation créée/);
 });

@@ -132,3 +132,19 @@ test('native WebSocket close fences Redis immediately and pending batches stop b
   assert.match(input, /enqueueMachineRelay\(redis,row\.machineId,relay\)/);
   assert.match(input, /browserClosed&&await enqueueAuthorizedNativeMachineRelay/);
 });
+
+test('unqualified private sessions are revoked at browser, gateway and Agent reconciliation boundaries', () => {
+  const api = readFileSync(new URL('../src/desktop-workspace-routes.ts', import.meta.url), 'utf8');
+  const gateway = readFileSync(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
+  assert.match(api, /windowsNativePrivateMediaReady\(\): boolean \{\s*return false/);
+  assert.match(api, /if \(!windowsNativePrivateMediaReady\(\)\)\s*\{\s*return reply\.code\(409\)\.send\(\{ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON \}\);/);
+  assert.match(api, /events: \{ where: \{ action: 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED' \}, select: \{ id: true \}, take: 1 \}/);
+  assert.match(api, /privateQualification \? 'BLOCKED' : row\.status/);
+  assert.match(api, /if \(row\.runtimeBackend === WorkspaceRuntimeBackend\.WINDOWS_NATIVE && row\.events\.length > 0\)[\s\S]*?return reply\.code\(409\)\.send\(\{ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON \}\)/);
+
+  assert.match(gateway, /events:\{none:\{action:PRIVATE_WINDOWS_QUALIFICATION_EVENT\}\}/);
+  assert.match(gateway, /qualification_event\."action"=\$\{PRIVATE_WINDOWS_QUALIFICATION_EVENT\}/);
+  assert.match(gateway, /events:\{where:\{action:PRIVATE_WINDOWS_QUALIFICATION_EVENT\},select:\{id:true\},take:1\}/);
+  assert.match(gateway, /events\.length>0\?\{status:WorkspaceSessionStatus\.STOPPING\}:\{\}/,
+    'Agent reconciliation must receive STOPPING for a previously-created private screen-only session');
+});

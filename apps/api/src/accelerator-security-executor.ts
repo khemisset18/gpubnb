@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import type { AcceleratorSecurityDecision } from './accelerator-security-policy.js';
 import { enterQuarantine } from './quarantine-service.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 const activeBookingStatuses = [
   BookingStatus.FUNDED,
@@ -167,7 +168,8 @@ export async function enforceAcceleratorSecurityDecisionTransactionally(
   machineId: string,
   decision: AcceleratorSecurityDecision,
 ): Promise<AcceleratorSecurityExecution> {
-  return db.$transaction(
+  return runBookingTransaction(
+    db,
     (tx) => enforceAcceleratorSecurityDecision(tx, machineId, decision),
     { isolationLevel: 'Serializable' },
   );
