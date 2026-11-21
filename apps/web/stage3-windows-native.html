@@ -15,18 +15,35 @@
       <span class="badge warn">Stage 3 privé</span>
       <h1>Test Windows natif</h1>
       <p class="muted">
-        Cette page ne publie pas le GPU dans la marketplace. Elle crée uniquement
-        une réservation bêta privée sur le Host Windows déjà qualifié.
+        Test privé PC1 → PC2, sans paiement réel ni publication du GPU.
+        La présence d'un Workspace dans cette liste ne signifie pas que son
+        streaming Windows est qualifié. Aucun mode public n'est activé ici.
+      </p>
+      <p><strong>Choisir un Workspace à examiner :</strong></p>
+      <div class="actions" role="group" aria-label="Workspace Windows à examiner">
+        <button type="button" class="button button-primary" data-private-workspace="cloud-desktop" aria-pressed="true">Cloud Desktop</button>
+        <button type="button" class="button" data-private-workspace="creator" aria-pressed="false">Creator / Blender</button>
+        <button type="button" class="button" data-private-workspace="cad" aria-pressed="false">CAD / FreeCAD</button>
+        <button type="button" class="button" data-private-workspace="gaming" aria-pressed="false">Gaming / Steam</button>
+      </div>
+      <p id="stage3-workspace-info" class="muted" role="status" aria-live="polite">
+        Cloud Desktop : essai privé conditionnel, uniquement si PC1 est qualifié.
+        Le streaming audio n'est pas encore disponible dans le navigateur.
       </p>
       <div class="actions">
-        <button id="stage3-start" class="button button-primary" type="button">
-          Démarrer le test Windows
-        </button>
+        <button id="stage3-check" class="button" type="button">Vérifier PC1 et l'accès privé</button>
+        <button id="stage3-start" class="button button-primary" type="button" disabled>Démarrer l'essai privé Cloud Desktop</button>
         <a class="button" href="bookings.html">Mes réservations</a>
       </div>
       <div id="stage3-status" class="muted" role="status" aria-live="polite" style="margin-top:18px">
-        Prêt.
+        Choisissez un Workspace puis vérifiez PC1. Aucune session ne sera créée sans validation.
       </div>
+      <p class="muted">
+        Le mode Creator, CAD et Gaming est visible à titre de diagnostic, mais
+        n'est pas lancé ici tant que le helper Windows signé n'en démontre pas
+        le fonctionnement. Le bouton « Démarrer » n'expose jamais le bureau
+        personnel de PC1 comme solution de secours.
+      </p>
     </section>
   </main>
 </body>
