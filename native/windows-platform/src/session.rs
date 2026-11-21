@@ -200,6 +200,20 @@ fn validate_renter_identity_policy(
     Ok(())
 }
 
+// An independent renter account must not be elevated or even an administrator
+// with a UAC-filtered token: the latter can regain elevated rights on the host.
+// A separate Windows SID and WTS session alone do not enforce this property.
+#[cfg(any(target_os = "windows", test))]
+fn validate_non_administrator_renter_token(
+    token_elevation: u32,
+    contains_administrators_group: bool,
+) -> Result<(), PlatformError> {
+    if token_elevation != 0 || contains_administrators_group {
+        return Err(PlatformError::RenterAdministratorForbidden);
+    }
+    Ok(())
+}
+
 pub fn ensure_provider_process_absent(
     session_id: u32,
     provider_user_sid: &str,
@@ -292,7 +306,7 @@ mod windows_impl {
     use super::{
         RenterSessionIsolationProof, RenterSessionToken, validate_exclusive_active_session,
         validate_input_desktop_name, validate_local_console_session,
-        validate_unlocked_renter_session,
+        validate_unlocked_renter_session, validate_non_administrator_renter_token,
     };
     use crate::PlatformError;
     use std::ffi::c_void;
@@ -305,6 +319,8 @@ mod windows_impl {
     const TOKEN_GROUPS_CLASS: u32 = 2;
     const TOKEN_TYPE_CLASS: u32 = 8;
     const TOKEN_SESSION_ID_CLASS: u32 = 12;
+    const TOKEN_ELEVATION_CLASS: u32 = 20;
+    const LOCAL_ADMINISTRATORS_SID: &str = "S-1-5-32-544";
     const TOKEN_PRIMARY: u32 = 1;
     const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
@@ -598,6 +614,45 @@ mod windows_impl {
         sid_to_string(group.sid)
     }
 
+    fn renter_token_contains_administrators_group(token: Handle) -> Result<bool, PlatformError> {
+        let buffer = token_information(token, TOKEN_GROUPS_CLASS)?;
+        if buffer.len() < size_of::<u32>() {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+        // TOKEN_GROUPS has a DWORD count followed by naturally aligned
+        // SID_AND_ATTRIBUTES records (8-byte alignment on x64).
+        let count = unsafe { *(buffer.as_ptr().cast::<u32>()) as usize };
+        if count > 4096 {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+        let header = (size_of::<u32>() + align_of::<SidAndAttributes>() - 1)
+            & !(align_of::<SidAndAttributes>() - 1);
+        let bytes_needed = header
+            .checked_add(
+                count
+                    .checked_mul(size_of::<SidAndAttributes>())
+                    .ok_or(PlatformError::RenterTokenQueryFailed)?,
+            )
+            .ok_or(PlatformError::RenterTokenQueryFailed)?;
+        if bytes_needed > buffer.len() {
+            return Err(PlatformError::RenterTokenQueryFailed);
+        }
+        let groups = unsafe {
+            std::slice::from_raw_parts(
+                buffer.as_ptr().add(header).cast::<SidAndAttributes>(),
+                count,
+            )
+        };
+        for group in groups {
+            // Deny-only/disabled BUILTIN\\Administrators is still an admin
+            // account with a filtered token. Never accept it for rentals.
+            if sid_to_string(group.sid)?.eq_ignore_ascii_case(LOCAL_ADMINISTRATORS_SID) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     pub(super) fn current_process_session_id() -> Result<u32, PlatformError> {
         // SAFETY: GetCurrentProcessId has no preconditions.
         let process_id = unsafe { GetCurrentProcessId() };
@@ -839,6 +894,10 @@ mod windows_impl {
             return Err(PlatformError::RenterTokenUserMismatch);
         }
         let logon_sid = logon_sid(handle.0)?;
+        validate_non_administrator_renter_token(
+            token_u32(handle.0, TOKEN_ELEVATION_CLASS)?,
+            renter_token_contains_administrators_group(handle.0)?,
+        )?;
 
         Ok(RenterSessionToken {
             session_id,
@@ -853,6 +912,23 @@ mod windows_impl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renter_token_policy_rejects_elevated_and_filtered_administrator_accounts() {
+        assert_eq!(validate_non_administrator_renter_token(0, false), Ok(()));
+        assert_eq!(
+            validate_non_administrator_renter_token(1, false),
+            Err(PlatformError::RenterAdministratorForbidden),
+        );
+        assert_eq!(
+            validate_non_administrator_renter_token(0, true),
+            Err(PlatformError::RenterAdministratorForbidden),
+        );
+        assert_eq!(
+            validate_non_administrator_renter_token(1, true),
+            Err(PlatformError::RenterAdministratorForbidden),
+        );
+    }
 
     #[test]
     fn verified_isolation_proof_encodes_the_full_renter_boundary() {
