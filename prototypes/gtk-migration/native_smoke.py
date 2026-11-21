@@ -89,9 +89,11 @@ def main():
             report['nativeHostStatus'] = host
             refused = script('''const done=arguments[arguments.length-1];
               window.__TAURI_INTERNALS__.invoke('__qualification_unknown_command__').then(
-                value=>done({rejected:false}),error=>done({rejected:true,error:String(error)}));''', async_=True)
+                value=>done({rejected:false}),error=>done({rejected:true,reason:String(error)}));''', async_=True)
             assert refused['rejected'] is True, refused
+            assert '__qualification_unknown_command__' in refused.get('reason', '') and 'not found' in refused['reason'].lower(), refused
             report['unknownIpcRejected'] = True
+            report['unknownIpcRefusal'] = refused
             button = request('POST', f'/session/{session}/element', {'using': 'css selector', 'value': '#start-onboarding'})
             element = button['element-6066-11e4-a52e-4f735466cecf']
             request('POST', f'/session/{session}/element/{element}/click', {})
