@@ -14,4 +14,20 @@ strip = true
 
 [patch.crates-io]
 solana-secp256k1-recover = { path = "vendor/security/solana-secp256k1-recover-2.2.1" }
-glib = { path = "vendor/security/glib-0.18.5" }
+# Experimental official GTK3 migration snapshots; see prototypes/gtk-migration/source-pins.json.
+# Every revision is immutable and every package retains its actual upstream version.
+tauri = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-build = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-codegen = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-macros = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-runtime = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-runtime-wry = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-utils = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tao = { git = "https://github.com/tauri-apps/tao.git", rev = "08660027c723e09a45b10badf60a73a661c94a95" }
+wry = { git = "https://github.com/tauri-apps/wry.git", rev = "327242ae73301c5e34dcc158e31ae453e8afe837" }
+webkit2gtk = { git = "https://github.com/tauri-apps/webkit2gtk-rs.git", rev = "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72" }
+webkit2gtk-sys = { git = "https://github.com/tauri-apps/webkit2gtk-rs.git", rev = "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72" }
+muda = { git = "https://github.com/tauri-apps/muda.git", rev = "e4b5c4cf58935cd7a387a6843f099e535bdf3c4a" }
+tray-icon = { git = "https://github.com/tauri-apps/tray-icon.git", rev = "79b656b7a61b6b551f90ed1b137bf17a920f6d0b" }
+libappindicator = { git = "https://github.com/tauri-apps/libappindicator-rs.git", rev = "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93" }
+libappindicator-sys = { git = "https://github.com/tauri-apps/libappindicator-rs.git", rev = "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93" }

@@ -7,6 +7,7 @@ import { enforceGpuThermalQuarantine } from './gpu-thermal-quarantine.js';
 import { syncGpuMiningResourcesFromAccelerators } from './mining-resource-inventory.js';
 import { reactivateHealthyOfflineListings } from './rental-listing-recovery.js';
 import { rentalHeartbeatOfflineSeconds } from './rental-runtime-policy.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 export type AcceleratorHeartbeatContext = {
   machineId: string;
@@ -82,7 +83,7 @@ export async function processAcceleratorHeartbeatTransactionally(
   db: PrismaClient,
   context: AcceleratorHeartbeatContext,
 ) {
-  return db.$transaction(
+  return runBookingTransaction(db,
     (tx) => processAcceleratorHeartbeat(tx, context),
     { isolationLevel: 'Serializable' },
   );

@@ -1,0 +1,97 @@
+{
+  "retrieved_at": "2026-11-21T09:52:36.336518+00:00",
+  "results": [
+    {
+      "name": "litesvm",
+      "latest": "0.18.2",
+      "recent": [
+        {
+          "v": "0.18.2",
+          "rust": "1.97.1",
+          "yanked": false,
+          "date": "2026-11-04T04:46:10.248063Z"
+        },
+        {
+          "v": "0.18.1",
+          "rust": "1.97.1",
+          "yanked": false,
+          "date": "2026-10-18T23:24:15.942976Z"
+        },
+        {
+          "v": "0.18.0",
+          "rust": "1.97.1",
+          "yanked": false,
+          "date": "2026-10-09T12:27:07.709874Z"
+        },
+        {
+          "v": "0.17.0",
+          "rust": "1.89.0",
+          "yanked": false,
+          "date": "2026-09-28T08:35:36.582504Z"
+        }
+      ]
+    },
+    {
+      "name": "agave-precompiles",
+      "latest": "5.0.0-alpha.1",
+      "recent": [
+        {
+          "v": "5.0.0-alpha.1",
+          "rust": "1.99.1",
+          "yanked": false,
+          "date": "2026-11-19T21:26:54.381093Z"
+        },
+        {
+          "v": "4.5.0-beta.0",
+          "rust": "1.99.1",
+          "yanked": false,
+          "date": "2026-11-06T09:10:35.716407Z"
+        },
+        {
+          "v": "4.4.1",
+          "rust": "1.98.1",
+          "yanked": false,
+          "date": "2026-11-05T19:01:41.315756Z"
+        },
+        {
+          "v": "4.4.0",
+          "rust": "1.98.1",
+          "yanked": false,
+          "date": "2026-10-28T21:21:54.969902Z"
+        }
+      ]
+    },
+    {
+      "name": "agave-migration-pr",
+      "merged": true,
+      "merged_at": "2026-11-04T02:54:24Z",
+      "head_sha": "e05e837ec6b402617b80af8569c8971507383701",
+      "merge_sha": "7da4c9846a716f86850fc0f8b95cc54f175c2479"
+    },
+    {
+      "name": "agave5-deps",
+      "deps": [
+        {
+          "name": "ed25519-dalek",
+          "req": "=1.0.1",
+          "kind": "dev"
+        },
+        {
+          "name": "rand",
+          "req": "^0.9.4",
+          "kind": "dev"
+        },
+        {
+          "name": "solana-ed25519",
+          "req": "^0.2.4",
+          "kind": "normal"
+        },
+        {
+          "name": "solana-ed25519-program",
+          "req": "^3.0.0",
+          "kind": "normal"
+        }
+      ]
+    }
+  ]
+}

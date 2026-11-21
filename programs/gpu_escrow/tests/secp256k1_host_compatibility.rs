@@ -1,7 +1,5 @@
 //! Public recovery fixtures only: no signing, secret keys, RNG, RPC or handlers.
-use anchor_lang::solana_program::secp256k1_recover::{
-    secp256k1_recover, Secp256k1Pubkey, Secp256k1RecoverError,
-};
+use solana_secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey, Secp256k1RecoverError};
 
 fn bytes(hex: &str) -> Vec<u8> {
     assert_eq!(hex.len() % 2, 0);
@@ -12,7 +10,7 @@ fn bytes(hex: &str) -> Vec<u8> {
 }
 
 #[test]
-fn actual_solana_reexport_matches_independent_public_recovery_oracle() {
+fn vetted_solana_sdk_matches_independent_public_recovery_oracle() {
     let fixtures: serde_json::Value = match std::env::var("GPUBNB_RECOVERY_FIXTURES") {
         Ok(path) => serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap(),
         Err(_) => serde_json::from_str(include_str!(

@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "assessmentKind": "experimental official GTK3 migration qualification",
+  "baseLocalCommit": "a7997adcdf2e61b32841386aef4d2ea29309c2f4",
+  "baseTree": "4792982f5a5d8214666d9810918d4d965bf1248d",
+  "borrowedExample": {
+    "repository": "Hao0321/Editkin",
+    "commit": "6010f2b76dbb1c49f77d5fdfddafed5f61744c86",
+    "linuxRun": "https://github.com/Hao0321/Editkin/actions/runs/36682270509",
+    "proofAppliesToGpuBnb": false
+  },
+  "runtime": {
+    "tauri": "=2.12.0",
+    "tauri-build": "=2.7.0",
+    "rust-version": "1.92"
+  },
+  "patches": {
+    "tauri": {
+      "git": "https://github.com/tauri-apps/tauri.git",
+      "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    "tauri-build": {
+      "git": "https://github.com/tauri-apps/tauri.git",
+      "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    "tauri-codegen": {
+      "git": "https://github.com/tauri-apps/tauri.git",
+      "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    "tauri-macros": {
+      "git": "https://github.com/tauri-apps/tauri.git",
+      "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    "tauri-runtime": {
+      "git": "https://github.com/tauri-apps/tauri.git",
+      "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    "tauri-runtime-wry": {
+      "git": "https://github.com/tauri-apps/tauri.git",
+      "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    "tauri-utils": {
+      "git": "https://github.com/tauri-apps/tauri.git",
+      "rev": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    "tao": {
+      "git": "https://github.com/tauri-apps/tao.git",
+      "rev": "08660027c723e09a45b10badf60a73a661c94a95"
+    },
+    "wry": {
+      "git": "https://github.com/tauri-apps/wry.git",
+      "rev": "327242ae73301c5e34dcc158e31ae453e8afe837"
+    },
+    "webkit2gtk": {
+      "git": "https://github.com/tauri-apps/webkit2gtk-rs.git",
+      "rev": "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72"
+    },
+    "webkit2gtk-sys": {
+      "git": "https://github.com/tauri-apps/webkit2gtk-rs.git",
+      "rev": "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72"
+    },
+    "muda": {
+      "git": "https://github.com/tauri-apps/muda.git",
+      "rev": "e4b5c4cf58935cd7a387a6843f099e535bdf3c4a"
+    },
+    "tray-icon": {
+      "git": "https://github.com/tauri-apps/tray-icon.git",
+      "rev": "79b656b7a61b6b551f90ed1b137bf17a920f6d0b"
+    },
+    "libappindicator": {
+      "git": "https://github.com/tauri-apps/libappindicator-rs.git",
+      "rev": "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93"
+    },
+    "libappindicator-sys": {
+      "git": "https://github.com/tauri-apps/libappindicator-rs.git",
+      "rev": "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93"
+    }
+  },
+  "nativeQualificationRequired": [
+    "locked metadata and exact upstream Git source identities",
+    "Linux native compile and installer",
+    "Linux Xvfb WebDriver GUI and safe IPC smoke",
+    "Windows native compile and installer",
+    "macOS native compile and installer",
+    "strict Cargo audit and Trivy",
+    "desktop host tests and unchanged Solana host tests",
+    "financial and API/Agent production source unchanged"
+  ],
+  "safeGlibVersion": "0.22.11",
+  "gtkVersion": "0.19.0",
+  "upstreamReview": "All 15 immutable source revisions originate from official repositories; outstanding PR snapshots are experimental, not stable release certification.",
+  "currentPrObservations": {
+    "observedUtc": "2026-11-18T21:12:10.671632+00:00",
+    "pullRequests": [
+      {
+        "repository": "tauri-apps/tauri",
+        "pr": 16170,
+        "url": "https://github.com/tauri-apps/tauri/pull/16170",
+        "state": "open",
+        "draft": true,
+        "head": "899ca2105ffd06293013b6d2bff4416987d99010",
+        "base": "64bfdd909c5c3f0828371e4995b69ad5ed685126",
+        "updatedAt": "2026-11-18T14:50:52Z",
+        "rawSha256": "02a5b84015f4b6fb55d0bfb7c18485426e1ae3ae7b59cff884eea6e39c4c5b3a"
+      },
+      {
+        "repository": "tauri-apps/tao",
+        "pr": 1332,
+        "url": "https://github.com/tauri-apps/tao/pull/1332",
+        "state": "open",
+        "draft": false,
+        "head": "08660027c723e09a45b10badf60a73a661c94a95",
+        "base": "27fe28c73ace307eb0b1d1abf457508410f1340e",
+        "updatedAt": "2026-11-18T15:25:59Z",
+        "rawSha256": "47e5ccacb54675077ca8b664999dc65ee8b7ad284f0438b2ed5677a0ed001cf8"
+      },
+      {
+        "repository": "tauri-apps/wry",
+        "pr": 1843,
+        "url": "https://github.com/tauri-apps/wry/pull/1843",
+        "state": "open",
+        "draft": true,
+        "head": "327242ae73301c5e34dcc158e31ae453e8afe837",
+        "base": "d8fe88dc7be2f6ff00c671f823e985335a14f7ad",
+        "updatedAt": "2026-10-18T20:25:20Z",
+        "rawSha256": "08f166770f0cb63b433330fa606962c0ab7ddbd9a9baf39b480d8050c0fce6d6"
+      },
+      {
+        "repository": "tauri-apps/webkit2gtk-rs",
+        "pr": 167,
+        "url": "https://github.com/tauri-apps/webkit2gtk-rs/pull/167",
+        "state": "open",
+        "draft": false,
+        "head": "f472300ece78050b11fc0dbe69ddec13d34fcff3",
+        "base": "ec1017deddca065ff284be2477fcd4cf94e84c46",
+        "updatedAt": "2026-11-18T15:45:16Z",
+        "rawSha256": "0f269026feca689e10b94fa2cffb78be8e3e63830ff567fb96749814917ce034"
+      },
+      {
+        "repository": "tauri-apps/muda",
+        "pr": 403,
+        "url": "https://github.com/tauri-apps/muda/pull/403",
+        "state": "open",
+        "draft": true,
+        "head": "920ee6fd027ee778bd9867b5ab7005f7a130ff03",
+        "base": "88e0c3658a85668872c621f77d6aad1616f42780",
+        "updatedAt": "2026-09-30T07:24:31Z",
+        "rawSha256": "0bac9f1c2ef4079c88d71f7e06e8de6d46a113d1f6c9ab1613089b4bc2e08dae"
+      },
+      {
+        "repository": "tauri-apps/tray-icon",
+        "pr": 369,
+        "url": "https://github.com/tauri-apps/tray-icon/pull/369",
+        "state": "open",
+        "draft": true,
+        "head": "af76479d5ef9f52fbc6a7bf127b0edd8164d72ff",
+        "base": "1375c38714143883faad8f5a3bacf2e3d9a9b8e0",
+        "updatedAt": "2026-09-30T07:29:45Z",
+        "rawSha256": "837d0180f42ac0d4cc119503047b3a918478191e0d3e5d5b118cdb3eb3bb8c76"
+      },
+      {
+        "repository": "tauri-apps/libappindicator-rs",
+        "pr": 53,
+        "url": "https://github.com/tauri-apps/libappindicator-rs/pull/53",
+        "state": "closed",
+        "draft": false,
+        "head": "363837a6e8a9192ea06fd133d9a9ea51189e5aa8",
+        "base": "d3af4b3a51c0bf208d4aec23305d5ef6f1785e0a",
+        "updatedAt": "2026-11-18T15:26:55Z",
+        "rawSha256": "9e6b3abb7ae15f6f7c0a88ffbeb87ec0f4b9e5c2e18e69d2801e23b1e03ca0a7"
+      }
+    ]
+  },
+  "baseReferenceCommit": "8085369f76b36868f97e776763e88ce727e62c5a",
+  "financialProfile": {
+    "kind": "qualified-anchor-sdk-1.2.2",
+    "referenceLocalCommit": "2152b7b652a5248dafa6603e48760f9041de9b03",
+    "referenceTree": "bd64c94828a5250aea111c9b2953ce4c85d12c6e",
+    "integrityModule": "prototypes/anchor-sdk-migration/integrity.py",
+    "integrityModuleSha256": "1f14c1631d7e9c7ca855a110e46dfa4ff7a038000d48795c08ded7063b6f5b9a",
+    "sourcePins": "prototypes/anchor-sdk-migration/source-pins.json",
+    "sourcePinsSha256": "f3190633aa0099c477b77d4413df4615c4161b95f7c9c18ba8aaefadcdf17be7",
+    "financialGraphSha256": "6b616dcf73618ebd71e849ecdad3cb974e798ac1aa4a22bc9977b451ee3644e9",
+    "financialPackageCount": 182,
+    "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "evidence": {
+      "wireRecords": "docs/asset-exchange/research/2026-11-20/anchor-sdk/wire-result.json",
+      "privateRuntime": "docs/asset-exchange/research/2026-11-21/anchor-sdk/minimal-runtime-results.json",
+      "scopeAndSourceReview": "docs/asset-exchange/research/2026-11-21/anchor-sdk/source-scope-review.json",
+      "strictScanner": "docs/asset-exchange/research/2026-11-21/anchor-sdk/strict-scan-summary.json",
+      "boundedRuntimeReview": "docs/asset-exchange/research/2026-11-21/anchor-sdk/bounded-runtime-review-result.json"
+    },
+    "referencePublishedCommit": "39156eee6a9c85248d90591fda8d2a52a8601d4f",
+    "referencePublishedTree": "7d85d8ab7ffc0220373e263ce46ec48687e0bad7"
+  }
+}

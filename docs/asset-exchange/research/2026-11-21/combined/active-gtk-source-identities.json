@@ -1,0 +1,114 @@
+{
+  "officialGitPackages": [
+    {
+      "name": "tauri",
+      "version": "2.12.0",
+      "source": "git+https://github.com/tauri-apps/tauri.git?rev=899ca2105ffd06293013b6d2bff4416987d99010#899ca2105ffd06293013b6d2bff4416987d99010",
+      "manifestSha256": "2a4abe31418fb1970bd99b3ef7eb5577c4f978a374758984f88b3ef78e3a4020",
+      "checkoutCommit": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    {
+      "name": "tauri-build",
+      "version": "2.7.0",
+      "source": "git+https://github.com/tauri-apps/tauri.git?rev=899ca2105ffd06293013b6d2bff4416987d99010#899ca2105ffd06293013b6d2bff4416987d99010",
+      "manifestSha256": "251d961b704bb425394d6d000dca814ca82d98e0b522dac062c07fd87093c74d",
+      "checkoutCommit": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    {
+      "name": "tauri-codegen",
+      "version": "2.7.0",
+      "source": "git+https://github.com/tauri-apps/tauri.git?rev=899ca2105ffd06293013b6d2bff4416987d99010#899ca2105ffd06293013b6d2bff4416987d99010",
+      "manifestSha256": "9ce990c6c5bfea7e3c5200bb30f265a6885fb334e5fcc005f8850a1cee1a8c4c",
+      "checkoutCommit": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    {
+      "name": "tauri-macros",
+      "version": "2.7.0",
+      "source": "git+https://github.com/tauri-apps/tauri.git?rev=899ca2105ffd06293013b6d2bff4416987d99010#899ca2105ffd06293013b6d2bff4416987d99010",
+      "manifestSha256": "311cec2bdeb4719c8fba0c10b123dd504dfc663301e3f55711099d94784bc6f6",
+      "checkoutCommit": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    {
+      "name": "tauri-runtime",
+      "version": "2.12.0",
+      "source": "git+https://github.com/tauri-apps/tauri.git?rev=899ca2105ffd06293013b6d2bff4416987d99010#899ca2105ffd06293013b6d2bff4416987d99010",
+      "manifestSha256": "f9e1592ddaedd36319dc13c0e08969958afdf6e3724265c5b260fc42077a227c",
+      "checkoutCommit": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    {
+      "name": "tauri-runtime-wry",
+      "version": "2.12.0",
+      "source": "git+https://github.com/tauri-apps/tauri.git?rev=899ca2105ffd06293013b6d2bff4416987d99010#899ca2105ffd06293013b6d2bff4416987d99010",
+      "manifestSha256": "9d49d25c6bf2095f1edab4508cae202b180974c51829680418d10c792318b755",
+      "checkoutCommit": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    {
+      "name": "tauri-utils",
+      "version": "2.10.0",
+      "source": "git+https://github.com/tauri-apps/tauri.git?rev=899ca2105ffd06293013b6d2bff4416987d99010#899ca2105ffd06293013b6d2bff4416987d99010",
+      "manifestSha256": "a9c82eb37f4c733c9024987f84a0b1e10e763fc61c319877952eda20243fe240",
+      "checkoutCommit": "899ca2105ffd06293013b6d2bff4416987d99010"
+    },
+    {
+      "name": "tao",
+      "version": "0.37.0",
+      "source": "git+https://github.com/tauri-apps/tao.git?rev=08660027c723e09a45b10badf60a73a661c94a95#08660027c723e09a45b10badf60a73a661c94a95",
+      "manifestSha256": "1d6daa7bd22034e747c92884fee50d61f7620092831aa3454d91158ab1b0684f",
+      "checkoutCommit": "08660027c723e09a45b10badf60a73a661c94a95"
+    },
+    {
+      "name": "wry",
+      "version": "0.57.0",
+      "source": "git+https://github.com/tauri-apps/wry.git?rev=327242ae73301c5e34dcc158e31ae453e8afe837#327242ae73301c5e34dcc158e31ae453e8afe837",
+      "manifestSha256": "ce8d2f8ba8ba5255c34bbd721164d7aef77c7304e4b8f94f736dc3af784ecbe3",
+      "checkoutCommit": "327242ae73301c5e34dcc158e31ae453e8afe837"
+    },
+    {
+      "name": "webkit2gtk",
+      "version": "2.0.2",
+      "source": "git+https://github.com/tauri-apps/webkit2gtk-rs.git?rev=f5c3825c3f21c44ce346a5aa42e8c33a762f9f72#f5c3825c3f21c44ce346a5aa42e8c33a762f9f72",
+      "manifestSha256": "6d2e8c5b002b47fe7d13144907fe5043b6771131ef144a9cd29b69cf05bb18d7",
+      "checkoutCommit": "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72"
+    },
+    {
+      "name": "webkit2gtk-sys",
+      "version": "2.0.2",
+      "source": "git+https://github.com/tauri-apps/webkit2gtk-rs.git?rev=f5c3825c3f21c44ce346a5aa42e8c33a762f9f72#f5c3825c3f21c44ce346a5aa42e8c33a762f9f72",
+      "manifestSha256": "74f3bd0c469d22584d0f7307ede67f8acf852f52a162025363ea216df6e3b0b7",
+      "checkoutCommit": "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72"
+    },
+    {
+      "name": "muda",
+      "version": "0.20.0",
+      "source": "git+https://github.com/tauri-apps/muda.git?rev=e4b5c4cf58935cd7a387a6843f099e535bdf3c4a#e4b5c4cf58935cd7a387a6843f099e535bdf3c4a",
+      "manifestSha256": "0c2b6793c79218a3c50607bc86f31535cc459a160ee4afe00d0cf861c97d7550",
+      "checkoutCommit": "e4b5c4cf58935cd7a387a6843f099e535bdf3c4a"
+    },
+    {
+      "name": "tray-icon",
+      "version": "0.25.0",
+      "source": "git+https://github.com/tauri-apps/tray-icon.git?rev=79b656b7a61b6b551f90ed1b137bf17a920f6d0b#79b656b7a61b6b551f90ed1b137bf17a920f6d0b",
+      "manifestSha256": "c6172fdf56428c9a20d15da62c89772dcd4f102cc3cd0b17192c24fb404a2ab3",
+      "checkoutCommit": "79b656b7a61b6b551f90ed1b137bf17a920f6d0b"
+    },
+    {
+      "name": "libappindicator",
+      "version": "0.9.0",
+      "source": "git+https://github.com/tauri-apps/libappindicator-rs.git?rev=f2617d92288e2f0a2f998d3cd46c003e3a5c6d93#f2617d92288e2f0a2f998d3cd46c003e3a5c6d93",
+      "manifestSha256": "214db0c5bfda877e3a7d756b7ff08e43a4c066b4b795df632042a3e2e7439826",
+      "checkoutCommit": "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93"
+    },
+    {
+      "name": "libappindicator-sys",
+      "version": "0.9.0",
+      "source": "git+https://github.com/tauri-apps/libappindicator-rs.git?rev=f2617d92288e2f0a2f998d3cd46c003e3a5c6d93#f2617d92288e2f0a2f998d3cd46c003e3a5c6d93",
+      "manifestSha256": "b3c76f0e88af4b0fa4596a454a1d681e044e9d41d2d3d3cda86d5a41cd2c48d0",
+      "checkoutCommit": "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93"
+    }
+  ],
+  "glibVersion": "0.22.11",
+  "glibVariantIteratorSha256": "e6160f1e35372441ed94881988675f4078dd8617f31aa779fa0b97222d6db004",
+  "oldGlibSelected": false,
+  "gtkVersion": "0.19.0",
+  "removedUnsafeChainsAbsent": true
+}

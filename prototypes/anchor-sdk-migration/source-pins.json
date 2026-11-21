@@ -1,0 +1,52 @@
+{
+  "anchorCrateSha256": "ce734f46dca7bc34c93f206871293d0bebaa89184d92231e1cd7a3c532993585",
+  "anchorPublishedVersion": "1.2.2",
+  "baselineCommit": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+  "financialGraphSha256": "6b616dcf73618ebd71e849ecdad3cb974e798ac1aa4a22bc9977b451ee3644e9",
+  "programFiles": {
+    "programs/gpu_escrow/Anchor.toml": "ba5899cd426d4aed9b577297f7f6b07e9b00ba85160f43c05601bd501d6b6713",
+    "programs/gpu_escrow/Cargo.toml": "64e6f5b0080dfcba80fd1b80b6bca07e43b87702397409677ce4d3d955c3f3c4",
+    "programs/gpu_escrow/src/lib.rs": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "programs/gpu_escrow/tests/anchor_wire_compatibility.rs": "17452ee04dbb6f1120a898681c112991580c2696beef9eaaf5fc52cbd828636b",
+    "programs/gpu_escrow/tests/borsh_zst_regression.rs": "9478e44e103aef887c21a24911f116a8bc016fdf147c20009e18eeadf71a38c3",
+    "programs/gpu_escrow/tests/secp256k1_host_compatibility.rs": "9c6ca1c93bd986b26e3e539db23c7068e771e093d050bc86170cf031cb711d45"
+  },
+  "releaseProfile": {
+    "codegen-units": 1,
+    "lto": true,
+    "opt-level": "s",
+    "panic": "abort",
+    "strip": true
+  },
+  "reviewedRecoveryVendor": {
+    "files": {
+      ".cargo_vcs_info.json": "1e4b80c32ba8756c35f13d24805b549952850ee5052ec7f2402871c351ddf16e",
+      "BACKPORT.md": "fc7108794febdd78b53f31cb2f13c47d9bb9173800d9062bb9281f9aa3678375",
+      "Cargo.toml": "036b4d7df2fc632e064d84d8d8bef3a432ab24951b455c8a006f2a135505070f",
+      "Cargo.toml.orig": "808a7c6360189801b796df84e077248e93b221196c047fc11e7a41425a90f201",
+      "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "src/lib.rs": "c83a4990493a181a8d32a1dcfdb3ff75c744a2ae2ef12e90c02e65a0fa7c5c14"
+    },
+    "path": "vendor/security/solana-secp256k1-recover-2.2.1"
+  },
+  "runtimeFiles": {
+    "prototypes/anchor-sdk-migration/runtime/Cargo.lock": "a49195e74e78d0932bf81427b0a27750d1c51937664b28a453822204856bce09",
+    "prototypes/anchor-sdk-migration/runtime/Cargo.toml": "550ae9a420e6baf782bbd59df60c770a5c1b21f8f9d27d652c767fab8f494397",
+    "prototypes/anchor-sdk-migration/runtime/src/lib.rs": "8a42c79f15a0440d6f74bc09ea5035e70e07c3beeb0d93e16148feffe3c32d13"
+  },
+  "sbfTools": {
+    "agave": {
+      "bytes": 82900972,
+      "sha256": "5b0f0fc7e4eedace05f6455de00aa1f2f3d1642068f1e8d50760ba49112c3941",
+      "url": "https://github.com/anza-xyz/agave/releases/download/v4.4.1/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+    },
+    "platform-tools": {
+      "bytes": 531380716,
+      "sha256": "b0f7af104adf726fff2a6a09ea2eb2f2d2965c92295f4d7388c08d140e0c2b00",
+      "url": "https://github.com/anza-xyz/platform-tools/releases/download/v1.57/platform-tools-linux-x86_64.tar.bz2"
+    }
+  },
+  "schemaVersion": 1,
+  "wireRecordsSha256": "a071dc6e64629ddf7155001a92acfb593761bacbcc1ab03a28a9b080a88e3700",
+  "workspaceResolver": "2"
+}

@@ -4,17 +4,33 @@ on:
   pull_request:
     paths:
       - prototypes/rust-compatible-backports/**
+      - prototypes/gtk-migration/**
       - vendor/security/**
       - Cargo.toml
       - Cargo.lock
       - .github/workflows/rust-compatible-backports.yml
   workflow_dispatch:
+  push:
+    branches:
+      - qualification/doge-gtk-20261118
+    paths:
+      - prototypes/rust-compatible-backports/**
+      - prototypes/gtk-migration/prepare.py
+      - prototypes/gtk-migration/source-pins.json
+      - prototypes/gtk-migration/probe/**
+      - vendor/security/**
+      - Cargo.toml
+      - Cargo.lock
+      - apps/host-desktop/src-tauri/**
+      # GUI-only test and workflow routing changes reuse the unchanged Rust
+      # qualification already running; the pull-request gate above stays intact.
 
 permissions:
   contents: read
 
 jobs:
   actual-workspace:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/qualification/doge-gtk-20261118'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -39,6 +55,8 @@ jobs:
           npm run build --prefix apps/host-desktop
       - name: Exercise preparation refusals without native execution
         run: python3 -m unittest discover -s prototypes/rust-compatible-backports -p 'test_*.py' -v
+      - name: Refuse unreviewed financial profile and verifier substitutions
+        run: python3 -m unittest discover -s prototypes/gtk-migration -p 'test_*.py' -v
       - name: Qualify exact backports in the actual current workspace graph
         run: python3 prototypes/rust-compatible-backports/prepare.py "$RUNNER_TEMP/rust-backport-workspace"
       - name: Preserve hashes, logs and explicit qualification limits
@@ -50,6 +68,7 @@ jobs:
             ${{ runner.temp }}/rust-backport-workspace/report.json
             ${{ runner.temp }}/rust-backport-workspace/active-metadata.json
             ${{ runner.temp }}/rust-backport-workspace/metadata.json
+            ${{ runner.temp }}/rust-backport-workspace/probe-metadata.json
             ${{ runner.temp }}/rust-backport-workspace/*.log
             ${{ runner.temp }}/rust-backport-workspace/candidate-Cargo.lock
           if-no-files-found: error
