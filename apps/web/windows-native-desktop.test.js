@@ -323,6 +323,10 @@ test('DOM binding blocks browser handling only for events accepted by the native
   assert.equal(prevented, 0, 'ordinary page keys must not be captured');
   canvas.emit('pointerdown', { clientX: 20, clientY: 30, button: 0, pointerId: 1 });
   keyboard.listeners.get('keydown')({
+    code: 'KeyA',
+    preventDefault() { prevented += 1; },
+  });
+  keyboard.listeners.get('keydown')({
     code: 'Unidentified',
     preventDefault() { prevented += 1; },
   });
