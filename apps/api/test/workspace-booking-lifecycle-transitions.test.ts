@@ -9,7 +9,7 @@ test('runtime registration opens a bounded activation window without starting pa
   const end = source.indexOf('\n  });', start);
   const body = source.slice(start, end).replace(/\s+/g, '');
 
-  assert.match(body, /firstRegistration=current\.status===WorkspaceSessionStatus\.READY&&typeofmetadata\?\.gatewayPath!==['"]string['"]/);
+  assert.match(body, /firstRegistration=\(current\.status===WorkspaceSessionStatus\.READY\|\|\(isWindowsNativeRuntime\(current\.runtimeBackend\)&&current\.status===WorkspaceSessionStatus\.PREPARING\)\)&&typeofmetadata\?\.gatewayPath!==['"]string['"]/);
   assert.match(body, /activationDeadline=newDate\(readyAt\.getTime\(\)\+INTERACTIVE_CONNECT_TIMEOUT_SECONDS\*1000\)/);
   assert.match(body, /readyAt,startedAt:null,expiresAt:activationDeadline/);
   assert.doesNotMatch(body, /startedAt:readyAt/);
@@ -123,7 +123,7 @@ test('generic compute start and metrics routes cannot bypass the Developer billi
   assert.equal(guards.length, 2);
 });
 
-test('the dev-bypass diagnostic reconciler never touches a booking with a real Developer session', async () => {
+test('the dev-bypass diagnostic reconciler never touches a booking with any interactive Workspace session', async () => {
   const source = await readFile(new URL('../src/dev-booking-reconciler.ts', import.meta.url), 'utf8');
   const start = source.indexOf('const readyBookings = betaTestDevBypassActive() ? [] : await db.booking.findMany({');
   assert.ok(start >= 0);
@@ -132,7 +132,8 @@ test('the dev-bypass diagnostic reconciler never touches a booking with a real D
 
   assert.match(
     body,
-    /workspaceSessions:\{none:\{machineWorkspace:\{workspace:\{slug:'developer'\}\}\}\}/,
-    'without this exclusion, this dev-test shortcut would run an unrelated GPU_DIAGNOSTIC job and mark a real Developer rental booking COMPLETED/DEGRADED out from under the renter',
+    /workspaceSessions:\{none:DEVELOPER_SESSION_FILTER\}/,
+    'without this exclusion, this dev-test shortcut could release a native or Linux interactive rental out from under its renter',
   );
+  assert.match(source, /const DEVELOPER_SESSION_FILTER = \{\s*machineWorkspace: \{ workspace: \{ slug: \{ not: 'compute' \} \} \},\s*\} as const;/);
 });

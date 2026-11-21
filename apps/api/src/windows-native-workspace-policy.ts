@@ -94,3 +94,31 @@ export function windowsNativeWorkspaceCandidate(
     backend: 'WINDOWS_NATIVE',
   };
 }
+
+/** Owner-side static analysis for native Windows workspace consent.
+ * Cloud Desktop and Gaming remain unavailable until the browser/gateway has
+ * renter-scoped audio and controller paths; a screen-only helper result must
+ * not let those profiles appear enabled or ready.
+ */
+export function windowsNativeWorkspaceOwnerAnalysis(
+  machine: WindowsNativeHostCapabilities,
+  manifest: WorkspaceManifest,
+  slug: WindowsNativeDesktopSlug,
+  expectedGpuUuid: string | null | undefined,
+): WindowsNativeCandidate {
+  const candidate = windowsNativeWorkspaceCandidate(machine, manifest, expectedGpuUuid);
+  const missingCapability = slug === 'cloud-desktop'
+    ? 'Audio navigateur WASAPI/Opus non implémenté'
+    : slug === 'gaming'
+      ? 'Audio navigateur ou manette non implémentés'
+      : null;
+  if (!missingCapability) return candidate;
+  return {
+    ...candidate,
+    candidate: false,
+    score: 0,
+    state: 'INCOMPATIBLE',
+    missing: [...candidate.missing, missingCapability],
+    reasons: [],
+  };
+}

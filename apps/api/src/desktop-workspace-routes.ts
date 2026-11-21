@@ -23,7 +23,8 @@ import {
 import type { Redis } from 'ioredis';
 
 import { requireSession } from './auth.js';
-import { nativeRentalEligibility, windowsNativeCommercialReleaseEnabled } from './windows-native-rental-eligibility.js';
+import { nativeRentalEligibility } from './windows-native-rental-eligibility.js';
+import { windowsNativeCommercialReleaseEnabled } from './windows-native-release-flag.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import { config } from './config.js';
 import { ensureCompatibleMachineWorkspace, type ExecutableWorkspaceSlug } from './machine-workspace-catalog.js';
@@ -34,7 +35,7 @@ import {
   allocateWindowsNativeQualificationBookingResources,
   ResourceAllocationError,
 } from './resource-allocation-service.js';
-import { preparationPhase, safeConnection } from './workspace-renter-routes.js';
+import { preparationPhase, safeConnection, selectedWorkspaceSessionScope } from './workspace-renter-routes.js';
 import { WINDOWS_NATIVE_GPU_UUID_RE } from './windows-native-capability.js';
 import { privateConsoleAgentCommit, privateConsoleSessionMarker } from './windows-native-private-console.js';
 import { qualificationNativeSource } from './windows-native-private-console-proof.js';
@@ -1047,10 +1048,10 @@ async function createWindowsNativeQualificationSession(
  * never the owner's console. The local signed helper must prove capture,
  * media, exact GPU and cleanup independently before a stream is openable.
  *
- * The API stages a READY desired session so v10 can perform this physical
- * startup; gatewayLastSeenAt and connectionMetadata remain absent until the
- * helper actually registers. That means billing and browser access remain
- * blocked until an authenticated frame reaches the renter's browser.
+ * The API stages an internal PREPARING session for the v10 agent. The gateway
+ * does not expose it to renter traffic; only the native helper may register it
+ * after its per-session preflight succeeds. This keeps billing and browser
+ * access blocked until an authenticated upstream frame reaches the renter.
  */
 async function createWindowsNativeRentalSession(
   db: PrismaClient,
@@ -1149,7 +1150,7 @@ async function createWindowsNativeRentalSession(
           bookingId, renterId,
           machineId: booking.listing.machineId,
           machineWorkspaceId: ownerWorkspace.id,
-          status: WorkspaceSessionStatus.READY,
+          status: WorkspaceSessionStatus.PREPARING,
           runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
           isolationType: 'WINDOWS_NATIVE',
           // Never carry a privateConsoleQualification marker into a rental.
@@ -1161,8 +1162,8 @@ async function createWindowsNativeRentalSession(
             autoStopMinutes: 60,
           },
           connectionType: 'GPUBNB_GATEWAY',
-          preparationProgress: 70,
-          preparationStep: 'WINDOWS_NATIVE_HELPER_ATTESTATION_PENDING',
+          preparationProgress: 5,
+          preparationStep: 'WINDOWS_NATIVE_START_AUTHORIZED',
           preparationRequestedAt: now,
           readyDeadlineAt: new Date(Math.min(booking.endsAt.getTime(), now.getTime() + 15 * 60_000)),
           expiresAt: booking.endsAt,
@@ -1217,7 +1218,13 @@ async function createDesktopWorkspaceSession(
   slug: DesktopWorkspaceSlug,
 ) {
   const booking = await db.booking.findFirst({
-    where: { id: bookingId, buyerId: renterId, status: { in: activeBookings } },
+    where: {
+      id: bookingId,
+      buyerId: renterId,
+      status: { in: activeBookings },
+      endsAt: { gt: new Date() },
+      OR: [{ requestedWorkspaceSlug: null }, { requestedWorkspaceSlug: slug }],
+    },
     include: { listing: { select: { machineId: true } } },
   });
   if (!booking) return { error: 'funded_booking_required' as const };
@@ -1241,7 +1248,13 @@ async function createDesktopWorkspaceSession(
       // Same race boundary as the already-qualified renter routes: re-check the
       // commercial booking inside the transaction before creating a runtime.
       const eligible = await tx.booking.updateMany({
-        where: { id: bookingId, buyerId: renterId, status: { in: activeBookings }, endsAt: { gt: new Date() } },
+        where: {
+          id: bookingId,
+          buyerId: renterId,
+          requestedWorkspaceSlug: booking.requestedWorkspaceSlug,
+          status: { in: activeBookings },
+          endsAt: { gt: new Date() },
+        },
         data: { buyerId: renterId },
       });
       if (eligible.count !== 1) throw new Error('funded_booking_required');
@@ -1491,7 +1504,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       if (!session) return;
       const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
       const row = await db.workspaceSession.findFirst({
-        where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
+        where: { ...selectedWorkspaceSessionScope(slug), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
         select: {
           id: true,
           status: true,
@@ -1562,7 +1575,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       if (!session) return;
       const bookingId = String((request.params as { bookingId?: string }).bookingId || '');
       const row = await db.workspaceSession.findFirst({
-        where: { bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
+        where: { ...selectedWorkspaceSessionScope(slug), bookingId, renterId: session.userId, machineWorkspace: { workspace: { slug } } },
         select: {
           id: true,
           renterId: true,

@@ -389,7 +389,7 @@ export async function withNativeGatewaySessionFence(
   userId:string,
   runtimeBackend:WorkspaceRuntimeBackend,
   operation:(isActive:()=>boolean,tx:Prisma.TransactionClient)=>Promise<boolean>,
-  options:{lockSessionForMutation?:boolean}={},
+  options:{lockSessionForMutation?:boolean;allowPreparing?:boolean}={},
 ):Promise<boolean>{
   if(!isWindowsNativeRuntime(runtimeBackend))return false;
   try{return await db.$transaction(async tx=>{
@@ -407,7 +407,7 @@ export async function withNativeGatewaySessionFence(
       WHERE ws."id"=${sessionId} AND ws."machineId"=${machineId}
         AND mw."machineId"=ws."machineId"
         AND ws."runtimeBackend"::text=${runtimeBackend}
-        AND ws."status"::text IN ('READY','RUNNING')
+        AND (ws."status"::text IN ('READY','RUNNING') OR (${options.allowPreparing===true} AND ws."status"::text='PREPARING'))
         AND ws."expiresAt">clock_timestamp()
         AND m."connectivity"::text='ONLINE'
         AND m."moderationStatus"::text='CLEAR'
@@ -805,7 +805,7 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.get('/agent/workspace-gateway/:machineId/desired',async(request,reply)=>{
     const machineId=String((request.params as {machineId?:string}).machineId||'');const route=`/agent/workspace-gateway/${machineId}/desired`;if(!await authenticateAgent(db,redis,machineId,request,route))return reply.code(401).send({error:'invalid_agent_request'});
-    const rows=await db.workspaceSession.findMany({where:{machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,resourceLimits:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
+    const rows=await db.workspaceSession.findMany({where:{machineId,runtimeBackend:{in:gatewayRuntimeBackends()},OR:[{status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING,WorkspaceSessionStatus.STOP_REQUESTED,WorkspaceSessionStatus.STOPPING]}},{runtimeBackend:WorkspaceRuntimeBackend.WINDOWS_NATIVE,status:WorkspaceSessionStatus.PREPARING}],machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,expiresAt:true,runtimeBackend:true,connectionMetadata:true,resourceLimits:true,machineWorkspace:{select:{workspace:{select:{slug:true}}}}}});
     // The agent needs to know which container/image to run per session - a
     // flat workspaceSlug is what workspace_gateway.py's _reconcile_sessions
     // reads (defaulting to 'developer' for any older/unrecognized value).
@@ -841,10 +841,10 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
   });
   app.post('/agent/workspace-gateway/:sessionId/register',async(request,reply)=>{
     const sessionId=String((request.params as {sessionId?:string}).sessionId||'');const body=request.body as {machineId?:string;runtimeId?:string;localPort?:number};const machineId=String(body.machineId||'');const route=`/agent/workspace-gateway/${sessionId}/register`;if(!await authenticateAgent(db,redis,machineId,request,route,true))return reply.code(401).send({error:'invalid_agent_request'});if(!/^[a-zA-Z0-9_.-]{6,100}$/.test(String(body.runtimeId||''))||!Number.isInteger(body.localPort)||Number(body.localPort)<1024||Number(body.localPort)>65535)return reply.code(400).send({error:'invalid_runtime_registration'});
-    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,renterId:true,runtimeBackend:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
-    const register=async(tx:Prisma.TransactionClient,current:{id:string;status:WorkspaceSessionStatus;bookingId:string;connectionMetadata:Prisma.JsonValue|null},requireFundedBooking:boolean):Promise<boolean>=>{
+    const row=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},OR:[{status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]}},{runtimeBackend:WorkspaceRuntimeBackend.WINDOWS_NATIVE,status:WorkspaceSessionStatus.PREPARING}],machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,renterId:true,runtimeBackend:true,status:true,bookingId:true,connectionMetadata:true,booking:{select:{expectedSeconds:true}}}});if(!row)return reply.code(409).send({error:'workspace_not_registerable'});
+    const register=async(tx:Prisma.TransactionClient,current:{id:string;status:WorkspaceSessionStatus;runtimeBackend:WorkspaceRuntimeBackend;bookingId:string;connectionMetadata:Prisma.JsonValue|null},requireFundedBooking:boolean):Promise<boolean>=>{
       const metadata=current.connectionMetadata&&typeof current.connectionMetadata==='object'?current.connectionMetadata as Record<string,unknown>:null;
-      const firstRegistration=current.status===WorkspaceSessionStatus.READY&&typeof metadata?.gatewayPath!=='string';
+      const firstRegistration=(current.status===WorkspaceSessionStatus.READY||(isWindowsNativeRuntime(current.runtimeBackend)&&current.status===WorkspaceSessionStatus.PREPARING))&&typeof metadata?.gatewayPath!=='string';
       const readyAt=new Date();const activationDeadline=new Date(readyAt.getTime()+INTERACTIVE_CONNECT_TIMEOUT_SECONDS*1000);
       if(firstRegistration){
         const booking=await tx.booking.updateMany({where:{id:current.bookingId,status:BookingStatus.FUNDED},data:{status:BookingStatus.STARTING,startsAt:readyAt,endsAt:activationDeadline}});
@@ -852,18 +852,18 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
         await tx.machineAllocation.updateMany({where:{bookingId:current.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}});
         await tx.acceleratorAllocation.updateMany({where:{bookingId:current.bookingId},data:{startsAt:readyAt,endsAt:activationDeadline}});
       }
-      await tx.workspaceSession.update({where:{id:current.id},data:{connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},gatewayLastSeenAt:readyAt,...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}});
+      await tx.workspaceSession.update({where:{id:current.id},data:{...(firstRegistration&&isWindowsNativeRuntime(current.runtimeBackend)?{status:WorkspaceSessionStatus.READY}:{}),connectionType:'GPUbnbGateway',connectionMetadata:{gatewayPath:`/workspace-gateway/${sessionId}`,runtimeId:String(body.runtimeId),localPort:Number(body.localPort)},gatewayLastSeenAt:readyAt,...(firstRegistration?{readyAt,startedAt:null,expiresAt:activationDeadline,preparationProgress:100,preparationStep:'WAITING_FOR_INTERACTIVE_CONNECTION'}:{}),events:{create:{actorType:'AGENT',actorId:machineId,action:'GATEWAY_READY'}}}});
       return true;
     };
     if(isWindowsNativeRuntime(row.runtimeBackend)){
       const accepted=await withNativeGatewaySessionFence(db,sessionId,machineId,row.renterId,row.runtimeBackend,async(isActive,tx)=>{
-        const current=await tx.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:row.runtimeBackend,status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true}});
+        const current=await tx.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:row.runtimeBackend,OR:[{status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]}},{runtimeBackend:WorkspaceRuntimeBackend.WINDOWS_NATIVE,status:WorkspaceSessionStatus.PREPARING}],machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,runtimeBackend:true,bookingId:true,connectionMetadata:true}});
         if(!current||!isActive())return false;
         return await register(tx,current,true)&&isActive();
-      },{lockSessionForMutation:true});
+      },{lockSessionForMutation:true,allowPreparing:true});
       if(!accepted)return reply.code(409).send({error:'workspace_not_registerable'});
     }else{
-      const current=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,bookingId:true,connectionMetadata:true}});
+      const current=await db.workspaceSession.findFirst({where:{id:sessionId,machineId,runtimeBackend:{in:gatewayRuntimeBackends()},status:{in:[WorkspaceSessionStatus.READY,WorkspaceSessionStatus.RUNNING]},machineWorkspace:{workspace:{slug:{in:GATEWAY_WORKSPACE_SLUGS}}}},select:{id:true,status:true,runtimeBackend:true,bookingId:true,connectionMetadata:true}});
       if(!current)return reply.code(409).send({error:'workspace_not_registerable'});
       await db.$transaction(async tx=>register(tx,current,false));
     }

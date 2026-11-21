@@ -110,6 +110,10 @@ WINDOWS_NATIVE_WORKSPACE_PROFILES: dict[str, NativeWorkspaceProfile] = {
         slug="cloud-desktop",
         application=None,
         executable_candidates=(),
+        # The current browser gateway has no renter-scoped audio path. Treat
+        # audio as a hard profile requirement so a silent desktop cannot pass
+        # the native helper preflight and be reported as READY.
+        requires_audio=True,
     ),
     "creator": NativeWorkspaceProfile(
         slug="creator",

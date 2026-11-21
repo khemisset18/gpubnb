@@ -924,7 +924,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             if status in {"STOP_REQUESTED", "STOPPING"} or self._expired(session.get("expiresAt")):
                 self._native_stop_and_report(session_id)
                 continue
-            if status not in {"READY", "RUNNING"}:
+            if status not in {"PREPARING", "READY", "RUNNING"}:
                 continue
             # The server-issued HTTPS desired session, exact Agent build, and a
             # separate local opt-in must agree before console media is touched.

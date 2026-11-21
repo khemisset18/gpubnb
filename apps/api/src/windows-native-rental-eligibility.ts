@@ -12,19 +12,11 @@ import {
 
 import { config } from './config.js';
 import { workspaceManifest } from './workspace-manifests.js';
+import { windowsNativeCommercialReleaseEnabled } from './windows-native-release-flag.js';
 import {
   windowsNativeWorkspaceCandidate,
   type WindowsNativeDesktopSlug,
 } from './windows-native-workspace-policy.js';
-
-/**
- * An explicitly dark-by-default *commercial* gate, separate from the old
- * private Windows console qualification. The console path is never an
- * acceptable source for a public renter's Windows desktop.
- */
-export function windowsNativeCommercialReleaseEnabled(): boolean {
-  return config.WINDOWS_NATIVE_RENTALS_ENABLED === 'true';
-}
 
 const rentableGpuStatuses: AcceleratorOperationalStatus[] = [
   AcceleratorOperationalStatus.AVAILABLE,
@@ -69,6 +61,15 @@ export async function nativeRentalEligibility(
 ): Promise<NativeRentalEligibility> {
   if (!windowsNativeCommercialReleaseEnabled()) {
     return { eligible: false, reason: 'windows_native_release_not_approved', machineId: null };
+  }
+  if (config.ESCROW_PROGRAM_ID === 'NOT_DEPLOYED_YET') {
+    return { eligible: false, reason: 'windows_native_escrow_not_deployed', machineId: null };
+  }
+  // The current browser gateway has no renter-scoped WASAPI/Opus audio path.
+  // A Cloud Desktop that advertises a silent screen is incomplete, so keep it
+  // non-bookable until the browser, gateway and helper all prove audio.
+  if (slug === 'cloud-desktop') {
+    return { eligible: false, reason: 'windows_native_audio_unimplemented', machineId: null };
   }
   // The existing native browser/media protocol transports H.264 frames and
   // keyboard/mouse only. It has no end-to-end audio or Gamepad API pipeline,
@@ -124,6 +125,9 @@ export async function nativeRentalEligibility(
 
   const gpu = listing.accelerators[0]!.accelerator;
   const host = listing.machine;
+  if (!host.operatingSystem?.trim().toLowerCase().startsWith('windows')) {
+    return { eligible: false, reason: 'windows_native_host_required', machineId: listing.machineId };
+  }
   const fresh = (value: Date | null): boolean =>
     value !== null && value.getTime() <= now.getTime()
     && now.getTime() - value.getTime() <= config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS * 1000;

@@ -72,11 +72,29 @@ export async function completeGpuProofJob(
       changed: false,
     };
   }
+  // A GPU proof may only prepare Compute itself or the legacy unselected
+  // Developer flow. An explicitly selected Data/AI/desktop/etc. booking must
+  // never be rewritten into a Developer session by a stale or misrouted job.
+  if (selected?.requestedWorkspaceSlug
+      && selected.requestedWorkspaceSlug !== 'compute') {
+    return {
+      bookingStatus: BookingStatus.STARTING,
+      machineReleased: false,
+      developerWorkspaceSessionId: null,
+      developerPreparationQueued: false,
+      changed: false,
+    };
+  }
   let developerWorkspaceCompatible = null;
-  try {
-    developerWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, 'developer');
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== 'developer_workspace_incompatible') throw error;
+  // Only the legacy NULL selection keeps the historical proof → Developer
+  // handoff. An explicit Compute request ends with the proof and never opens
+  // the different Developer Workspace.
+  if (!selected?.requestedWorkspaceSlug) {
+    try {
+      developerWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, 'developer');
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'developer_workspace_incompatible') throw error;
+    }
   }
 
   return runBookingTransaction(db, async (tx) => {

@@ -276,6 +276,18 @@ test('private flow cannot open a desktop before funding or when readiness denies
     assert.ok(!box.calls.some(call=>call.path.endsWith('/access')));
   }
 });
+test('booking UI follows only the purchased Workspace and never offers Compute for an explicit selection',()=>{
+  const script=source('workspace-bookings.js');
+  assert.match(script,/eligible=active\.filter\(row=>!row\.booking\.requestedWorkspaceSlug/);
+  assert.match(script,/selectedWorkspaceProfiles=Object\.freeze/);
+  assert.match(script,/request\(base\+profile\.create/);
+  assert.match(script,/request\(base\+profile\.access/);
+  assert.match(script,/Workspace exact demandé/);
+  assert.doesNotMatch(script,/Réservation Windows native/);
+  const account=source('account.js');
+  assert.match(account,/!item\.requestedWorkspaceSlug\|\|item\.requestedWorkspaceSlug==='compute'/);
+  assert.match(account,/Suivre le Workspace sélectionné/);
+});
 test('terminal private session refusal never requests an access grant',async()=>{
   const box=await privateRun(path=>path.endsWith('/status')?response(200,{status:'QUARANTINED',canOpen:false}):null);
   assert.equal(box.location.href,'/stage3-windows-native.html');assert.ok(!box.calls.some(call=>call.path.endsWith('/access')));
