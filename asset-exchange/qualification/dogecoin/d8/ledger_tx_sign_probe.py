@@ -246,6 +246,24 @@ def review_synthetic_finalize(paid_outputs):
             "screen_fee_observed": saw_fee, "simulated_screen_sequence": history[-25:]}
 
 
+def build_input_hash_chunk(trusted, signer_script):
+    """Keep the input script and its 4-byte sequence in ONE legacy APDU.
+
+    Upstream transaction_parse() immediately calls check_transaction_available(4)
+    after consuming the script; splitting sequence into another APDU makes
+    the legacy firmware assert/exit 255 before any signature. Never pad or
+    change the signed transaction to silence the parser.
+    """
+    if not isinstance(trusted, bytes) or not 48 <= len(trusted) <= 128:
+        raise ValueError("invalid synthetic trusted input")
+    if not isinstance(signer_script, bytes) or len(signer_script) != 25 or not signer_script.startswith(bytes.fromhex("76a914")) or not signer_script.endswith(bytes.fromhex("88ac")):
+        raise ValueError("invalid synthetic P2PKH script")
+    combined = b"\x01" + bytes([len(trusted)]) + trusted + bytes([len(signer_script)]) + signer_script + SEQUENCE
+    if len(combined) > 255:
+        raise ValueError("synthetic input APDU too large")
+    return combined
+
+
 def probe():
     # Refuse any signing without a verified transaction session.
     print("DOGE_TX_DIAG: start unapproved sign refusal", file=sys.stderr, flush=True)
@@ -267,11 +285,8 @@ def probe():
     print("DOGE_TX_DIAG: before HASH_INPUT_START 0x44 first", file=sys.stderr, flush=True)
     send_ok(0x44, 0, 0, bytes.fromhex("01000000") + b"\x01")
     print("DOGE_TX_DIAG: first 0x44 accepted", file=sys.stderr, flush=True)
-    print("DOGE_TX_DIAG: before 0x44 trusted-input chunk", file=sys.stderr, flush=True)
-    send_ok(0x44, 0x80, 0, b"\x01" + bytes([len(trusted)]) + trusted +
-            bytes([len(signer_script)]) + signer_script)
-    print("DOGE_TX_DIAG: trusted-input chunk accepted, before 0x44 sequence", file=sys.stderr, flush=True)
-    send_ok(0x44, 0x80, 0, SEQUENCE)
+    print("DOGE_TX_DIAG: before 0x44 trusted-input/script/sequence atomic chunk", file=sys.stderr, flush=True)
+    send_ok(0x44, 0x80, 0, build_input_hash_chunk(trusted, signer_script))
     print("DOGE_TX_DIAG: all 0x44 chunks accepted", file=sys.stderr, flush=True)
     print("DOGE_TX_DIAG: streaming complete, attempting synthetic screen review", file=sys.stderr, flush=True)
     review = review_synthetic_finalize(paid_outputs)
