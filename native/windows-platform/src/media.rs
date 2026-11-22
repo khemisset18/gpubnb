@@ -223,6 +223,7 @@ pub enum MediaProbeError {
     CaptureTimeout,
     CaptureAccessLost,
     DeviceLost,
+    AudioTargetExited,
     InvalidResult,
     MissingProof,
     Diagnostic(MediaFailureDiagnostic),
@@ -440,6 +441,16 @@ fn classify_probe_hresult(hr: i32) -> MediaProbeError {
         0x887A0026 => MediaProbeError::CaptureAccessLost, // DXGI_ERROR_ACCESS_LOST
         0x887A0005..=0x887A0007 => MediaProbeError::DeviceLost, // REMOVED / HUNG / RESET
         _ => MediaProbeError::ProbeFailed,
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn classify_audio_hresult(hr: i32) -> MediaProbeError {
+    // HRESULT_FROM_WIN32(ERROR_PROCESS_ABORTED), where the Win32 error is 1067 (0x42B).
+    if hr as u32 == 0x8007_042B {
+        MediaProbeError::AudioTargetExited
+    } else {
+        classify_probe_hresult(hr)
     }
 }
 
@@ -899,7 +910,7 @@ mod windows_impl {
         let hr = unsafe { open(wire.as_ptr().cast::<c_void>(), &mut raw) };
         if hr != 0 || raw.is_null() {
             return Err(if hr < 0 {
-                classify_probe_hresult(hr)
+                classify_audio_hresult(hr)
             } else {
                 MediaProbeError::InvalidResult
             });
@@ -932,7 +943,7 @@ mod windows_impl {
             return Ok(None);
         }
         if hr != 0 {
-            return Err(classify_probe_hresult(hr));
+            return Err(classify_audio_hresult(hr));
         }
         let payload_bytes = read_u32(&result, 28)? as usize;
         if payload_bytes > payload.len() {
@@ -1164,6 +1175,15 @@ mod tests {
             );
         }
         assert_eq!(classify_probe_hresult(-1), MediaProbeError::ProbeFailed);
+    }
+
+    #[test]
+    fn audio_target_exit_hresult_is_classified_for_session_teardown() {
+        assert_eq!(
+            classify_audio_hresult(0x8007_042Bu32 as i32),
+            MediaProbeError::AudioTargetExited
+        );
+        assert_eq!(classify_audio_hresult(-1), MediaProbeError::ProbeFailed);
     }
 
     #[test]
