@@ -366,8 +366,37 @@ export class WindowsNativeDesktopClient {
     const keyup = (event) => {
       if (keyboardArmed && this.key(event.code, true)) event.preventDefault?.();
     };
+    const documentTarget = pointerTarget.ownerDocument || keyboardTarget;
+    let pointerLocked = documentTarget.pointerLockElement === this.canvas;
+    const pointerRelative = (dx, dy) => {
+      const input = this.#requireInput();
+      if (!input || typeof input.mouseRelative !== 'function' ||
+          !Number.isFinite(dx) || !Number.isFinite(dy)) return false;
+      // Pointer-lock deltas are browser supplied. Bound each event before it
+      // reaches the existing epoch-fenced native input protocol.
+      const x = Math.max(-4096, Math.min(4096, Math.trunc(dx)));
+      const y = Math.max(-4096, Math.min(4096, Math.trunc(dy)));
+      if (x === 0 && y === 0) return false;
+      return input.mouseRelative(x, y);
+    };
+    const pointerLockChanged = () => {
+      const locked = documentTarget.pointerLockElement === this.canvas;
+      if (locked) {
+        pointerLocked = true;
+        focusCanvas();
+      } else if (pointerLocked) {
+        pointerLocked = false;
+        // Escape or browser policy can release pointer lock asynchronously.
+        // Release all held native input before requiring another canvas click.
+        disarmKeyboard();
+      }
+    };
     const pointermove = (event) => {
-      if (keyboardArmed && this.pointerAbsolute(event.clientX, event.clientY)) event.preventDefault?.();
+      if (!keyboardArmed) return;
+      const accepted = pointerLocked
+        ? pointerRelative(event.movementX, event.movementY)
+        : this.pointerAbsolute(event.clientX, event.clientY);
+      if (accepted) event.preventDefault?.();
     };
     const pointerdown = (event) => {
       this.canvas.focus?.({ preventScroll: true });
@@ -391,6 +420,7 @@ export class WindowsNativeDesktopClient {
     keyboardTarget.addEventListener('keyup', keyup);
     keyboardTarget.addEventListener('focusin', focusMoved);
     keyboardTarget.addEventListener('visibilitychange', visibilityChanged);
+    documentTarget.addEventListener?.('pointerlockchange', pointerLockChanged);
     pointerTarget.addEventListener('focus', focusCanvas);
     pointerTarget.addEventListener('blur', blur);
     pointerTarget.addEventListener('lostpointercapture', blur);
@@ -407,6 +437,7 @@ export class WindowsNativeDesktopClient {
       keyboardTarget.removeEventListener?.('keyup', keyup);
       keyboardTarget.removeEventListener?.('focusin', focusMoved);
       keyboardTarget.removeEventListener?.('visibilitychange', visibilityChanged);
+      documentTarget.removeEventListener?.('pointerlockchange', pointerLockChanged);
       pointerTarget.removeEventListener?.('focus', focusCanvas);
       pointerTarget.removeEventListener?.('blur', blur);
       pointerTarget.removeEventListener?.('lostpointercapture', blur);
@@ -418,6 +449,9 @@ export class WindowsNativeDesktopClient {
       pointerTarget.removeEventListener?.('wheel', wheel);
       pointerTarget.removeEventListener?.('contextmenu', contextmenu);
       disarmKeyboard();
+      if (documentTarget.pointerLockElement === this.canvas) {
+        try { documentTarget.exitPointerLock?.(); } catch {}
+      }
     };
   }
 

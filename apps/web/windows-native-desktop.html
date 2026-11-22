@@ -14,13 +14,15 @@
     <span id="nativeDesktopStatus" role="status">Connexion sécurisée…</span>
     <span id="nativeDesktopContinuity" role="status">Vidéo continue : 0/300 s</span>
     <a id="nativeDesktopManage" href="session.html">Gérer la session</a>
+    <button id="nativeDesktopFullscreen" type="button" aria-pressed="false">Plein écran</button>
+    <button id="nativeDesktopPointerLock" type="button" aria-pressed="false">Verrouiller la souris</button>
     <button id="nativeDesktopClose" type="button">Fermer la vidéo</button>
   </header>
   <main>
-    <p class="remote-help">Cliquez sur le bureau pour activer le clavier et la souris. Le contrôle à distance est désactivé lorsque vous changez de fenêtre ou d'onglet.</p>
+    <p class="remote-help">Cliquez sur le bureau pour activer le clavier et la souris. Vous pouvez verrouiller le pointeur pour viser dans un jeu. Le contrôle à distance est désactivé lorsque vous changez de fenêtre ou d'onglet.</p>
     <canvas id="nativeDesktopCanvas" width="1280" height="720" aria-label="Bureau distant GPUbnb : cliquez pour utiliser le clavier et la souris"></canvas>
     <p class="remote-help">Fermer la vidéo ne termine pas la location. Pour arrêter la location et libérer le GPU, utilisez « Gérer la session ».</p>
   </main>
-  <script type="module" src="windows-native-desktop-page.js?v=20261004-reconnect-1"></script>
+  <script type="module" src="windows-native-desktop-page.js?v=20261122-pointer-lock-1"></script>
 </body>
 </html>

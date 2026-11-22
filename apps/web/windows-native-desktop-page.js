@@ -77,7 +77,7 @@ export function safeNativeDesktopErrorCode(error) {
   return SAFE_NATIVE_DESKTOP_ERROR_CODES.has(message) ? message : 'windows_native_client_failed';
 }
 
-import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-gamepad-1';
+import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-gamepad-pointer-lock-1';
 import { Stage4VideoContinuity } from './windows-native-continuity.js?v=20261016-1';
 
 const NATIVE_RECONNECT_DELAYS_MS = Object.freeze([250, 500, 1000, 2000, 5000]);
@@ -115,6 +115,8 @@ export function mountWindowsNativeDesktop({
   const canvas = documentObject.querySelector('#nativeDesktopCanvas');
   const status = documentObject.querySelector('#nativeDesktopStatus');
   const closeButton = documentObject.querySelector('#nativeDesktopClose');
+  const fullscreenButton = documentObject.querySelector('#nativeDesktopFullscreen');
+  const pointerLockButton = documentObject.querySelector('#nativeDesktopPointerLock');
   const proofIndicator = documentObject.querySelector('#nativeDesktopContinuity');
   if (!canvas || !status || !closeButton) {
     throw new Error('windows_native_page_contract');
@@ -127,6 +129,60 @@ export function mountWindowsNativeDesktop({
   const setStatus = (value) => {
     status.textContent = value;
   };
+  const updateFullscreenButton = () => {
+    if (!fullscreenButton) return;
+    const active = Boolean(documentObject.fullscreenElement);
+    fullscreenButton.textContent = active ? 'Quitter le plein écran' : 'Plein écran';
+    fullscreenButton.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  };
+  const updatePointerLockButton = () => {
+    if (!pointerLockButton) return;
+    const active = documentObject.pointerLockElement === canvas;
+    pointerLockButton.textContent = active ? 'Libérer la souris' : 'Verrouiller la souris';
+    pointerLockButton.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  };
+  const requestFullscreen = async () => {
+    try {
+      if (documentObject.fullscreenElement) {
+        await documentObject.exitFullscreen?.();
+      } else {
+        const target = documentObject.documentElement || canvas;
+        if (typeof target.requestFullscreen !== 'function') throw new Error('fullscreen_unavailable');
+        await target.requestFullscreen();
+      }
+    } catch {
+      setStatus('Le plein écran est indisponible dans ce navigateur.');
+    }
+    updateFullscreenButton();
+  };
+  const togglePointerLock = async () => {
+    try {
+      if (documentObject.pointerLockElement === canvas) {
+        await documentObject.exitPointerLock?.();
+      } else {
+        if (typeof canvas.requestPointerLock !== 'function') throw new Error('pointer_lock_unavailable');
+        canvas.focus?.({ preventScroll: true });
+        await canvas.requestPointerLock();
+      }
+    } catch {
+      setStatus('Le verrouillage de la souris est indisponible dans ce navigateur.');
+    }
+    updatePointerLockButton();
+  };
+  const exitPresentationModes = () => {
+    if (documentObject.pointerLockElement === canvas) {
+      try { documentObject.exitPointerLock?.(); } catch {}
+    }
+    if (documentObject.fullscreenElement) {
+      try { Promise.resolve(documentObject.exitFullscreen?.()).catch(() => {}); } catch {}
+    }
+  };
+  fullscreenButton?.addEventListener('click', requestFullscreen);
+  pointerLockButton?.addEventListener('click', togglePointerLock);
+  documentObject.addEventListener?.('fullscreenchange', updateFullscreenButton);
+  documentObject.addEventListener?.('pointerlockchange', updatePointerLockButton);
+  updateFullscreenButton();
+  updatePointerLockButton();
   const proof = proofIndicator ? new Stage4VideoContinuity() : null;
   // Backoff recovery is a separate proof, even when no 300s indicator is shown.
   // One decoded image followed by a frozen stream is NOT a stable connection.
@@ -167,6 +223,7 @@ export function mountWindowsNativeDesktop({
     unbindCurrent = null;
     try { unbind?.(); } catch {}
     try { client?.close(); } catch {}
+    exitPresentationModes();
   };
 
   const markRecovered = () => {
@@ -223,6 +280,7 @@ export function mountWindowsNativeDesktop({
           currentClient = null;
           unbindCurrent = null;
           try { unbind?.(); } catch {}
+          exitPresentationModes();
 
           if (stopped) {
             setStatus('Session vidéo fermée');
@@ -307,6 +365,10 @@ export function mountWindowsNativeDesktop({
     releaseCurrent();
     windowObject.removeEventListener?.('pagehide', onPageHide);
     windowObject.removeEventListener?.('pageshow', onPageShow);
+    documentObject.removeEventListener?.('fullscreenchange', updateFullscreenButton);
+    documentObject.removeEventListener?.('pointerlockchange', updatePointerLockButton);
+    fullscreenButton?.removeEventListener?.('click', requestFullscreen);
+    pointerLockButton?.removeEventListener?.('click', togglePointerLock);
     setStatus('Session vidéo fermée');
   };
 

@@ -76,6 +76,94 @@ test('page mounts the client without exposing a capability in URL or DOM', () =>
   assert.equal(closed, 1);
 });
 
+test('fullscreen and pointer lock are user controlled and released on authority revocation', async () => {
+  const listeners = new Map();
+  const makeButton = () => ({
+    textContent: '',
+    attributes: new Map(),
+    handlers: new Map(),
+    addEventListener(name, handler) { this.handlers.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (this.handlers.get(name) === handler) this.handlers.delete(name);
+    },
+    setAttribute(name, value) { this.attributes.set(name, value); },
+  });
+  const canvas = { focus() {} };
+  const status = { textContent: '' };
+  const closeButton = makeButton();
+  const fullscreenButton = makeButton();
+  const pointerLockButton = makeButton();
+  const documentObject = {
+    fullscreenElement: null,
+    pointerLockElement: null,
+    listeners,
+    addEventListener(name, handler) { listeners.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (listeners.get(name) === handler) listeners.delete(name);
+    },
+    emit(name) { listeners.get(name)?.(); },
+    documentElement: {
+      requestFullscreen() {
+        documentObject.fullscreenElement = documentObject.documentElement;
+        documentObject.emit('fullscreenchange');
+        return Promise.resolve();
+      },
+    },
+    exitFullscreen() {
+      this.fullscreenElement = null;
+      this.emit('fullscreenchange');
+      return Promise.resolve();
+    },
+    exitPointerLock() {
+      this.pointerLockElement = null;
+      this.emit('pointerlockchange');
+    },
+    querySelector(selector) {
+      return {
+        '#nativeDesktopCanvas': canvas,
+        '#nativeDesktopStatus': status,
+        '#nativeDesktopClose': closeButton,
+        '#nativeDesktopFullscreen': fullscreenButton,
+        '#nativeDesktopPointerLock': pointerLockButton,
+      }[selector] ?? null;
+    },
+  };
+  canvas.requestPointerLock = () => {
+    documentObject.pointerLockElement = canvas;
+    documentObject.emit('pointerlockchange');
+    return Promise.resolve();
+  };
+  const windowObject = { addEventListener() {}, removeEventListener() {} };
+  const client = {
+    bindDom() { return () => {}; },
+    start() {},
+    close() {},
+  };
+  let clientOptions;
+
+  mountWindowsNativeDesktop({
+    documentObject,
+    windowObject,
+    locationObject: {
+      href: 'https://example.test/windows-native-desktop.html?session=sess-1',
+      search: '?session=sess-1',
+    },
+    clientFactory: (options) => { clientOptions = options; return client; },
+  });
+  await fullscreenButton.handlers.get('click')();
+  await pointerLockButton.handlers.get('click')();
+  assert.equal(fullscreenButton.textContent, 'Quitter le plein écran');
+  assert.equal(fullscreenButton.attributes.get('aria-pressed'), 'true');
+  assert.equal(pointerLockButton.textContent, 'Libérer la souris');
+  assert.equal(pointerLockButton.attributes.get('aria-pressed'), 'true');
+
+  clientOptions.onState({ state: 'closed', closeCode: 1008, wasClean: true });
+  assert.equal(documentObject.fullscreenElement, null);
+  assert.equal(documentObject.pointerLockElement, null);
+  assert.equal(fullscreenButton.textContent, 'Plein écran');
+  assert.equal(pointerLockButton.textContent, 'Verrouiller la souris');
+});
+
 
 test('unexpected transport close reconnects with a fresh client', () => {
   const canvas = {};
