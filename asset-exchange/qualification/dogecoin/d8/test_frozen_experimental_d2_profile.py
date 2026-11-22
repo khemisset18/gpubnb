@@ -16,6 +16,7 @@ sys.path.insert(0, str(D2))
 sys.path.insert(0, str(WALLET))
 
 import offline_candidate
+import htlc_codec
 import spend_preparation
 import refund_ladder
 import external_signer
@@ -60,7 +61,7 @@ def verify():
     assert profile == expected, "experimental D2 profile manifest differs from explicit pinned reference"
     assert spend_preparation.GENESIS == profile["genesis"]
     assert offline_candidate.SOURCE == profile["dogecoinSourceCommit"]
-    assert offline_candidate.SEQUENCE == profile["nSequence"]
+    assert htlc_codec.SEQUENCE == profile["nSequence"]
     assert refund_ladder.SEQUENCE == profile["nSequence"]
     assert external_signer.PROFILE == profile["externalSoftwareSignerProfile"]
     assert script_diagnostics.LIBRARY_SHA256 == profile["d0ConsensusLibrarySha256"]
