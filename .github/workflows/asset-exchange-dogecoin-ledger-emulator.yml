@@ -83,7 +83,7 @@ jobs:
           docker run --rm --network none --entrypoint /bin/bash \
             -v "$APP_ROOT:/app" -w /app \
             ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite:latest \
-            -lc 'set -euo pipefail; test -d "$NANOS2_SDK"; make -j2 BOLOS_SDK="$NANOS2_SDK" COIN=dogecoin'
+            -lc 'set -euo pipefail; test -d "$NANOSP_SDK"; make -j2 BOLOS_SDK="$NANOSP_SDK" COIN=dogecoin'
           APP_ELF="$(find "$APP_ROOT" -type f -name 'app.elf' | head -n 1)"
           test -n "$APP_ELF"
           cp "$APP_ELF" "$APP_ROOT/doge-test.elf"
