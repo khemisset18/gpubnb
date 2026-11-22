@@ -114,10 +114,11 @@ bool SameTokenUser(HANDLE left, HANDLE right)
 HRESULT OpenAuthorizedRenterProcess(
     uint32_t expectedSessionId,
     DWORD expectedProcessId,
+    uint64_t expectedCreationTime100ns,
     DWORD* processId,
     HANDLE* processHandle)
 {
-    if (expectedSessionId == 0 || expectedProcessId == 0 ||
+    if (expectedSessionId == 0 || expectedProcessId == 0 || expectedCreationTime100ns == 0 ||
         processId == nullptr || processHandle == nullptr)
         return E_INVALIDARG;
     *processId = 0;
@@ -140,6 +141,25 @@ HRESULT OpenAuthorizedRenterProcess(
         FALSE,
         expectedProcessId);
     if (targetProcess == nullptr) return HRESULT_FROM_WIN32(GetLastError());
+
+    FILETIME creationTime = {};
+    FILETIME exitTime = {};
+    FILETIME kernelTime = {};
+    FILETIME userTime = {};
+    if (!GetProcessTimes(targetProcess, &creationTime, &exitTime, &kernelTime, &userTime))
+    {
+        const DWORD error = GetLastError();
+        CloseHandle(targetProcess);
+        return HRESULT_FROM_WIN32(error);
+    }
+    ULARGE_INTEGER actualCreationTime = {};
+    actualCreationTime.LowPart = creationTime.dwLowDateTime;
+    actualCreationTime.HighPart = creationTime.dwHighDateTime;
+    if (actualCreationTime.QuadPart != expectedCreationTime100ns)
+    {
+        CloseHandle(targetProcess);
+        return HRESULT_FROM_WIN32(ERROR_PROCESS_ABORTED);
+    }
 
     DWORD actualSessionId = 0;
     if (!ProcessIdToSessionId(expectedProcessId, &actualSessionId))
@@ -278,6 +298,7 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
         request->WindowsSessionId == 0 ||
         request->TargetProcessId == 0 ||
         request->Reserved != 0 ||
+        request->TargetProcessCreationTime100ns == 0 ||
         request->ReadTimeoutMs < kMinAudioReadTimeoutMs ||
         request->ReadTimeoutMs > kMaxAudioReadTimeoutMs)
     {
@@ -309,6 +330,7 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
     hr = OpenAuthorizedRenterProcess(
         request->WindowsSessionId,
         request->TargetProcessId,
+        request->TargetProcessCreationTime100ns,
         &value->targetProcessId,
         &value->targetProcess);
     if (FAILED(hr)) return hr;
@@ -433,6 +455,7 @@ HRESULT __stdcall GPUbnbAudioRead(
     UINT64 firstDevicePosition = 0;
     UINT64 firstQpcPosition = 0;
     bool haveFirstPosition = false;
+    bool uncertainTimestamp = false;
     bool allSilent = true;
     for (;;)
     {
@@ -489,6 +512,11 @@ HRESULT __stdcall GPUbnbAudioRead(
         }
         if ((bufferFlags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0)
             result->Flags |= GPUBNB_AUDIO_PACKET_DISCONTINUITY;
+        if ((bufferFlags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) != 0)
+        {
+            uncertainTimestamp = true;
+            result->Flags |= GPUBNB_AUDIO_PACKET_DISCONTINUITY;
+        }
 
         hr = capture->audioCapture->ReleaseBuffer(frames);
         if (FAILED(hr)) return hr;
@@ -499,6 +527,7 @@ HRESULT __stdcall GPUbnbAudioRead(
     if (WaitForSingleObject(capture->targetProcess, 0) != WAIT_TIMEOUT)
         return HRESULT_FROM_WIN32(ERROR_PROCESS_ABORTED);
     if (!haveFirstPosition) return S_FALSE;
+    if (uncertainTimestamp) firstQpcPosition = 0;
     if (allSilent) result->Flags |= GPUBNB_AUDIO_PACKET_SILENT;
     else result->Flags &= ~GPUBNB_AUDIO_PACKET_SILENT;
     result->Frames = static_cast<uint32_t>(framesCopied);

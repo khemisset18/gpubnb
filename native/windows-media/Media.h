@@ -177,6 +177,7 @@ struct GPUbnbAudioCaptureRequest
     uint32_t TargetProcessId;
     uint32_t ReadTimeoutMs;
     uint32_t Reserved;
+    uint64_t TargetProcessCreationTime100ns;
 };
 
 // Payload is the selected renter game process tree's WASAPI mix format. It does
@@ -200,7 +201,7 @@ struct GPUbnbAudioPacketResult
 };
 #pragma pack(pop)
 
-static_assert(sizeof(GPUbnbAudioCaptureRequest) == 24, "GPUbnb audio request ABI drift");
+static_assert(sizeof(GPUbnbAudioCaptureRequest) == 32, "GPUbnb audio request ABI drift");
 static_assert(sizeof(GPUbnbAudioPacketResult) == 64, "GPUbnb audio packet ABI drift");
 
 struct GPUbnbAudioCapture;

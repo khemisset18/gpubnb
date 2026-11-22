@@ -30,7 +30,7 @@ pub const MEDIA_PROOF_CAPTURED_FRAME: u32 = 1 << 2;
 pub const MEDIA_PROOF_NVENC_BITSTREAM: u32 = 1 << 3;
 pub const MEDIA_FRAME_FLAG_KEYFRAME: u32 = 1 << 0;
 pub const AUDIO_CAPTURE_ABI_VERSION: u32 = 1;
-pub const AUDIO_CAPTURE_REQUEST_SIZE: usize = 24;
+pub const AUDIO_CAPTURE_REQUEST_SIZE: usize = 32;
 pub const AUDIO_PACKET_RESULT_SIZE: usize = 64;
 pub const MAX_AUDIO_PACKET_BYTES: usize = 512 * 1024;
 pub const MEDIA_REQUIRED_PROOFS: u32 = MEDIA_PROOF_EXACT_GPU
@@ -233,6 +233,9 @@ pub struct AudioCaptureRequest {
     pub windows_session_id: u32,
     pub target_process_id: u32,
     pub read_timeout_ms: u32,
+    /// FILETIME creation timestamp (100 ns units since 1601-01-01 UTC) from
+    /// the process handle returned by the authorized game launcher.
+    pub target_process_creation_time_100ns: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -330,10 +333,11 @@ impl AudioCaptureSession {
 
     /// Stops the process-loopback client on its owning worker thread and
     /// reports failure to the session lifecycle instead of hiding it in Drop.
-    pub fn close(mut self) -> Result<(), MediaProbeError> {
+    pub fn close(self) -> Result<(), MediaProbeError> {
         #[cfg(target_os = "windows")]
         {
-            windows_impl::close_audio_capture_session(&mut self.inner)
+            let mut session = self;
+            windows_impl::close_audio_capture_session(&mut session.inner)
         }
         #[cfg(not(target_os = "windows"))]
         {
@@ -350,6 +354,7 @@ fn encode_audio_capture_request(
     if request.windows_session_id == 0
         || request.target_process_id == 0
         || !(10..=150).contains(&request.read_timeout_ms)
+        || request.target_process_creation_time_100ns == 0
     {
         return Err(MediaProbeError::InvalidRequest);
     }
@@ -360,6 +365,7 @@ fn encode_audio_capture_request(
     wire[12..16].copy_from_slice(&request.target_process_id.to_le_bytes());
     wire[16..20].copy_from_slice(&request.read_timeout_ms.to_le_bytes());
     // 20..24 is the strict-zero reserved field.
+    wire[24..32].copy_from_slice(&request.target_process_creation_time_100ns.to_le_bytes());
     Ok(wire)
 }
 
@@ -1340,26 +1346,34 @@ mod tests {
         assert!(CPP_MEDIA_HEADER.contains("struct GPUbnbAudioCaptureRequest"));
         assert!(CPP_MEDIA_HEADER.contains("struct GPUbnbAudioPacketResult"));
         assert!(CPP_MEDIA_HEADER.contains("uint32_t ReadTimeoutMs;"));
+        assert!(CPP_MEDIA_HEADER.contains("uint64_t TargetProcessCreationTime100ns;"));
         assert!(CPP_MEDIA_HEADER.contains("GPUbnbAudioOpenForRenterProcess"));
         assert!(CPP_MEDIA_HEADER.contains("GPUbnbAudioRead"));
         assert!(CPP_MEDIA_HEADER.contains("GPUbnbAudioClose"));
-        assert!(CPP_MEDIA_HEADER.contains("sizeof(GPUbnbAudioCaptureRequest) == 24"));
+        assert!(CPP_MEDIA_HEADER.contains("sizeof(GPUbnbAudioCaptureRequest) == 32"));
         assert!(CPP_MEDIA_HEADER.contains("sizeof(GPUbnbAudioPacketResult) == 64"));
+        assert!(CPP_MEDIA_HEADER.contains("GPUBNB_AUDIO_PACKET_MAX_BYTES = 512u * 1024u"));
         assert_eq!(AUDIO_CAPTURE_ABI_VERSION, 1);
+        assert_eq!(MAX_AUDIO_PACKET_BYTES, 512 * 1024);
 
         let request = AudioCaptureRequest {
             windows_session_id: 17,
             target_process_id: 2048,
             read_timeout_ms: 25,
+            target_process_creation_time_100ns: 0x1122_3344_5566_7788,
         };
         let wire = encode_audio_capture_request(request).expect("valid audio request");
-        assert_eq!(wire.len(), 24);
-        assert_eq!(&wire[0..4], &24u32.to_le_bytes());
+        assert_eq!(wire.len(), 32);
+        assert_eq!(&wire[0..4], &32u32.to_le_bytes());
         assert_eq!(&wire[4..8], &1u32.to_le_bytes());
         assert_eq!(&wire[8..12], &17u32.to_le_bytes());
         assert_eq!(&wire[12..16], &2048u32.to_le_bytes());
         assert_eq!(&wire[16..20], &25u32.to_le_bytes());
         assert_eq!(&wire[20..24], &[0u8; 4]);
+        assert_eq!(
+            &wire[24..32],
+            &0x1122_3344_5566_7788u64.to_le_bytes()
+        );
 
         for invalid in [
             AudioCaptureRequest {
@@ -1378,6 +1392,10 @@ mod tests {
                 read_timeout_ms: 151,
                 ..request
             },
+            AudioCaptureRequest {
+                target_process_creation_time_100ns: 0,
+                ..request
+            },
         ] {
             assert_eq!(
                 encode_audio_capture_request(invalid),
@@ -1389,11 +1407,13 @@ mod tests {
     #[test]
     fn cpp_audio_capture_uses_process_loopback_and_shared_event_buffering() {
         const CPP_AUDIO_SOURCE: &str = include_str!("../../windows-media/Audio.cpp");
+        assert!(CPP_AUDIO_SOURCE.contains("GetProcessTimes(targetProcess"));
         assert!(CPP_AUDIO_SOURCE.contains("AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK"));
         assert!(CPP_AUDIO_SOURCE.contains("PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE"));
         assert!(CPP_AUDIO_SOURCE.contains("AUDCLNT_STREAMFLAGS_EVENTCALLBACK"));
         assert!(CPP_AUDIO_SOURCE.contains("capture->readTimeoutMs"));
         assert!(CPP_AUDIO_SOURCE.contains("WaitForMultipleObjects("));
+        assert!(CPP_AUDIO_SOURCE.contains("AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR"));
         assert!(CPP_AUDIO_SOURCE.contains(
             "AUDCLNT_STREAMFLAGS_NOPERSIST,\n        0,\n        0,"
         ));
@@ -1419,6 +1439,29 @@ mod tests {
         assert!(packet.discontinuity);
         assert_eq!(packet.bytes, payload);
 
+        for (format, bytes_per_sample) in [
+            (AudioSampleFormat::IeeeFloat32, 4usize),
+            (AudioSampleFormat::PcmUint8, 1),
+            (AudioSampleFormat::PcmInt16, 2),
+            (AudioSampleFormat::PcmInt24, 3),
+            (AudioSampleFormat::PcmInt32, 4),
+        ] {
+            let payload = vec![0x5a; 4 * bytes_per_sample];
+            let result = audio_result(
+                expected,
+                format,
+                2,
+                0,
+                payload.len() as u32,
+            );
+            assert_eq!(
+                decode_audio_packet(&result, &payload, expected)
+                    .expect("supported PCM format")
+                    .sample_format,
+                format
+            );
+        }
+
         assert_eq!(
             decode_audio_packet(&wire, &vec![0x5a; 15], expected).err(),
             Some(MediaProbeError::InvalidResult)
@@ -1429,6 +1472,18 @@ mod tests {
                 &payload,
                 AudioCaptureIdentity {
                     target_process_id: 2049,
+                    ..expected
+                },
+            )
+            .err(),
+            Some(MediaProbeError::InvalidResult)
+        );
+        assert_eq!(
+            decode_audio_packet(
+                &wire,
+                &payload,
+                AudioCaptureIdentity {
+                    windows_session_id: 18,
                     ..expected
                 },
             )
@@ -1474,6 +1529,7 @@ mod tests {
                 windows_session_id: 17,
                 target_process_id: 2048,
                 read_timeout_ms: 25,
+                target_process_creation_time_100ns: 0x1122_3344_5566_7788,
             };
             assert!(matches!(
                 AudioCaptureSession::open(request),

@@ -2,8 +2,11 @@
 
 `GPUbnbAudioOpenForRenterProcess` is a low-level WASAPI process-loopback
 capture primitive. The caller must pass the exact Windows session ID and PID
-of the authorized game process. The DLL verifies that both it and the target
-process are alive in the same Windows session and run under the same user SID.
+of the authorized game process, plus its creation timestamp from the process
+handle returned by the authorized game launcher. The timestamp uses Windows
+FILETIME units (100 ns since 1601-01-01 UTC), which rejects a stale/reused PID.
+The DLL verifies that both it and the target process are alive in the same
+Windows session and run under the same user SID.
 It captures the target process and its child processes only; it does not open
 the system render endpoint or capture the system-wide mix.
 
@@ -17,7 +20,9 @@ system-wide loopback.
 The request's `ReadTimeoutMs` (10–150 ms) bounds how long a packet read waits;
 it does not change the WASAPI engine period. Shared-mode event-driven capture
 passes zero buffer and periodicity values to `IAudioClient::Initialize`, as
-required by that buffering mode.
+required by that buffering mode. If WASAPI reports an uncertain timestamp, the
+packet is marked discontinuous and its QPC timestamp is zeroed for downstream
+synchronization.
 
 This ABI is not yet connected to the Windows stream helper, the authenticated
 gateway, an audio encoder, or browser playback. It provides no audio/video
