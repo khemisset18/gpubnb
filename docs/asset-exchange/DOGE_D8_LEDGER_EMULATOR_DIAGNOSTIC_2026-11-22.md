@@ -62,3 +62,10 @@ activation ni contournement. La qualification D8 demeure **BLOCKED**.
 
 Les tests unitaires du parseur peuvent être lancés sans émulateur :
 \`python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_emulator_probe.py' -v\`.
+
+
+## Étape suivante : tentative de signature synthétique
+
+Un scénario distinct construit un faux UTXO DOGE de **5 DOGE fictifs** (octets locaux, non publiés) et un paiement P2PKH de **4,99 DOGE fictifs**, avec **0,01 DOGE fictif de frais**. Il demande l'approbation à l'écran émulé uniquement après la lecture des montants et de l'étiquette d'adresse, puis vérifie une éventuelle signature ECDSA secp256k1 et le rejet cryptographique d'une transaction dont la sortie a été mutée de 1 koinu. Les réponses de refus/échec sont conservées comme diagnostics, sans signature de repli.
+
+Le test ne prouve pas l'affichage complet et indépendant de tous les champs ; une approbation simulée n'est jamais assimilée à un opérateur humain. Aucun serveur Dogecoin, UTXO réel, RPC, transaction diffusée, clé utilisateur, Trust Wallet ni réseau externe. Si le pilote legacy DOGE ne permet pas cette séquence, **l'échec est réel et D8 reste BLOCKED**, pas artificiellement promu PASS. Une signature P2PKH classique ne prouverait pas l'HTLC/CLTV Regtest exigé par GPUbnb.
