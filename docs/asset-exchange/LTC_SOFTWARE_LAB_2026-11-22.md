@@ -535,3 +535,44 @@ récupérable ou signée, aucune preuve de chaîne ni de contrôle des fonds.
 Le SHA-256 public non authentifié n'est pas une preuve de provenance.
 Aucune activation, signature, émission, nœud, RPC ou fonds réels.
 L8 et L9 restent différés.
+
+## Complément L7 — modèle synthétique de désaccord des observateurs
+
+Deux fichiers additifs isolés ont été publiés sur la branche LTC :
+
+- `synthetic_watcher_disagreement.py` : examine **exactement deux
+  dictionnaires publics fictifs** portant les statuts MEMPOOL,
+  CONFIRMED, CONFLICTED, REORGED ou UNKNOWN. L'identité de réseau
+  `litecoin/regtest` et le genesis sont figés. Le validateur
+  refuse les champs inconnus, MWEB, les mauvaises identités, les
+  hashes incorrects, les statuts incohérents et les fausses secondes
+  sources portant le même libellé.
+- `test_synthetic_watcher_disagreement.py` : **32 méthodes
+  unitaires distinctes ajoutées**, couvrant accord non authentifié,
+  désaccord de confirmations/head/blockhash, données périmées,
+  conflit, réorganisation, source absente/dupliquée, mutations
+  de champs, interdiction de permissions et absence d'accès
+  aux fichiers.
+
+Les deux fichiers sont **publiés** et leurs empreintes Git ont été
+consultées :
+`3be698c5b99c425cdf6dbd853f3e13363643e6f5`
+et `de35473906f7913dfc4af02f53216fa2327b0aab`.
+
+**Exécution : NON ENCORE ATTESTÉE** pour ces 32 tests.
+Le dernier total WSL2 confirmé reste **140/140 PASS**. Nouveau
+total attendu après fetch : **172 tests distincts (140 + 32)**.
+
+Une paire de libellés de sources distincts n'établit **jamais**
+l'indépendance réelle des observateurs ; des données JSON cohérentes
+ne prouvent pas un bloc ou une confirmation. C'est un modèle
+déterministe d'états d'incertitude, pas un watcher et pas un
+client RPC. Tous les résultats renvoient `canAdvance=false`,
+`canRefund=false`, `canSign=false`, `canBroadcast=false`,
+`realChainEvidenceVerified=false`, et
+`automaticSettlementSupported=false`.
+
+**L7 reste BLOQUÉ** : aucun vrai nœud, aucune source indépendante
+authentifiée, aucune démonstration native de reorg et aucune preuve
+de finalité financière. Ce module ne modifie ni le runtime, ni DOGE,
+ni le registre d'activation. L8/L9 restent différés.
