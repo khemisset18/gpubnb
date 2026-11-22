@@ -28,10 +28,9 @@ using Microsoft::WRL::RuntimeClassFlags;
 
 namespace
 {
-constexpr uint32_t kMinAudioBufferMs = 10;
-constexpr uint32_t kMaxAudioBufferMs = 100;
+constexpr uint32_t kMinAudioReadTimeoutMs = 10;
+constexpr uint32_t kMaxAudioReadTimeoutMs = 150;
 constexpr DWORD kAudioActivationTimeoutMs = 5000;
-constexpr DWORD kAudioReadTimeoutMs = 150;
 constexpr uint32_t kMinSampleRate = 8000;
 constexpr uint32_t kMaxSampleRate = 192000;
 constexpr uint16_t kMaxChannels = 8;
@@ -255,6 +254,7 @@ struct GPUbnbAudioCapture
 
     uint32_t windowsSessionId = 0;
     DWORD targetProcessId = 0;
+    DWORD readTimeoutMs = kMaxAudioReadTimeoutMs;
     DWORD ownerThreadId = 0;
     HANDLE targetProcess = nullptr;
     HANDLE audioEvent = nullptr;
@@ -278,8 +278,8 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
         request->WindowsSessionId == 0 ||
         request->TargetProcessId == 0 ||
         request->Reserved != 0 ||
-        request->BufferDurationMs < kMinAudioBufferMs ||
-        request->BufferDurationMs > kMaxAudioBufferMs)
+        request->ReadTimeoutMs < kMinAudioReadTimeoutMs ||
+        request->ReadTimeoutMs > kMaxAudioReadTimeoutMs)
     {
         return E_INVALIDARG;
     }
@@ -304,6 +304,7 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
     value->comInitialized = true;
     value->ownerThreadId = GetCurrentThreadId();
     value->windowsSessionId = request->WindowsSessionId;
+    value->readTimeoutMs = request->ReadTimeoutMs;
 
     hr = OpenAuthorizedRenterProcess(
         request->WindowsSessionId,
@@ -352,6 +353,14 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
     ComPtr<IUnknown> activated;
     hr = handler->GetResult(&activated);
     if (FAILED(hr) || !activated) return FAILED(hr) ? hr : E_NOINTERFACE;
+
+    // Process-loopback activation accepts a PID rather than the validated
+    // process HANDLE. Recheck that HANDLE after the asynchronous activation so
+    // a process exit/PID-reuse race can never yield a readable capture session.
+    // No packet is exposed until this function returns successfully.
+    if (WaitForSingleObject(value->targetProcess, 0) != WAIT_TIMEOUT)
+        return HRESULT_FROM_WIN32(ERROR_PROCESS_ABORTED);
+
     hr = activated.As(&value->audioClient);
     if (FAILED(hr)) return hr;
 
@@ -360,15 +369,16 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
     hr = ResolveSupportedFormat(value->mixFormat, &value->sampleFormat);
     if (FAILED(hr)) return hr;
 
-    const REFERENCE_TIME duration =
-        static_cast<REFERENCE_TIME>(request->BufferDurationMs) * 10000;
+    // Shared-mode event-driven WASAPI requires both duration parameters to be
+    // zero; the audio engine chooses its native period. ReadTimeoutMs bounds
+    // only our wait below and does not attempt to reconfigure that period.
     hr = value->audioClient->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_LOOPBACK |
             AUDCLNT_STREAMFLAGS_EVENTCALLBACK |
             AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
             AUDCLNT_STREAMFLAGS_NOPERSIST,
-        duration,
+        0,
         0,
         value->mixFormat,
         nullptr);
@@ -407,8 +417,15 @@ HRESULT __stdcall GPUbnbAudioRead(
     if (WaitForSingleObject(capture->targetProcess, 0) != WAIT_TIMEOUT)
         return HRESULT_FROM_WIN32(ERROR_PROCESS_ABORTED);
 
-    const DWORD wait = WaitForSingleObject(capture->audioEvent, kAudioReadTimeoutMs);
+    const HANDLE waitHandles[] = {capture->audioEvent, capture->targetProcess};
+    const DWORD wait = WaitForMultipleObjects(
+        2,
+        waitHandles,
+        FALSE,
+        capture->readTimeoutMs);
     if (wait == WAIT_TIMEOUT) return S_FALSE;
+    if (wait == WAIT_OBJECT_0 + 1)
+        return HRESULT_FROM_WIN32(ERROR_PROCESS_ABORTED);
     if (wait != WAIT_OBJECT_0) return HRESULT_FROM_WIN32(GetLastError());
 
     uint64_t framesCopied = 0;
@@ -479,6 +496,8 @@ HRESULT __stdcall GPUbnbAudioRead(
         framesCopied += frames;
     }
 
+    if (WaitForSingleObject(capture->targetProcess, 0) != WAIT_TIMEOUT)
+        return HRESULT_FROM_WIN32(ERROR_PROCESS_ABORTED);
     if (!haveFirstPosition) return S_FALSE;
     if (allSilent) result->Flags |= GPUBNB_AUDIO_PACKET_SILENT;
     else result->Flags &= ~GPUBNB_AUDIO_PACKET_SILENT;

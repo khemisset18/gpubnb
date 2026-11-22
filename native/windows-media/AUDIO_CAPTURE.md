@@ -14,6 +14,11 @@ unsupported mix format, Windows audio service failure or device error is a
 capture failure and must stop/revoke the session rather than fall back to
 system-wide loopback.
 
+The request's `ReadTimeoutMs` (10–150 ms) bounds how long a packet read waits;
+it does not change the WASAPI engine period. Shared-mode event-driven capture
+passes zero buffer and periodicity values to `IAudioClient::Initialize`, as
+required by that buffering mode.
+
 This ABI is not yet connected to the Windows stream helper, the authenticated
 gateway, an audio encoder, or browser playback. It provides no audio/video
 clock synchronization, device-change recovery or end-to-end STOP test. The

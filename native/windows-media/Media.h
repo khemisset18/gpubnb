@@ -175,7 +175,7 @@ struct GPUbnbAudioCaptureRequest
     uint32_t Version;
     uint32_t WindowsSessionId;
     uint32_t TargetProcessId;
-    uint32_t BufferDurationMs;
+    uint32_t ReadTimeoutMs;
     uint32_t Reserved;
 };
 
