@@ -749,7 +749,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                             console_mode: console,
                         },
                         audio_capture.as_mut(),
-                        gaming_application.as_ref().map(RenterApplicationProcess::identity),
+                        gaming_application
+                            .as_ref()
+                            .map(RenterApplicationProcess::identity),
                         &media,
                     )?;
                     media_session = Some(session);
