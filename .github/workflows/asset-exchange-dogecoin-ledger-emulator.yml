@@ -32,7 +32,13 @@ jobs:
           cd "$APP_ROOT"
           git checkout --detach "$LEDGER_APP_SHA"
           test "$(git rev-parse HEAD)" = "$LEDGER_APP_SHA"
+          # Historic upstream .gitmodules points to an inaccessible *-dev SSH URL.
+          # Use the public Ledger mirror ONLY for the identical pinned gitlink SHA.
+          git config -f .gitmodules submodule.lib-app-bitcoin.url https://github.com/LedgerHQ/lib-app-bitcoin.git
+          git submodule sync --recursive
           git submodule update --init --recursive
+          test "$(git -C lib-app-bitcoin rev-parse HEAD)" = "2664e6e10e2df7b8ec35aec87c30503f4661682b"
+          git -C lib-app-bitcoin remote get-url origin
           git status --porcelain
       - name: Confirm Dogecoin source identity without claiming a Regtest profile
         shell: bash
