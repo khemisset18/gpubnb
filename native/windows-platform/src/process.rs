@@ -195,6 +195,7 @@ pub struct RenterWorkerLaunchSpec<'a> {
     pub generation: u64,
     pub gpu_uuid: &'a str,
     pub workspace: &'a str,
+    pub application: Option<&'a str>,
 }
 
 fn safe_session_id(value: &str) -> bool {
@@ -216,7 +217,13 @@ fn canonical_gpu_uuid(value: &str) -> bool {
 }
 
 fn allowed_workspace(value: &str) -> bool {
-    matches!(value, "cloud-desktop" | "creator" | "cad" | "gaming")
+    matches!(value, "cloud-desktop" | "gaming")
+}
+
+fn qualified_steam_application_path_str(path: &str) -> bool {
+    QUALIFIED_STEAM_APPLICATIONS
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(path))
 }
 
 fn validate_worker_launch_spec(spec: RenterWorkerLaunchSpec<'_>) -> Result<(), PlatformError> {
@@ -226,6 +233,11 @@ fn validate_worker_launch_spec(spec: RenterWorkerLaunchSpec<'_>) -> Result<(), P
         || !allowed_workspace(spec.workspace)
     {
         return Err(PlatformError::InvalidPath);
+    }
+    match (spec.workspace, spec.application) {
+        ("cloud-desktop", None) => {}
+        ("gaming", Some(path)) if qualified_steam_application_path_str(path) => {}
+        _ => return Err(PlatformError::InvalidPath),
     }
     Ok(())
 }
@@ -249,6 +261,11 @@ fn worker_command_line(
     command.push(spec.gpu_uuid);
     command.push(" --workspace ");
     command.push(spec.workspace);
+    if let Some(application) = spec.application {
+        command.push(" --application \"");
+        command.push(application);
+        command.push("\"");
+    }
     Ok(command)
 }
 
@@ -582,10 +599,12 @@ fn gaming_application_command_line(path: &Path) -> Result<OsString, PlatformErro
 }
 
 /// Starts the only currently qualified Gaming entry point, Steam, on the
-/// worker's interactive renter desktop. The caller must still keep Gaming
-/// booking disabled until audio transport and controller proofs are complete.
+/// worker's interactive renter desktop. Gaming stays ineligible for booking
+/// until process-audio isolation and the browser input path pass real PC1-to-PC2
+/// qualification.
 pub fn launch_qualified_gaming_application(
     expected_session_id: u32,
+    application_path: &Path,
 ) -> Result<RenterApplicationProcess, PlatformError> {
     if expected_session_id == 0 {
         return Err(PlatformError::InvalidWindowsSessionId);
@@ -598,23 +617,14 @@ pub fn launch_qualified_gaming_application(
         return Err(PlatformError::RenterTokenSessionMismatch);
     }
 
-    let mut verified = None;
-    for candidate in QUALIFIED_STEAM_APPLICATIONS {
-        let path = Path::new(candidate);
-        match open_application_for_verification(path) {
-            Ok(file) => {
-                if !qualified_steam_application_path(file.path()) {
-                    return Err(PlatformError::InvalidPath);
-                }
-                file.verify_authenticode()?;
-                verified = Some(file);
-                break;
-            }
-            Err(error) if path.exists() => return Err(error),
-            Err(_) => {}
-        }
+    if !application_path.is_absolute() || !qualified_steam_application_path(application_path) {
+        return Err(PlatformError::InvalidPath);
     }
-    let verified = verified.ok_or(PlatformError::OpenFailed)?;
+    let verified = open_application_for_verification(application_path)?;
+    if !qualified_steam_application_path(verified.path()) {
+        return Err(PlatformError::InvalidPath);
+    }
+    verified.verify_authenticode()?;
     let application = wide(verified.path().as_os_str())?;
     let command_line_os = gaming_application_command_line(verified.path())?;
     let mut command_line = wide(command_line_os.as_os_str())?;
@@ -943,6 +953,7 @@ mod tests {
             generation: 1,
             gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             workspace: "cloud-desktop",
+            application: None,
         };
         assert_eq!(validate_worker_launch_spec(good), Ok(()));
 
@@ -963,6 +974,14 @@ mod tests {
                 workspace: "developer",
                 ..good
             },
+            RenterWorkerLaunchSpec {
+                workspace: "gaming",
+                ..good
+            },
+            RenterWorkerLaunchSpec {
+                application: Some(r"C:\Program Files (x86)\Steam\steam.exe"),
+                ..good
+            },
         ] {
             assert_eq!(
                 validate_worker_launch_spec(bad),
@@ -978,6 +997,7 @@ mod tests {
             generation: 7,
             gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             workspace: "gaming",
+            application: Some(r"C:\Program Files (x86)\Steam\steam.exe"),
         };
         let path = Path::new(r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe");
         let command = worker_command_line(path, spec).expect("worker command");
@@ -985,6 +1005,7 @@ mod tests {
         assert!(text.contains("--session-id sess-ABC_123"));
         assert!(text.contains("--generation 7"));
         assert!(text.contains("--workspace gaming"));
+        assert!(text.contains("--application \"C:\\Program Files (x86)\\Steam\\steam.exe\""));
         assert!(!text.contains("cmd.exe"));
         assert!(!text.contains("powershell"));
     }
@@ -1023,7 +1044,11 @@ mod tests {
     #[test]
     fn gaming_application_rejects_the_provider_session_before_launch() {
         assert_eq!(
-            launch_qualified_gaming_application(0).err(),
+            launch_qualified_gaming_application(
+                0,
+                Path::new(r"C:\Program Files (x86)\Steam\steam.exe")
+            )
+            .err(),
             Some(PlatformError::InvalidWindowsSessionId)
         );
     }

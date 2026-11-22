@@ -138,6 +138,8 @@ pub struct StartSessionReport {
     pub generation: u64,
     pub media_port: u16,
     pub media_token: String,
+    pub audio_ready: bool,
+    pub controller_ready: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,7 +186,9 @@ fn random_runtime_identity() -> Result<(u64, [u8; 16]), AuthorityError> {
 
 fn runtime_config<'a>(
     session_id: &'a str,
+    workspace: crate::lifecycle::WorkspaceKind,
     gpu_uuid: &'a str,
+    application_path: Option<&'a str>,
     lease: &'a crate::renter_lease::RenterSessionLease,
     generation: u64,
     display_nonce: [u8; 16],
@@ -192,15 +196,90 @@ fn runtime_config<'a>(
     ServiceRuntimeConfig {
         session_id,
         generation,
-        workspace: crate::lifecycle::WorkspaceKind::CloudDesktop,
+        workspace,
         gpu_uuid,
+        application_path,
         windows_session_id: lease.windows_session_id,
         renter_user_sid: &lease.renter_user_sid,
         provider_user_sid: &lease.provider_user_sid,
         display_nonce,
-        width: 1920,
-        height: 1080,
+        width: if matches!(workspace, crate::lifecycle::WorkspaceKind::Gaming) {
+            1280
+        } else {
+            1920
+        },
+        height: if matches!(workspace, crate::lifecycle::WorkspaceKind::Gaming) {
+            720
+        } else {
+            1080
+        },
         refresh_hz: 60,
+    }
+}
+
+fn validate_runtime_workspace(
+    workspace: &str,
+    application_path: Option<&str>,
+    backend: RuntimeDisplayBackend,
+) -> Result<crate::lifecycle::WorkspaceKind, AuthorityError> {
+    match (workspace, application_path, backend) {
+        ("cloud-desktop", None, _) => Ok(crate::lifecycle::WorkspaceKind::CloudDesktop),
+        ("gaming", Some(path), RuntimeDisplayBackend::IddCx)
+            if [
+                r"C:\Program Files (x86)\Steam\steam.exe",
+                r"C:\Program Files\Steam\steam.exe",
+            ]
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(path)) =>
+        {
+            Ok(crate::lifecycle::WorkspaceKind::Gaming)
+        }
+        _ => Err(AuthorityError::UnsupportedWorkspace),
+    }
+}
+
+#[cfg(test)]
+mod runtime_workspace_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_workspace_accepts_only_supported_app_backend_pairs() {
+        assert_eq!(
+            validate_runtime_workspace("cloud-desktop", None, RuntimeDisplayBackend::IddCx),
+            Ok(crate::lifecycle::WorkspaceKind::CloudDesktop)
+        );
+        assert_eq!(
+            validate_runtime_workspace(
+                "gaming",
+                Some(r"C:\Program Files (x86)\Steam\steam.exe"),
+                RuntimeDisplayBackend::IddCx
+            ),
+            Ok(crate::lifecycle::WorkspaceKind::Gaming)
+        );
+        assert_eq!(
+            validate_runtime_workspace(
+                "gaming",
+                Some(r"C:\Program Files (x86)\Steam\steam.exe"),
+                RuntimeDisplayBackend::DedicatedConsole
+            ),
+            Err(AuthorityError::UnsupportedWorkspace)
+        );
+        assert_eq!(
+            validate_runtime_workspace(
+                "gaming",
+                Some(r"C:\Users\Owner\Downloads\steam.exe"),
+                RuntimeDisplayBackend::IddCx
+            ),
+            Err(AuthorityError::UnsupportedWorkspace)
+        );
+        assert_eq!(
+            validate_runtime_workspace(
+                "creator",
+                Some(r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"),
+                RuntimeDisplayBackend::IddCx
+            ),
+            Err(AuthorityError::UnsupportedWorkspace)
+        );
     }
 }
 
@@ -336,7 +415,9 @@ fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestRepor
         let (generation, display_nonce) = random_runtime_identity()?;
         let config = runtime_config(
             &session_id,
+            crate::lifecycle::WorkspaceKind::CloudDesktop,
             &lease.gpu_uuid,
+            None,
             &lease,
             generation,
             display_nonce,
@@ -436,6 +517,16 @@ fn parse_backend_ready(
         .next()
         .ok_or(AuthorityError::ControlProtocol)?
         .to_owned();
+    let audio_ready = match parts.next() {
+        Some("1") => true,
+        Some("0") => false,
+        _ => return Err(AuthorityError::ControlProtocol),
+    };
+    let controller_ready = match parts.next() {
+        Some("1") => true,
+        Some("0") => false,
+        _ => return Err(AuthorityError::ControlProtocol),
+    };
     if generation == 0
         || media_port == 0
         || media_token.len() != 64
@@ -450,6 +541,8 @@ fn parse_backend_ready(
         generation,
         media_port,
         media_token,
+        audio_ready,
+        controller_ready,
     })
 }
 
@@ -474,11 +567,13 @@ pub fn start_session(
     session_id: &str,
     workspace: &str,
     gpu_uuid: &str,
+    application_path: Option<&str>,
 ) -> Result<StartSessionReport, AuthorityError> {
     start_session_backend(
         session_id,
         workspace,
         gpu_uuid,
+        application_path,
         RuntimeDisplayBackend::IddCx,
     )
 }
@@ -487,11 +582,13 @@ pub fn start_console_session(
     session_id: &str,
     workspace: &str,
     gpu_uuid: &str,
+    application_path: Option<&str>,
 ) -> Result<StartSessionReport, AuthorityError> {
     start_session_backend(
         session_id,
         workspace,
         gpu_uuid,
+        application_path,
         RuntimeDisplayBackend::DedicatedConsole,
     )
 }
@@ -500,18 +597,17 @@ fn start_session_backend(
     session_id: &str,
     workspace: &str,
     gpu_uuid: &str,
+    application_path: Option<&str>,
     backend: RuntimeDisplayBackend,
 ) -> Result<StartSessionReport, AuthorityError> {
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (session_id, workspace, gpu_uuid, backend);
+        let _ = (session_id, workspace, gpu_uuid, application_path, backend);
         return Err(AuthorityError::WindowsRequired);
     }
     #[cfg(target_os = "windows")]
     {
-        if workspace != "cloud-desktop" {
-            return Err(AuthorityError::UnsupportedWorkspace);
-        }
+        validate_runtime_workspace(workspace, application_path, backend)?;
         let _lease = verified_lease(gpu_uuid)?;
 
         if control_request(session_id, "STATUS", 100, 1_000).is_ok() {
@@ -535,6 +631,9 @@ fn start_session_backend(
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        if let Some(application_path) = application_path {
+            command.arg("--application").arg(application_path);
+        }
         command.creation_flags(0x0000_0008 | 0x0800_0000);
         let mut child = command.spawn().map_err(|_| AuthorityError::Spawn)?;
 
@@ -746,11 +845,13 @@ pub fn run_authority_child(
     session_id: &str,
     workspace: &str,
     gpu_uuid: &str,
+    application_path: Option<&str>,
 ) -> Result<(), AuthorityError> {
     run_authority_child_backend(
         session_id,
         workspace,
         gpu_uuid,
+        application_path,
         RuntimeDisplayBackend::IddCx,
     )
 }
@@ -759,11 +860,13 @@ pub fn run_console_authority_child(
     session_id: &str,
     workspace: &str,
     gpu_uuid: &str,
+    application_path: Option<&str>,
 ) -> Result<(), AuthorityError> {
     run_authority_child_backend(
         session_id,
         workspace,
         gpu_uuid,
+        application_path,
         RuntimeDisplayBackend::DedicatedConsole,
     )
 }
@@ -772,11 +875,12 @@ fn run_authority_child_backend(
     session_id: &str,
     workspace: &str,
     gpu_uuid: &str,
+    application_path: Option<&str>,
     backend: RuntimeDisplayBackend,
 ) -> Result<(), AuthorityError> {
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (session_id, workspace, gpu_uuid, backend);
+        let _ = (session_id, workspace, gpu_uuid, application_path, backend);
         return Err(AuthorityError::WindowsRequired);
     }
     #[cfg(target_os = "windows")]
@@ -784,9 +888,7 @@ fn run_authority_child_backend(
         if env::var(AUTHORITY_CHILD_ENV).ok().as_deref() != Some("1") {
             return Err(AuthorityError::ControlProtocol);
         }
-        if workspace != "cloud-desktop" {
-            return Err(AuthorityError::UnsupportedWorkspace);
-        }
+        let workspace_kind = validate_runtime_workspace(workspace, application_path, backend)?;
 
         let owner_sid = current_process_user_sid().map_err(|_| AuthorityError::ControlPipe)?;
         // FIRST_PIPE_INSTANCE is the single-authority lock for this GPUbnb session.
@@ -795,7 +897,15 @@ fn run_authority_child_backend(
 
         let lease = verified_lease(gpu_uuid)?;
         let (generation, display_nonce) = random_runtime_identity()?;
-        let config = runtime_config(session_id, gpu_uuid, &lease, generation, display_nonce);
+        let config = runtime_config(
+            session_id,
+            workspace_kind,
+            gpu_uuid,
+            application_path,
+            &lease,
+            generation,
+            display_nonce,
+        );
         let runtime = match backend {
             RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
             RuntimeDisplayBackend::DedicatedConsole => {
@@ -835,19 +945,27 @@ fn run_authority_child_backend(
             let mut exit_after_response = false;
             let response = match request {
                 "START" if !start_reported => {
-                    let media_token = runtime
+                    let guard = runtime
                         .lock()
-                        .map_err(|_| AuthorityError::ControlPipe)?
-                        .as_ref()
-                        .and_then(QualifiedGraphicsRuntime::media_token)
+                        .map_err(|_| AuthorityError::ControlPipe)?;
+                    let active = guard.as_ref().ok_or(AuthorityError::MediaProof)?;
+                    let media_token = active
+                        .media_token()
                         .map(str::to_owned)
                         .ok_or(AuthorityError::MediaProof)?;
+                    let audio_ready = active.audio_ready();
+                    let controller_ready = active.controller_ready();
                     start_reported = true;
                     let tag = match backend {
                         RuntimeDisplayBackend::IddCx => "READY",
                         RuntimeDisplayBackend::DedicatedConsole => "READY_CONSOLE",
                     };
-                    format!("{tag}|{generation}|{}|{media_token}", endpoint.port())
+                    format!(
+                        "{tag}|{generation}|{}|{media_token}|{}|{}",
+                        endpoint.port(),
+                        u8::from(audio_ready),
+                        u8::from(controller_ready)
+                    )
                 }
                 "START" => "ERR|already_running".to_owned(),
                 "STATUS" => {
@@ -1001,14 +1119,17 @@ mod tests {
 
     #[test]
     fn ready_response_is_strict() {
-        let value =
-            "READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let value = "READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|1|1";
         let parsed = parse_ready(value).expect("ready");
         assert_eq!(parsed.generation, 42);
         assert_eq!(parsed.media_port, 54321);
         assert_eq!(parsed.media_token.len(), 64);
+        assert!(parsed.audio_ready);
+        assert!(parsed.controller_ready);
         assert!(parse_ready("READY|0|54321|bad").is_err());
         assert!(parse_ready("READY|42|0|0123").is_err());
+        assert!(parse_ready("READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|2|1").is_err());
+        assert!(parse_ready("READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|1|1|extra").is_err());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1019,7 +1140,8 @@ mod tests {
             start_session(
                 "sess-1",
                 "cloud-desktop",
-                "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"
+                "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+                None,
             ),
             Err(AuthorityError::WindowsRequired)
         );

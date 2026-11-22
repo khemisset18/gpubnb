@@ -161,7 +161,7 @@
           PRIVATE_WINDOWS_HOST_NOT_READY:'PC1 ne prouve pas encore sa capacité Windows native.',
           PRIVATE_WINDOWS_HOST_RESERVED:'PC1 est déjà réservé par une autre session.',
           windows_native_audio_not_qualified:'Cloud Desktop reste bloqué : le flux audio doit encore être qualifié sur PC1 et PC2.',
-          windows_native_audio_controller_not_qualified:'Gaming reste bloqué : le flux audio, la manette native et l’isolation doivent encore être qualifiés.',
+          windows_native_audio_controller_not_qualified:'Gaming reste bloqué : l’audio, le mode manette navigateur et l’isolation doivent encore être qualifiés sur PC1 et PC2. Les jeux qui exigent XInput ne sont pas pris en charge.',
         }[preflight.code]||'Préconditions privées manquantes.';
         throw new Error(reason+' Aucune réservation créée.');
       }

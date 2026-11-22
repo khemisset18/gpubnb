@@ -77,6 +77,7 @@ struct WorkerArgs {
     generation: u64,
     gpu_uuid: String,
     workspace: WorkspaceKind,
+    application: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,11 +182,21 @@ fn take_value(
         .ok_or_else(|| WorkerError::new(missing, 2))
 }
 
+fn qualified_steam_application_path(value: &str) -> bool {
+    [
+        r"C:\Program Files (x86)\Steam\steam.exe",
+        r"C:\Program Files\Steam\steam.exe",
+    ]
+    .iter()
+    .any(|candidate| candidate.eq_ignore_ascii_case(value))
+}
+
 fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
     let mut session_id = None;
     let mut generation = None;
     let mut gpu_uuid = None;
     let mut workspace = None;
+    let mut application = None;
     let mut index = 0usize;
 
     while index < args.len() {
@@ -207,6 +218,9 @@ fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
                 let raw = take_value(args, &mut index, "missing_workspace")?;
                 workspace = Some(parse_workspace(&raw)?);
             }
+            "--application" if application.is_none() => {
+                application = Some(take_value(args, &mut index, "missing_application")?);
+            }
             _ => return Err(WorkerError::new("unknown_or_duplicate_argument", 2)),
         }
         index += 1;
@@ -226,12 +240,18 @@ fn parse_args(args: &[String]) -> Result<WorkerArgs, WorkerError> {
     if !valid_gpu_uuid(&gpu_uuid) {
         return Err(WorkerError::new("invalid_gpu_uuid", 2));
     }
+    match (workspace, application.as_deref()) {
+        (WorkspaceKind::CloudDesktop, None) => {}
+        (WorkspaceKind::Gaming, Some(path)) if qualified_steam_application_path(path) => {}
+        _ => return Err(WorkerError::new("application_not_qualified", 2)),
+    }
 
     Ok(WorkerArgs {
         session_id,
         generation,
         gpu_uuid,
         workspace,
+        application,
     })
 }
 
@@ -707,10 +727,15 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     {
                         ensure_current_renter_input_desktop(windows_session_id)
                             .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
-                        let application = launch_qualified_gaming_application(windows_session_id)
-                            .map_err(|_| {
-                            WorkerError::new("gaming_application_launch_failed", 21)
-                        })?;
+                        let application_path = args
+                            .application
+                            .as_deref()
+                            .ok_or_else(|| WorkerError::new("gaming_application_missing", 21))?;
+                        let application = launch_qualified_gaming_application(
+                            windows_session_id,
+                            std::path::Path::new(application_path),
+                        )
+                        .map_err(|_| WorkerError::new("gaming_application_launch_failed", 21))?;
                         gaming_application = Some(application);
                     }
                     if matches!(args.workspace, WorkspaceKind::Gaming) && audio_capture.is_none() {
@@ -1105,7 +1130,38 @@ mod tests {
         application.extend(strings(&["--application", r"C:\Windows\System32\cmd.exe"]));
         assert_eq!(
             parse_args(&application),
-            Err(WorkerError::new("unknown_or_duplicate_argument", 2))
+            Err(WorkerError::new("application_not_qualified", 2))
+        );
+    }
+
+    #[test]
+    fn worker_cli_accepts_gaming_only_with_qualified_steam_path() {
+        let mut args = valid_args();
+        let workspace_index = args
+            .iter()
+            .position(|value| value == "cloud-desktop")
+            .expect("workspace");
+        args[workspace_index] = "gaming".to_owned();
+        args.extend(strings(&[
+            "--application",
+            r"C:\Program Files (x86)\Steam\steam.exe",
+        ]));
+        let parsed = parse_args(&args).expect("qualified Steam worker");
+        assert_eq!(parsed.workspace, WorkspaceKind::Gaming);
+        assert_eq!(
+            parsed.application.as_deref(),
+            Some(r"C:\Program Files (x86)\Steam\steam.exe")
+        );
+
+        let mut missing_application = valid_args();
+        let workspace_index = missing_application
+            .iter()
+            .position(|value| value == "cloud-desktop")
+            .expect("workspace");
+        missing_application[workspace_index] = "gaming".to_owned();
+        assert_eq!(
+            parse_args(&missing_application),
+            Err(WorkerError::new("application_not_qualified", 2))
         );
     }
 

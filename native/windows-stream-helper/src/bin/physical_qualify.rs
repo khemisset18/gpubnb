@@ -309,6 +309,7 @@ mod windows {
             generation: args.generation,
             workspace: WorkspaceKind::CloudDesktop,
             gpu_uuid: &args.gpu_uuid,
+            application_path: None,
             windows_session_id: args.windows_session_id,
             renter_user_sid: &args.renter_user_sid,
             provider_user_sid: &args.provider_user_sid,

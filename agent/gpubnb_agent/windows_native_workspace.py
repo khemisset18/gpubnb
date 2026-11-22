@@ -1,9 +1,11 @@
 """Windows-native desktop Workspace contracts and capability preflight.
 
-This module deliberately does *not* make a Workspace bookable by itself.  It
+This module deliberately does *not* make a Workspace bookable by itself. It
 provides the common Windows-native contract for Cloud Desktop, Creator, CAD and
-Gaming and a fail-closed capability probe that can later be wired into the
-heartbeat/API once the native media helper is shipped and physically qualified.
+Gaming, plus a fail-closed generic capability probe. Gaming's generic probe
+does not launch Steam and cannot prove process-scoped audio; the per-session
+helper checks that path after launch. Public eligibility still requires the
+separate real-hardware qualification and server release gate.
 
 The helper contract is intentionally stronger than "Windows + CUDA + enough
 VRAM": a real isolated renter session, a GPUbnb-owned virtual display, a real

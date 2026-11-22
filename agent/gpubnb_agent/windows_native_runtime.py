@@ -221,7 +221,12 @@ def launch_windows_native_workspace(
         )
     if not preflight.gpu_uuid or preflight.gpu_uuid.casefold() != gpu_uuid.casefold():
         raise RuntimeError("native_stream_leased_gpu_mismatch")
-    if profile.requires_audio and not preflight.audio_available:
+    # The generic self-test has no launched renter application to capture.
+    # Gaming's audio readiness is checked after the helper launches the
+    # allowlisted Steam process and opens process-loopback WASAPI for its exact
+    # PID/session/creation time. Cloud Desktop still needs its separate
+    # preflight audio proof.
+    if profile.requires_audio and workspace_slug != "gaming" and not preflight.audio_available:
         raise RuntimeError("workspace_audio_required")
 
     application = discover_native_application(workspace_slug)
@@ -322,6 +327,10 @@ def launch_windows_native_workspace(
     if profile.requires_controller and not controller_ready:
         _raise_after_started_session_validation_failure(
             executable, session_id, "native_workspace_start_controller_required"
+        )
+    if profile.requires_controller and report.get("controllerMode") != "browser-gamepad-keyboard-mouse":
+        _raise_after_started_session_validation_failure(
+            executable, session_id, "native_workspace_start_controller_mode_unsupported"
         )
 
     media_url = _loopback_media_url(report.get("mediaUrl"), session_id)
