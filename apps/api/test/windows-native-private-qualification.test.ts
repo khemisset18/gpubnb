@@ -69,28 +69,37 @@ test('public Windows desktop catalogue remains fail closed', () => {
   );
 });
 
-test('rental GPU authority recognizes only Windows-native Cloud Desktop sessions', () => {
+test('rental GPU authority recognizes the native workspaces used by private qualification', () => {
   assert.match(
     authority,
     /runtimeBackend: WorkspaceRuntimeBackend\.WINDOWS_NATIVE/,
   );
   assert.match(
     authority,
-    /slug: 'cloud-desktop'/,
+    /slug: \{ in: \['cloud-desktop', 'gaming'\] \}/,
   );
   assert.doesNotMatch(
     authority,
     /'security-lab', 'cloud-desktop'/,
   );
 });
-test('private qualification only reads the global Cloud Desktop definition', () => {
+test('private qualification reads the selected global workspace definition', () => {
   assert.match(desktop, /workspaceDefinition\.findUnique/);
   assert.match(
     desktop,
-    /windows_native_qualification_cloud_desktop_definition_missing/,
+    /windows_native_qualification_\$\{slug\.replaceAll\('-', '_'\)\}_definition_missing/,
   );
   assert.doesNotMatch(desktop, /workspaceDefinition\.upsert/);
   assert.doesNotMatch(desktop, /WorkspaceRelease\.UPCOMING/);
+});
+
+test('private Gaming booking preserves workspace identity and never borrows the screen-only gate', () => {
+  assert.match(desktop, /requestedWorkspaceSlug: slug/);
+  assert.match(desktop, /workspace: \{ slug \}/);
+  assert.match(desktop, /const spec = workspaceSpec\[slug\]/);
+  assert.match(desktop, /action: slug === 'gaming'[\s\S]*?WINDOWS_NATIVE_GAMING_SESSION_REQUESTED/);
+  assert.match(desktop, /privateQualificationSourceAllowed\(slug, qualifiedSource, machine\.ownerId, renterId\)/);
+  assert.match(desktop, /windowsNativePrivateMediaReady\(\): boolean \{\s*return false/);
 });
 
 

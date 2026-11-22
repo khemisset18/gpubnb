@@ -15,6 +15,9 @@ test('private preflight is authenticated read-only and requires beta bypass AND 
   assert.match(route, /await requireSession\(request, reply, redis\)/);
   assert.match(route, /Cache-Control', 'no-store'/);
   assert.match(route, /windowsNativePrivateQualificationEnabled\(\)/);
+  assert.match(route, /isWindowsNativePrivateWorkspaceSlug\(requestedWorkspace\)/);
+  assert.match(route, /ownerId: session\.userId/);
+  assert.match(route, /privateQualificationSourceAllowed\(slug, source, host\.ownerId, session\.userId\)/);
   assert.match(route, /nativeDesktopStreamingAvailable: true/);
   assert.match(route, /WINDOWS_NATIVE_GPU_UUID_RE\.test\(uuid\)/);
   assert.match(route, /lastHeartbeatAt/);

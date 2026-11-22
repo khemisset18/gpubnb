@@ -55,11 +55,37 @@ const qualificationBookingStatuses: BookingStatus[] = [
 const WINDOWS_NATIVE_QUALIFICATION_SECONDS = 30 * 60;
 
 /**
- * Private Cloud Desktop qualification stays closed until the process-scoped
- * PCM path is proven on Windows and real PC1/PC2 hardware. The software path
- * exists; isolation, device behavior and STOP are unqualified.
+ * Private media stays closed until real PC1/PC2 audio, input, isolation and
+ * STOP behavior are qualified. Keep workspace-specific reasons so Gaming
+ * cannot be mistaken for a Cloud Desktop qualification.
  */
-const WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON = 'windows_native_audio_not_qualified' as const;
+type WindowsNativePrivateWorkspaceSlug = 'cloud-desktop' | 'gaming';
+const WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASONS: Record<WindowsNativePrivateWorkspaceSlug, string> = {
+  'cloud-desktop': 'windows_native_audio_not_qualified',
+  gaming: 'windows_native_audio_controller_not_qualified',
+};
+
+function isWindowsNativePrivateWorkspaceSlug(value: unknown): value is WindowsNativePrivateWorkspaceSlug {
+  return value === 'cloud-desktop' || value === 'gaming';
+}
+
+function windowsNativePrivateMediaBlockReason(slug: string): string {
+  return slug === 'gaming'
+    ? WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASONS.gaming
+    : WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASONS['cloud-desktop'];
+}
+
+function privateQualificationSourceAllowed(
+  slug: WindowsNativePrivateWorkspaceSlug,
+  source: Awaited<ReturnType<typeof qualificationNativeSource>>,
+  ownerId: string,
+  userId: string,
+): boolean {
+  if (!source || ownerId !== userId) return false;
+  // Gaming must use a separate IddCx renter surface; it may never borrow the
+  // owner's interactive console, even for the private no-payment test.
+  return slug !== 'gaming' || source.captureBackend === 'iddcx';
+}
 
 function windowsNativePrivateMediaReady(): boolean {
   return false;
@@ -163,6 +189,7 @@ async function rearmTimedOutWindowsNativeQualificationHost(
       status: { in: windowsNativePrivateQualificationListingStatuses },
       resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
       machine: {
+        ownerId: renterId,
         connectivity: MachineConnectivity.ONLINE,
         moderationStatus: ModerationStatus.CLEAR,
         operational: MachineOperational.DEGRADED,
@@ -185,6 +212,7 @@ async function rearmTimedOutWindowsNativeQualificationHost(
         machineId: target.machineId,
         status: { in: windowsNativePrivateQualificationListingStatuses },
         resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+        machine: { ownerId: renterId },
       },
       select: {
         id: true,
@@ -403,12 +431,13 @@ async function createWindowsNativeQualificationBooking(
   db: PrismaClient,
   renterId: string,
   redis: Redis,
+  slug: WindowsNativePrivateWorkspaceSlug,
 ) {
   if (!windowsNativePrivateQualificationEnabled()) {
     return { error: 'windows_native_qualification_disabled' as const };
   }
   if (!windowsNativePrivateMediaReady()) {
-    return { error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON };
+    return { error: windowsNativePrivateMediaBlockReason(slug) };
   }
 
   // A never-opened private qualification deliberately leaves the Host DEGRADED.
@@ -420,12 +449,13 @@ async function createWindowsNativeQualificationBooking(
   const existing = await db.booking.findFirst({
     where: {
       buyerId: renterId,
+      requestedWorkspaceSlug: slug,
       status: { in: qualificationBookingStatuses },
       endsAt: { gt: now },
       listing: {
         status: { in: windowsNativePrivateQualificationListingStatuses },
         resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
-        machine: { connectivity: MachineConnectivity.ONLINE },
+        machine: { ownerId: renterId, connectivity: MachineConnectivity.ONLINE },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -443,12 +473,11 @@ async function createWindowsNativeQualificationBooking(
     where: {
       status: { in: windowsNativePrivateQualificationListingStatuses },
       resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
-      // Qualification is a private, no-payment beta path. Unlike the public
-      // marketplace, it intentionally permits the provider account to act as
-      // the renter so the two-PC isolation proof does not require a second
-      // GPUbnb account. The listing remains HIDDEN_OFFLINE and all Windows
-      // native capability checks below still apply.
+      // Private qualification is owner-authorized: the authenticated owner
+      // account must rent its own HIDDEN_OFFLINE host. This needs no second
+      // GPUbnb account and cannot become public marketplace availability.
       machine: {
+        ownerId: renterId,
         connectivity: MachineConnectivity.ONLINE,
         moderationStatus: ModerationStatus.CLEAR,
       },
@@ -507,8 +536,7 @@ async function createWindowsNativeQualificationBooking(
     const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
 
     return (
-      source !== null
-      && (source.captureBackend !== 'console-dedicated' || machine.ownerId === renterId)
+      privateQualificationSourceAllowed(slug, source, machine.ownerId, renterId)
       && listing.accelerators.length === 1
       && Boolean(accelerator)
       && os.startsWith('windows')
@@ -596,6 +624,7 @@ async function createWindowsNativeQualificationBooking(
           id: target.id,
           status: { in: windowsNativePrivateQualificationListingStatuses },
           resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
+          machine: { ownerId: renterId },
         },
         select: {
           id: true,
@@ -652,8 +681,7 @@ async function createWindowsNativeQualificationBooking(
         || !os.startsWith('windows')
         || fresh.machine.connectivity !== MachineConnectivity.ONLINE
         || fresh.machine.moderationStatus !== ModerationStatus.CLEAR
-        || freshSource === null
-        || (freshSource.captureBackend === 'console-dedicated' && fresh.machine.ownerId !== renterId)
+        || !privateQualificationSourceAllowed(slug, freshSource, fresh.machine.ownerId, renterId)
         || !WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid)
         || !freshHeartbeat
         || !(
@@ -689,6 +717,7 @@ async function createWindowsNativeQualificationBooking(
           quotedLamports,
           expectedSeconds: WINDOWS_NATIVE_QUALIFICATION_SECONDS,
           idempotencyKey: randomUUID(),
+          requestedWorkspaceSlug: slug,
           status: BookingStatus.AWAITING_DEPOSIT,
         },
         select: {
@@ -735,12 +764,13 @@ async function createWindowsNativeQualificationSession(
   bookingId: string,
   renterId: string,
   redis: Redis,
+  slug: WindowsNativePrivateWorkspaceSlug,
 ) {
   if (!windowsNativePrivateQualificationEnabled()) {
     return { error: 'windows_native_qualification_disabled' as const };
   }
   if (!windowsNativePrivateMediaReady()) {
-    return { error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON };
+    return { error: windowsNativePrivateMediaBlockReason(slug) };
   }
 
   try {
@@ -751,6 +781,7 @@ async function createWindowsNativeQualificationSession(
         where: {
           id: bookingId,
           buyerId: renterId,
+          requestedWorkspaceSlug: slug,
           status: { in: activeBookings },
           endsAt: { gt: now },
         },
@@ -798,7 +829,7 @@ async function createWindowsNativeQualificationSession(
       const machineReady =
         os.startsWith('windows')
         && qualifiedSource !== null
-        && (qualifiedSource.captureBackend !== 'console-dedicated' || machine.ownerId === renterId)
+        && privateQualificationSourceAllowed(slug, qualifiedSource, machine.ownerId, renterId)
         && WINDOWS_NATIVE_GPU_UUID_RE.test(nativeGpuUuid)
         && machine.connectivity === MachineConnectivity.ONLINE
         && machine.moderationStatus === ModerationStatus.CLEAR
@@ -898,7 +929,7 @@ async function createWindowsNativeQualificationSession(
           renterId,
           runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
           machineWorkspace: {
-            workspace: { slug: 'cloud-desktop' },
+            workspace: { slug },
           },
         },
         select: {
@@ -936,13 +967,13 @@ async function createWindowsNativeQualificationSession(
       }
 
       const definition = await tx.workspaceDefinition.findUnique({
-        where: { slug: 'cloud-desktop' },
+        where: { slug },
         select: { id: true },
       });
 
       if (!definition) {
         throw new Error(
-          'windows_native_qualification_cloud_desktop_definition_missing',
+          `windows_native_qualification_${slug.replaceAll('-', '_')}_definition_missing`,
         );
       }
 
@@ -981,7 +1012,7 @@ async function createWindowsNativeQualificationSession(
         },
       });
 
-      const spec = workspaceSpec['cloud-desktop'];
+      const spec = workspaceSpec[slug];
 
       return tx.workspaceSession.create({
         data: {
@@ -1020,9 +1051,12 @@ async function createWindowsNativeQualificationSession(
             create: {
               actorType: 'RENTER',
               actorId: renterId,
-              action: 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED',
+              action: slug === 'gaming'
+                ? 'WINDOWS_NATIVE_GAMING_SESSION_REQUESTED'
+                : 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED',
               details: {
                 qualification: 'stage3',
+                workspaceSlug: slug,
                 gpuUuid: nativeGpuUuid,
               },
             },
@@ -1342,6 +1376,12 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
     if (!session) return;
     reply.header('Cache-Control', 'no-store');
 
+    const requestedWorkspace = (request.query as { workspaceSlug?: unknown }).workspaceSlug ?? 'cloud-desktop';
+    if (!isWindowsNativePrivateWorkspaceSlug(requestedWorkspace)) {
+      return reply.code(400).send({ error: 'unsupported_private_qualification_workspace' });
+    }
+    const slug = requestedWorkspace;
+
     if (!windowsNativePrivateQualificationEnabled()) {
       return {
         privateNoPaymentMode: false,
@@ -1356,6 +1396,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         status: { in: windowsNativePrivateQualificationListingStatuses },
         resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
         machine: {
+          ownerId: session.userId,
           connectivity: MachineConnectivity.ONLINE,
           moderationStatus: ModerationStatus.CLEAR,
         },
@@ -1404,8 +1445,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       const uuid = source?.gpuUuid ?? '';
       const accelerator = listing.accelerators[0]?.accelerator;
       const heartbeat = host.lastHeartbeatAt;
-      return source !== null
-        && (source.captureBackend !== 'console-dedicated' || host.ownerId === session.userId)
+      return privateQualificationSourceAllowed(slug, source, host.ownerId, session.userId)
         && host.operatingSystem?.trim().toLowerCase().startsWith('windows') === true
         && (host.operational === MachineOperational.AVAILABLE
           || host.operational === MachineOperational.RESERVED
@@ -1455,7 +1495,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         privateNoPaymentMode: true,
         allowed: false,
         hostReady: true,
-        code: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON,
+        code: windowsNativePrivateMediaBlockReason(slug),
       };
     }
 
@@ -1472,14 +1512,30 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
     const session = await requireSession(request, reply, redis);
     if (!session) return;
 
+    let requestedWorkspace: unknown = 'cloud-desktop';
+    if (request.body !== undefined && request.body !== null) {
+      if (typeof request.body !== 'object' || Array.isArray(request.body)) {
+        return reply.code(400).send({ error: 'unsupported_private_qualification_workspace' });
+      }
+      const body = request.body as Record<string, unknown>;
+      if (Object.keys(body).some((key) => key !== 'workspaceSlug')) {
+        return reply.code(400).send({ error: 'unsupported_private_qualification_workspace' });
+      }
+      requestedWorkspace = body.workspaceSlug ?? 'cloud-desktop';
+    }
+    if (!isWindowsNativePrivateWorkspaceSlug(requestedWorkspace)) {
+      return reply.code(400).send({ error: 'unsupported_private_qualification_workspace' });
+    }
+    const slug = requestedWorkspace;
+
     if (!windowsNativePrivateQualificationEnabled()) {
       return reply.code(409).send({ error: 'windows_native_qualification_disabled' });
     }
     if (!windowsNativePrivateMediaReady()) {
-      return reply.code(409).send({ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON });
+      return reply.code(409).send({ error: windowsNativePrivateMediaBlockReason(slug) });
     }
 
-    const result = await createWindowsNativeQualificationBooking(db, session.userId, redis);
+    const result = await createWindowsNativeQualificationBooking(db, session.userId, redis, slug);
     if ('error' in result) return reply.code(409).send({ error: result.error });
 
     return reply.code(result.created ? 201 : 200).send({
@@ -1501,14 +1557,17 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         (request.query as { qualification?: string }).qualification || '',
       );
 
-      if (qualification && (qualification !== 'windows-native' || slug !== 'cloud-desktop')) {
+      if (qualification && (
+        qualification !== 'windows-native'
+        || (slug !== 'cloud-desktop' && slug !== 'gaming')
+      )) {
         return reply.code(400).send({ error: 'unsupported_private_qualification' });
       }
       if (qualification === 'windows-native' && !windowsNativePrivateQualificationEnabled()) {
         return reply.code(409).send({ error: 'windows_native_qualification_disabled' });
       }
       if (qualification === 'windows-native' && !windowsNativePrivateMediaReady()) {
-        return reply.code(409).send({ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON });
+        return reply.code(409).send({ error: windowsNativePrivateMediaBlockReason(slug) });
       }
       const selected = await db.booking.findFirst({
         where: { id: bookingId, buyerId: session.userId },
@@ -1518,6 +1577,9 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         },
       });
       if (!selected) return reply.code(409).send({ error: 'funded_booking_required' });
+      if (qualification === 'windows-native' && selected.requestedWorkspaceSlug !== slug) {
+        return reply.code(409).send({ error: 'workspace_not_selected_for_booking' });
+      }
       const isWindowsHost = selected.listing.machine.operatingSystem?.trim().toLowerCase().startsWith('windows') ?? false;
       // A paid native booking can never silently open another Workspace
       // or fall back to the Linux Docker launch path.
@@ -1528,8 +1590,10 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         return reply.code(409).send({ error: 'windows_native_selection_required' });
       }
 
-      const result = slug === 'cloud-desktop' && qualification === 'windows-native'
-        ? await createWindowsNativeQualificationSession(db, bookingId, session.userId, redis)
+      const result = qualification === 'windows-native'
+        ? await createWindowsNativeQualificationSession(
+          db, bookingId, session.userId, redis, slug as WindowsNativePrivateWorkspaceSlug,
+        )
         : isWindowsHost
           ? await createWindowsNativeRentalSession(db, bookingId, session.userId, slug)
           : await createDesktopWorkspaceSession(db, bookingId, session.userId, slug);
@@ -1608,7 +1672,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
         },
         canOpen: !privateQualification && policy.allowed && live,
         blockedReason: privateQualification
-          ? WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON.toUpperCase()
+          ? windowsNativePrivateMediaBlockReason(slug).toUpperCase()
           : !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : live ? null : 'GATEWAY_STALE',
       };
     });
@@ -1636,7 +1700,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       });
       if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
       if (row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE && row.events.length > 0) {
-        return reply.code(409).send({ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON });
+        return reply.code(409).send({ error: windowsNativePrivateMediaBlockReason(slug) });
       }
 
       const policy = evaluateWorkspaceAccess({

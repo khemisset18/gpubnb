@@ -243,7 +243,8 @@ const privateReplies={
 async function privateRun(override=()=>null){
   const box=browser({route:'/stage3-windows-native.html',fetcher:path=>{
     const result=override(path);if(result)return result;
-    assert.ok(Object.hasOwn(privateReplies,path),path);return response(200,privateReplies[path]);
+    const key=path.split('?')[0];
+    assert.ok(Object.hasOwn(privateReplies,key),path);return response(200,privateReplies[key]);
   }});
   box.load('stage3-windows-native.js');assert.equal(box.calls.length,0);
   box.nodes.get('#stage3-check').events.get('click')();await settle();
@@ -251,28 +252,28 @@ async function privateRun(override=()=>null){
 }
 test('private Cloud Desktop remains closed until renter audio is qualified on the Host',async()=>{
   const box=await privateRun();
-  assert.deepEqual(box.calls.map(c=>c.path),['/auth/me','/qualification/windows-native/preflight']);
+  assert.deepEqual(box.calls.map(c=>c.path),['/auth/me','/qualification/windows-native/preflight?workspaceSlug=cloud-desktop']);
   assert.equal(box.nodes.get('#stage3-start').disabled,true);
   assert.match(box.nodes.get('#stage3-status').textContent,/audio/i);
   assert.ok(!box.calls.some(c=>c.options.method==='POST'));
   assert.equal(box.window.solana,undefined);
 });
 for(const phase of ['/auth/me','/qualification/windows-native/preflight'])test(`private preflight expiry at ${phase} returns to Web login`,async()=>{
-  const box=await privateRun(path=>path===phase?response(401,{error:'unauthorized'}):null);
+  const box=await privateRun(path=>path.startsWith(phase)?response(401,{error:'unauthorized'}):null);
   assert.equal(box.location.href,'auth.html?next=stage3-windows-native.html');
-  assert.equal(box.calls.at(-1).path,phase);
+  assert.ok(box.calls.at(-1).path.startsWith(phase));
 });
 for(const phase of ['/qualification/windows-native/preflight'])for(const status of [403,409])test(`private server refusal ${status} at ${phase} stops without opening`,async()=>{
-  const box=await privateRun(path=>path===phase?response(status,{error:'private_access_denied'}):null);
-  assert.equal(box.location.href,'/stage3-windows-native.html');assert.equal(box.calls.at(-1).path,phase);
+  const box=await privateRun(path=>path.startsWith(phase)?response(status,{error:'private_access_denied'}):null);
+  assert.equal(box.location.href,'/stage3-windows-native.html');assert.ok(box.calls.at(-1).path.startsWith(phase));
   assert.match(box.nodes.get('#stage3-status').textContent,/private_access_denied/);
 });
 test('stale positive PC1 preflight cannot bypass the audio qualification gate',async()=>{
-  const box=await privateRun(path=>path==='/qualification/windows-native/preflight'
+  const box=await privateRun(path=>path.startsWith('/qualification/windows-native/preflight')
     ?response(200,{privateNoPaymentMode:true,allowed:true,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'}):null);
   assert.equal(box.location.href,'/stage3-windows-native.html');
   assert.equal(box.nodes.get('#stage3-start').disabled,true);
-  assert.deepEqual(box.calls.map(c=>c.path),['/auth/me','/qualification/windows-native/preflight']);
+  assert.deepEqual(box.calls.map(c=>c.path),['/auth/me','/qualification/windows-native/preflight?workspaceSlug=cloud-desktop']);
   assert.ok(!box.calls.some(call=>call.options.method==='POST'));
 });
 test('booking UI follows only the purchased Workspace and never offers Compute for an explicit selection',()=>{
@@ -287,37 +288,77 @@ test('booking UI follows only the purchased Workspace and never offers Compute f
   assert.match(account,/!item\.requestedWorkspaceSlug\|\|item\.requestedWorkspaceSlug==='compute'/);
   assert.match(account,/Suivre le Workspace sélectionné/);
 });
-test('four private workspace choices map to distinct profiles and none can launch before end-to-end qualification',async()=>{
+test('four private workspace choices stay server-gated until their own media qualification passes',async()=>{
   const choices=['cloud-desktop','creator','cad','gaming'].map(slug=>{
     const button=node();button.dataset.privateWorkspace=slug;button.textContent=slug;return button;
   });
   const box=browser({route:'/stage3-windows-native.html',groups:{'[data-private-workspace]':choices},fetcher:path=>{
     if(path==='/auth/me')return response(200,{user:{id:'renter-1'}});
-    if(path==='/qualification/windows-native/preflight')return response(200,{privateNoPaymentMode:true,allowed:true});
+    if(path.startsWith('/qualification/windows-native/preflight'))return response(200,{
+      privateNoPaymentMode:true,allowed:false,
+      code:path.includes('workspaceSlug=gaming')?'windows_native_audio_controller_not_qualified':'windows_native_audio_not_qualified',
+    });
     throw new Error(`Unexpected request for non-launchable profile: ${path}`);
   }});
   box.load('stage3-windows-native.js');
   assert.deepEqual(choices.map(button=>button.dataset.privateWorkspace),['cloud-desktop','creator','cad','gaming']);
   assert.equal(box.nodes.get('#stage3-start').disabled,true);
-  for(const [index,label] of [[1,'Creator / Blender'],[2,'CAD / FreeCAD'],[3,'Gaming / Steam']]){
+  for(const [index,label] of [[1,'Creator / Blender'],[2,'CAD / FreeCAD']]){
     choices[index].events.get('click')();
-    box.nodes.get('#stage3-check').events.get('click')();await settle();
     assert.equal(box.nodes.get('#stage3-start').disabled,true);
+    assert.equal(box.nodes.get('#stage3-check').disabled,true);
     assert.ok(box.nodes.get('#stage3-workspace-info').textContent.includes(label.split(' / ')[1]));
-    assert.ok(box.nodes.get('#stage3-status').textContent.includes(label));
+    assert.ok(box.nodes.get('#stage3-status').textContent.includes(label.split(' / ')[0]));
   }
+  choices[3].events.get('click')();
+  box.nodes.get('#stage3-check').events.get('click')();await settle();
+  assert.equal(box.nodes.get('#stage3-start').disabled,true);
+  assert.ok(box.nodes.get('#stage3-status').textContent.includes('Gaming'));
   choices[0].events.get('click')();
   assert.equal(box.nodes.get('#stage3-start').disabled,true);
   box.nodes.get('#stage3-check').events.get('click')();await settle();
   assert.equal(box.nodes.get('#stage3-start').disabled,true);
   assert.deepEqual(box.calls.map(call=>call.path),[
-    '/auth/me','/qualification/windows-native/preflight',
-    '/auth/me','/qualification/windows-native/preflight',
-    '/auth/me','/qualification/windows-native/preflight',
-    '/auth/me','/qualification/windows-native/preflight',
+    '/auth/me','/qualification/windows-native/preflight?workspaceSlug=gaming',
+    '/auth/me','/qualification/windows-native/preflight?workspaceSlug=cloud-desktop',
   ]);
   box.nodes.get('#stage3-start').events.get('click')();await settle();
-  assert.equal(box.calls.length,8,'the disabled launcher cannot create a booking or workspace session');
+  assert.equal(box.calls.length,4,'a blocked launcher cannot create a booking or workspace session');
+});
+
+test('qualified private Gaming carries the selected workspace through booking, session, status and access',async()=>{
+  const gaming=node();gaming.dataset.privateWorkspace='gaming';
+  const box=browser({route:'/stage3-windows-native.html',groups:{'[data-private-workspace]':[gaming]},fetcher:(path,options={})=>{
+    if(path==='/auth/me')return response(200,{user:{id:'owner-renter'}});
+    if(path==='/qualification/windows-native/preflight?workspaceSlug=gaming')
+      return response(200,{privateNoPaymentMode:true,allowed:true,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'});
+    if(path==='/qualification/windows-native/booking'){
+      assert.equal(options.method,'POST');assert.deepEqual(JSON.parse(options.body),{workspaceSlug:'gaming'});
+      return response(201,{bookingId:'booking-1'});
+    }
+    if(path==='/dashboard')return response(200,{tenant:{bookings:[{id:'booking-1',status:'FUNDED'}]}});
+    if(path==='/bookings/booking-1/workspace/gaming?qualification=windows-native')
+      return response(200,{id:'session-1'});
+    if(path==='/bookings/booking-1/workspace/gaming/status')
+      return response(200,{status:'READY',canOpen:true,preparation:{step:'READY'}});
+    if(path==='/bookings/booking-1/workspace/gaming/access')
+      return response(200,{openPath:'/workspace-gateway/session-1?grant=private-test'});
+    throw new Error(`Unexpected private Gaming request: ${path}`);
+  }});
+  box.load('stage3-windows-native.js');
+  gaming.events.get('click')();
+  box.nodes.get('#stage3-check').events.get('click')();await settle();
+  assert.equal(box.nodes.get('#stage3-start').disabled,false);
+  box.nodes.get('#stage3-start').events.get('click')();await settle();
+  assert.deepEqual(box.calls.map(call=>call.path),[
+    '/auth/me','/qualification/windows-native/preflight?workspaceSlug=gaming',
+    '/auth/me','/qualification/windows-native/preflight?workspaceSlug=gaming',
+    '/qualification/windows-native/booking','/dashboard',
+    '/bookings/booking-1/workspace/gaming?qualification=windows-native',
+    '/bookings/booking-1/workspace/gaming/status',
+    '/bookings/booking-1/workspace/gaming/access',
+  ]);
+  assert.equal(box.location.href,'/workspace-gateway/session-1?grant=private-test');
 });
 
 test('browser pages load the validated return helper before consumers and hide owner-only dashboard blocks initially',()=>{

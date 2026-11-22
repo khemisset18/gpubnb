@@ -11,22 +11,26 @@
     'cloud-desktop':{
       label:'Cloud Desktop',
       info:"Cloud Desktop : lancement bloqué. Le transport navigateur n'a pas encore de chemin audio Windows → navigateur qualifié ; le précontrôle PC1 reste en lecture seule.",
+      canPrivatePreflight:true,
       canPrivateLaunch:false,
     },
     creator:{
       label:'Creator / Blender',
       info:"Blender Windows : sélection et diagnostic possibles, mais lancement privé bloqué jusqu'à la qualification réelle du helper et du GPU exact.",
+      canPrivatePreflight:false,
       canPrivateLaunch:false,
     },
     cad:{
       label:'CAD / FreeCAD',
       info:"FreeCAD Windows : sélection et diagnostic possibles, mais lancement privé bloqué jusqu'à la qualification réelle du helper et de la capture.",
+      canPrivatePreflight:false,
       canPrivateLaunch:false,
     },
     gaming:{
       label:'Gaming / Steam',
-      info:"Steam sous Windows : lancement bloqué tant que l'audio navigateur, la manette et la faible latence ne sont pas validés.",
-      canPrivateLaunch:false,
+      info:"Gaming / Steam Windows : après qualification réelle, le navigateur transmet vidéo, audio et Gamepad vers le Host. Les jeux exigeant XInput natif restent incompatibles.",
+      canPrivatePreflight:true,
+      canPrivateLaunch:true,
     },
   });
   let selectedWorkspace='cloud-desktop';
@@ -42,9 +46,10 @@
       item.disabled=busy;
     });
     if(info)info.textContent=profile.info;
+    if(checkButton)checkButton.disabled=busy||!profile.canPrivatePreflight;
     button.disabled=busy||!privateReady||!profile.canPrivateLaunch;
     button.textContent=profile.canPrivateLaunch
-      ? 'Démarrer l\'essai privé Cloud Desktop'
+      ? `Démarrer l'essai privé ${profile.label}`
       : profile.label+' : lancement non disponible';
   }
   selectors.forEach(item=>item.addEventListener('click',()=>{
@@ -102,18 +107,18 @@
     throw new Error('Le financement bêta n’a pas été confirmé à temps.');
   }
 
-  async function ensureWorkspace(bookingId){
+  async function ensureWorkspace(bookingId,workspaceSlug){
     setStatus('Création de la session Windows native…');
     try{
       return await request(
-        `/bookings/${encodeURIComponent(bookingId)}/workspace/cloud-desktop?qualification=windows-native`,
+        `/bookings/${encodeURIComponent(bookingId)}/workspace/${encodeURIComponent(workspaceSlug)}?qualification=windows-native`,
         {method:'POST'},
       );
     }catch(error){
       if(error.code==='funded_booking_required'){
         await waitForFunding(bookingId);
         return request(
-          `/bookings/${encodeURIComponent(bookingId)}/workspace/cloud-desktop?qualification=windows-native`,
+          `/bookings/${encodeURIComponent(bookingId)}/workspace/${encodeURIComponent(workspaceSlug)}?qualification=windows-native`,
           {method:'POST'},
         );
       }
@@ -121,11 +126,11 @@
     }
   }
 
-  async function waitForGateway(bookingId){
+  async function waitForGateway(bookingId,workspaceSlug){
     const deadline=Date.now()+180000;
     while(Date.now()<deadline){
       const detail=await request(
-        `/bookings/${encodeURIComponent(bookingId)}/workspace/cloud-desktop/status`,
+        `/bookings/${encodeURIComponent(bookingId)}/workspace/${encodeURIComponent(workspaceSlug)}/status`,
       );
       setStatus(
         `Session: ${detail.status} · ${detail.preparation?.step||detail.preparation?.phase||'préparation'}…`,
@@ -144,7 +149,7 @@
   }
 
   async function checkPrivateReadiness(){
-    if(busy)return;
+    if(busy||!profiles[selectedWorkspace].canPrivatePreflight)return;
     busy=true;
     privateReady=false;
     showSelection();
@@ -152,7 +157,7 @@
     try{
       setStatus('Vérification en lecture seule de la connexion privée et de PC1…');
       await request('/auth/me');
-      const preflight=await request('/qualification/windows-native/preflight');
+      const preflight=await request(`/qualification/windows-native/preflight?workspaceSlug=${encodeURIComponent(selectedWorkspace)}`);
       if(preflight.privateNoPaymentMode!==true){
         throw new Error('Le mode privé sans paiement n\'est pas actif. Aucune réservation créée.');
       }
@@ -188,7 +193,7 @@
   }
 
   async function run(){
-    if(busy||selectedWorkspace!=='cloud-desktop'||!profiles[selectedWorkspace].canPrivateLaunch||!privateReady)return;
+    if(busy||!profiles[selectedWorkspace].canPrivateLaunch||!privateReady)return;
     busy=true;
     privateReady=false;
     showSelection();
@@ -198,28 +203,32 @@
       await request('/auth/me');
 
       setStatus('Contrôle en lecture seule : mode privé sans paiement et PC1…');
-      const preflight=await request('/qualification/windows-native/preflight');
+      const preflight=await request(`/qualification/windows-native/preflight?workspaceSlug=${encodeURIComponent(selectedWorkspace)}`);
       if(preflight.privateNoPaymentMode!==true){
         throw new Error('Test bloqué : serveur privé sans paiement non activé. Aucune réservation créée.');
       }
       if(preflight.allowed!==true){
         const reason={
           PRIVATE_WINDOWS_HOST_NOT_READY:'PC1 ne confirme pas encore la session Windows native.',
-          PRIVATE_WINDOWS_HOST_RESERVED:'PC1 est déjà réservé par une autre session.'
+          PRIVATE_WINDOWS_HOST_RESERVED:'PC1 est déjà réservé par une autre session.',
+          windows_native_audio_not_qualified:'Cloud Desktop reste bloqué : audio et lecture navigateur à qualifier sur PC1 et PC2.',
+          windows_native_audio_controller_not_qualified:'Gaming reste bloqué : audio, commandes et isolation à qualifier sur PC1 et PC2. Les jeux exigeant XInput natif sont incompatibles.'
         }[preflight.code]||'Préconditions de qualification manquantes.';
         throw new Error(`Test bloqué : ${reason} Aucune réservation créée.`);
       }
 
       setStatus('Création de la réservation privée…');
-      const booking=await request('/qualification/windows-native/booking',{method:'POST'});
+      const booking=await request('/qualification/windows-native/booking',{
+        method:'POST',body:JSON.stringify({workspaceSlug:selectedWorkspace}),
+      });
 
       await waitForFunding(booking.bookingId);
-      await ensureWorkspace(booking.bookingId);
-      await waitForGateway(booking.bookingId);
+      await ensureWorkspace(booking.bookingId,selectedWorkspace);
+      await waitForGateway(booking.bookingId,selectedWorkspace);
 
-      setStatus('Passerelle prête. Ouverture du bureau Windows…');
+      setStatus('Passerelle prête. Ouverture de '+profiles[selectedWorkspace].label+'…');
       const access=await request(
-        `/bookings/${encodeURIComponent(booking.bookingId)}/workspace/cloud-desktop/access`,
+        `/bookings/${encodeURIComponent(booking.bookingId)}/workspace/${encodeURIComponent(selectedWorkspace)}/access`,
         {method:'POST'},
       );
       if(!access.openPath)throw new Error('URL d’accès sécurisée absente.');

@@ -293,7 +293,7 @@ export async function buildRentalResourceAuthority(
         },
         {
           runtimeBackend: WorkspaceRuntimeBackend.WINDOWS_NATIVE,
-          machineWorkspace: { workspace: { slug: 'cloud-desktop' } },
+          machineWorkspace: { workspace: { slug: { in: ['cloud-desktop', 'gaming'] } } },
         },
       ],
     },

@@ -14,7 +14,7 @@ const { config } = await import('../src/config.js');
 const { registerDesktopWorkspaceRoutes } = await import('../src/desktop-workspace-routes.js');
 
 const host = () => ({id:'private-listing', hourlyLamports:3600n,
-  machine:{id:'private-machine', operatingSystem:'Windows 11', operational:'AVAILABLE', lastHeartbeatAt:new Date(Date.now()-1_000),
+  machine:{id:'private-machine', ownerId:'renter', operatingSystem:'Windows 11', operational:'AVAILABLE', lastHeartbeatAt:new Date(Date.now()-1_000),
     nativeDesktopStreamingAvailable:true, lastCounter:BigInt(21),
     nativeDesktopStreamingGpuUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a'},
   accelerators:[{accelerator:{hardwareUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',
@@ -60,6 +60,33 @@ test('physically eligible preflight remains read-only but refuses unqualified br
   assert.equal(response.json().allowed,false);assert.equal(response.json().hostReady,true);
   assert.equal(response.json().code,'windows_native_audio_not_qualified');
   assert.equal(response.headers['cache-control'],'no-store');assert.equal(state.reads,2);
+}));
+
+test('private Gaming is owner-bound, uses its own block reason and rejects direct booking/session bypasses',async()=>fixture(async({app,state,headers})=>{
+  state.candidates=[host()];
+  const preflight=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+  assert.equal(preflight.statusCode,200);assert.equal(preflight.json().privateNoPaymentMode,true);
+  assert.equal(preflight.json().allowed,false);
+  assert.equal(preflight.json().code,'windows_native_audio_controller_not_qualified');
+  const readsBefore=state.reads;
+  const booking=await app.inject({method:'POST',url:'/qualification/windows-native/booking',headers,
+    payload:{workspaceSlug:'gaming'}});
+  assert.equal(booking.statusCode,409);
+  assert.equal(booking.json().error,'windows_native_audio_controller_not_qualified');
+  const session=await app.inject({method:'POST',url:'/bookings/forged-booking/workspace/gaming?qualification=windows-native',headers});
+  assert.equal(session.statusCode,409);
+  assert.equal(session.json().error,'windows_native_audio_controller_not_qualified');
+  assert.equal(state.reads,readsBefore,'unqualified Gaming must stop before booking or allocation lookups');
+  assert.equal(state.redisWrites,0,'unqualified Gaming cannot create access or session grants');
+}));
+
+test('private qualification rejects unsupported workspace slugs before database access',async()=>fixture(async({app,state,headers})=>{
+  const preflight=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=creator',headers});
+  assert.equal(preflight.statusCode,400);assert.equal(preflight.json().error,'unsupported_private_qualification_workspace');
+  const booking=await app.inject({method:'POST',url:'/qualification/windows-native/booking',headers,
+    payload:{workspaceSlug:'creator'}});
+  assert.equal(booking.statusCode,400);assert.equal(booking.json().error,'unsupported_private_qualification_workspace');
+  assert.equal(state.reads,0);
 }));
 
 test('direct booking and qualification-session requests cannot bypass the audio qualification gate',async()=>fixture(async({app,state,headers})=>{
