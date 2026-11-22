@@ -116,15 +116,19 @@ def main() -> int:
     parser.add_argument("--expect-web-source-changed", action="store_true")
     parser.add_argument("--expect-web-source-unchanged", action="store_true")
     args = parser.parse_args()
+    if args.expect_api_source_changed and args.expect_api_source_unchanged:
+        raise SystemExit("stage4_delta_conflicting_api_expectations")
+    if args.expect_web_source_changed and args.expect_web_source_unchanged:
+        raise SystemExit("stage4_delta_conflicting_web_expectations")
     report = make_report(
         Path(args.repo).resolve(),
         args.private_render_commit,
         args.pc1_candidate_commit,
     )
-    if args.expect_api_source_changed and args.expect_api_source_unchanged:
-        raise SystemExit("stage4_delta_conflicting_api_expectations")
-    if args.expect_web_source_changed and args.expect_web_source_unchanged:
-        raise SystemExit("stage4_delta_conflicting_web_expectations")
+    # Emit the complete, read-only evidence before enforcing expected source
+    # parity. A failing CI check should show which runtime assets drifted; the
+    # diagnostic must never turn that drift into a compatibility attestation.
+    print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
     if args.expect_api_source_unchanged and not report["apiRuntimeInputsIdenticalAtSource"]:
         raise SystemExit("stage4_delta_api_runtime_inputs_changed_review_required")
     if args.expect_api_source_changed and report["apiRuntimeInputsIdenticalAtSource"]:
@@ -133,7 +137,6 @@ def main() -> int:
         raise SystemExit("stage4_delta_web_difference_expectation_failed")
     if args.expect_web_source_unchanged and not report["webAssetsIdenticalAtSource"]:
         raise SystemExit("stage4_delta_web_source_changed_review_required")
-    print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
     return 0
 
 
