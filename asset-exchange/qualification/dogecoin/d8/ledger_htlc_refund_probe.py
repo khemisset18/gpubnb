@@ -120,6 +120,15 @@ def probe():
             sighash_type=2, negative_only=True), pub):
         raise ValueError("mutated sighash trailer signature unexpectedly valid")
     scriptsig = synthetic_scriptsig(der + b"\x01", redeem)
+    # Public, explicitly unfunded, synthetic transaction bytes for independent
+    # Dogecoin Core consensus verification. Never feed this to an RPC.
+    if len(scriptsig) > 252:
+        raise ValueError("synthetic scriptSig exceeds one-byte CompactSize scope")
+    signed_refund = (bytes.fromhex("01000000") + b"\x01" + tx.sha256d(funding) +
+        bytes(4) + bytes([len(scriptsig)]) + scriptsig + sequence +
+        outputs + LOCK_HEIGHT.to_bytes(4, "little"))
+    r, scalar_s = tx.parse_der_signature(der)
+    signature_low_s = scalar_s <= tx.N // 2
     visible = " ".join(review["simulated_screen_sequence"]).lower()
     terms = {
         "regtest_network": "regtest" in visible,
@@ -142,6 +151,23 @@ def probe():
         "contract_redeem_sha256": hashlib.sha256(redeem).hexdigest(),
         "contract_p2sh_sha256": hashlib.sha256(p2sh).hexdigest(),
         "synthetic_refund_scriptSig_sha256": hashlib.sha256(scriptsig).hexdigest(),
+        # All fields below contain ONLY disposable/public fixture bytes. No
+        # real UTXO exists; strict separate native verifier checks exact tx.
+        "native_consensus_candidate": {
+            "signed_transaction_hex": signed_refund.hex(),
+            "signed_transaction_sha256": hashlib.sha256(signed_refund).hexdigest(),
+            "synthetic_funding_hex": funding.hex(),
+            "script_pubkey_hex": p2sh.hex(),
+            "redeem_script_hex": redeem.hex(),
+            "signature_hex": (der + b"\x01").hex(),
+            "signature_low_s": signature_low_s,
+            "expected_native_flags": 517,
+            "input_index": 0,
+            "fake_prevout": "11" * 32,
+            "reviewed_network_in_firmware": "dogecoin-mainnet",
+            "hardware_qualified": False,
+            "broadcasts": 0
+        },
         "signature_on_synthetic_htlc_refund_digest_verified": True,
         "mutated_refund_value_rejected": True,
         "mutated_refund_lock_rejected": True,
