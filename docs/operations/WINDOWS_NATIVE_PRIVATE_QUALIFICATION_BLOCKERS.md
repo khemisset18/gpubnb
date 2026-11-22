@@ -6,13 +6,15 @@ started, no session or payment was created, and no deployment was triggered.
 
 ## Current code and live Stage service
 
-The PR branch `feature/windows-native-four-workspaces-20261120` has a private
-page with four explicit profile selections. The page's PC1 preflight is
-read-only. In this revision every launch control is disabled; API booking and
-session endpoints reject the screen-only Cloud Desktop path because there is
-no renter-scoped Windows-audio → browser path. Old private qualification
-sessions are blocked at the status/access API and gateway fence and are sent
-to the Agent as `STOPPING` for local cleanup.
+The current Gaming candidate is PR #387 on
+`feat/gaming-end-to-end-20261122`, stacked on the private browser workspace
+page. Its audio software path now runs from Steam process-loopback capture to
+the authenticated browser player, but it has no Windows or PC1→PC2 proof. The
+preflight is read-only; launch controls remain disabled and the API keeps
+reservation, access and owner opt-in blocked while audio/controller qualification
+gates are false. Old private qualification sessions remain blocked at the
+status/access API and gateway fence and are sent to the Agent as `STOPPING` for
+local cleanup.
 
 Read-only Render inspection on 2026-11-21 found the service
 [`gpubnb-stage3-private`](https://dashboard.render.com/web/srv-dau86i2d0e5s73elmk10)
@@ -39,7 +41,7 @@ not been verified for the requested revision.
 | Cloud Desktop | **Disabled** | Qualify the new bounded PCM/Web Audio path on a dedicated Host; verify isolation, exact GPU capture, STOP cleanup and browser video/input. Audio software plumbing exists but has no Windows or hardware proof. |
 | Creator / Blender | **Disabled** | Verify the signed Host package, Blender launch, GPU rendering, session boundary, network restrictions, audio expectations and STOP cleanup on a dedicated Host. |
 | CAD / FreeCAD | **Disabled** | Verify the signed Host package, FreeCAD launch, precise input, GPU rendering, session boundary, network restrictions and STOP cleanup on a dedicated Host. |
-| Gaming / Steam | **Disabled** | Add an authorized game selector/launch contract, qualify audio/video/input and STOP on real hardware, provide native XInput if required, measure latency, and resolve game-content and GPU-driver commercial licensing. The current controller bridge maps browser Gamepad events to keyboard/mouse only. |
+| Gaming / Steam | **Disabled** | Connect an authorized game selector to booking, qualify audio/video/input and STOP on real hardware, provide native XInput if the selected game requires it, measure latency, and resolve game-content and GPU-driver commercial licensing. The current browser gamepad bridge maps controls to keyboard/mouse only. |
 
 The four choice buttons identify the requested profile; they do not imply that
 its applications or media path are installed or operational. No profile may
@@ -56,6 +58,45 @@ The IddCx display-driver package must be independently identified, licensed,
 signed for the supported Windows release and verified under the intended
 Secure Boot policy. A CI archive hash proves byte identity, not publisher
 identity or safety.
+
+## Five-minute PC1 → PC2 qualification sheet
+
+This is a procedure to fill in after CI, independent review, package signing,
+licensing and operator authorization pass. It was **not run** in this revision.
+The 720p/60 FPS setting is a measurement target, not a performance guarantee.
+Keep the test private and no-payment; use a dedicated Host without owner data
+and a separate renter Windows identity. The remote game client must use the
+renter's own account and licenses.
+
+Before timing starts, record the exact reviewed SHA, installer SHA-256 and
+publisher signature, Windows build, GPU model/UUID, NVIDIA driver, browser and
+version, PC1/PC2 network type, selected title/account ownership and controller
+model. Confirm that only the selected GTX 1650 is exposed and the private
+no-payment mode is active.
+
+| Minute | Action | Record |
+| --- | --- | --- |
+| 0–1 | Start the authorized Steam workspace at 1280×720/60; wait for a real game frame and activate browser audio by gesture. | Startup and first-frame time, decoded FPS, initial input-to-visible-response time. |
+| 1–4 | Play the renter-owned title continuously; exercise keyboard, pointer-lock/mouse movement, buttons and a compatible browser gamepad. | FPS per 10 s window, dropped/stale frames, longest video gap, input response samples, audio gaps/clipping, A/V sync observations. |
+| 4–5 | Continue the same title, then press STOP at 5:00. | Last video/audio packet time, silence time after STOP, session status, Steam/game process exit, media DLL close, worker/job exit, display cleanup and Host availability. |
+
+After the timed run, perform a separate short-lived-grant revocation/reconnect
+check. Reconnect only within the allowed grant and verify that no old stream
+epoch or input is accepted. Repeat STOP to verify idempotency. Test sound
+isolation using non-personal tones only: play a tone from the renter game while
+the owner session is silent, then play a distinct tone in the owner session
+while the renter game is silent. The owner tone must not be audible or present
+in captured renter packets; any leak is an immediate failure. Do not record
+personal speech or system audio.
+
+Report FPS as decoded frames per second with average, median and p95. Report
+input response and audio/video alignment as distributions, plus the sampling
+method and network path. Report every outage, reconnect and STOP-to-last-packet
+interval. Mark native XInput **not qualified** unless the selected game's
+XInput path is driven by a real Xbox-compatible virtual device; keyboard/mouse
+mapping from Gamepad API is not an XInput pass. Keep the worksheet, sanitized
+logs and PC1/PC2 recordings with the reviewed SHA. Synthetic video or
+simulated capture does not count as a pass.
 
 ## Licensing checks
 

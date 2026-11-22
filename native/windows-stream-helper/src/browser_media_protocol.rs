@@ -726,10 +726,10 @@ mod tests {
         let mut mismatched = first;
         mismatched.chunk_offset = 2;
         mismatched.qpc_position_100ns += 1;
-        assert_eq!(
+        assert!(matches!(
             reassembler.push_chunk(&packet(mismatched, b"cd"), 2),
             Err(BrowserMediaError::FrameMismatch)
-        );
+        ));
 
         let mut keyframe = header();
         keyframe.stream_epoch = 2;
@@ -742,10 +742,10 @@ mod tests {
         let mut stale = keyframe;
         stale.frame_sequence = 2;
         stale.flags = 0;
-        assert_eq!(
+        assert!(matches!(
             reassembler.push_chunk(&packet(stale, b"cd"), 4),
             Err(BrowserMediaError::Timestamp)
-        );
+        ));
     }
 
     #[test]
