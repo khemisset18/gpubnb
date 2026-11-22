@@ -14,6 +14,7 @@ import urllib.request
 
 import ledger_emulator_probe as identity
 
+print("DOGE_TX_DIAG: python imported", file=sys.stderr, flush=True)
 API = "http://127.0.0.1:5000"
 BIP44_DOGE_PATH = bytes.fromhex("058000002c80000003800000000000000000000000")
 FUNDING_KOINU = 500_000_000
@@ -247,23 +248,29 @@ def review_synthetic_finalize(paid_outputs):
 
 def probe():
     # Refuse any signing without a verified transaction session.
+    print("DOGE_TX_DIAG: start unapproved sign refusal", file=sys.stderr, flush=True)
     premature, sw = send(0x48, 0, 0, BIP44_DOGE_PATH + b"\x00" + bytes(4) + b"\x01")
     if sw != "6985":
         raise ValueError("unexpected signing outside transaction state: " + sw)
+    print("DOGE_TX_DIAG: unauthorized sign refusal OK, fetching pubkey", file=sys.stderr, flush=True)
     public, sw = identity.send_apdu(identity.DOGE_PUBKEY_APDU)
     if sw != "9000":
         raise ValueError("public key retrieval failed: " + sw)
     signer_pub = public[1:66]
     signer_compressed = bytes([2 + (signer_pub[-1] & 1)]) + signer_pub[1:33]
     signer_script = p2pkh_script(hash160(signer_compressed))
+    print("DOGE_TX_DIAG: public key OK, streaming fictional funding", file=sys.stderr, flush=True)
     funding, trusted = get_trusted_input(signer_script)
     # Fixed one-input, one-output, simple P2PKH transaction, NO HTLC.
     paid_outputs = b"\x01" + output(PAYMENT_KOINU, p2pkh_script(DUMMY_DESTINATION_HASH))
+    print("DOGE_TX_DIAG: synthetic funding accepted, streaming signing input", file=sys.stderr, flush=True)
     send_ok(0x44, 0, 0, bytes.fromhex("01000000") + b"\x01")
     send_ok(0x44, 0x80, 0, b"\x01" + bytes([len(trusted)]) + trusted +
             bytes([len(signer_script)]) + signer_script)
     send_ok(0x44, 0x80, 0, SEQUENCE)
+    print("DOGE_TX_DIAG: streaming complete, attempting synthetic screen review", file=sys.stderr, flush=True)
     review = review_synthetic_finalize(paid_outputs)
+    print("DOGE_TX_DIAG: review complete, requesting ECDSA", file=sys.stderr, flush=True)
     signature_raw = send_ok(0x48, 0, 0, BIP44_DOGE_PATH + b"\x00" + bytes(4) + b"\x01")
     if not 65 <= len(signature_raw) <= 80 or signature_raw[-1] != 1:
         raise ValueError("invalid native signing response")
