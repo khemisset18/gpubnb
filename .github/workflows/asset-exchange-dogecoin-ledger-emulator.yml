@@ -13,6 +13,8 @@ on:
       - "asset-exchange/qualification/dogecoin/d8/test_ledger_htlc_refund_probe.py"
       - "asset-exchange/qualification/dogecoin/d8/d8_prephysical_gate.py"
       - "asset-exchange/qualification/dogecoin/d8/test_d8_prephysical_gate.py"
+      - "asset-exchange/qualification/dogecoin/d8/physical_request_preflight.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_physical_request_preflight.py"
       - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
   pull_request:
     paths:
@@ -42,6 +44,10 @@ jobs:
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_htlc_refund_probe.py' -v
       - name: Verify hard-blocked D8 classification and mutation negatives
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_d8_prephysical_gate.py' -v
+      - name: Check strict offline D8 public request validation and 17 mutations
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_physical_request_preflight.py' -v
       - name: Fetch exact public Ledger Legacy DOGE application with submodules
         shell: bash
         run: |
