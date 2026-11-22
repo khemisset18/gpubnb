@@ -138,11 +138,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker pull ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite:latest
-          docker image inspect ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite:latest --format '{{json .RepoDigests}}'
+          docker pull ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite@sha256:45ec491f28489aa0337eea8d50e9962a700ed41054081ee1b639bc1b128e6a32
+          docker image inspect ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite@sha256:45ec491f28489aa0337eea8d50e9962a700ed41054081ee1b639bc1b128e6a32 --format '{{json .RepoDigests}}'
           docker run --rm --network none --entrypoint /bin/bash \
             -v "$APP_ROOT:/app" -w /app \
-            ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite:latest \
+            ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite@sha256:45ec491f28489aa0337eea8d50e9962a700ed41054081ee1b639bc1b128e6a32 \
             -lc 'set -euo pipefail; test -d "$NANOSP_SDK"; make -j2 BOLOS_SDK="$NANOSP_SDK" COIN=dogecoin'
           APP_ELF="$(find "$APP_ROOT" -type f -name 'app.elf' | head -n 1)"
           test -n "$APP_ELF"
@@ -153,14 +153,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker pull ghcr.io/ledgerhq/speculos:latest
-          docker image inspect ghcr.io/ledgerhq/speculos:latest --format '{{json .RepoDigests}}'
+          docker pull ghcr.io/ledgerhq/speculos@sha256:56c7ec84c903147dac28e68706d3241218a3d9beb9562dd4a8c02947b2a24f47
+          docker image inspect ghcr.io/ledgerhq/speculos@sha256:56c7ec84c903147dac28e68706d3241218a3d9beb9562dd4a8c02947b2a24f47 --format '{{json .RepoDigests}}'
           docker run -d --network none --name doge-speculos \
             -v "$APP_ROOT:/speculos/apps:ro" \
             -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py:/speculos/ledger_emulator_probe.py:ro" \
             -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py:/speculos/ledger_tx_sign_probe.py:ro" \
             -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_htlc_refund_probe.py:/speculos/ledger_htlc_refund_probe.py:ro" \
-            ghcr.io/ledgerhq/speculos:latest \
+            ghcr.io/ledgerhq/speculos@sha256:56c7ec84c903147dac28e68706d3241218a3d9beb9562dd4a8c02947b2a24f47 \
             --model nanosp --display headless --api-port 5000 apps/doge-test.elf
           trap 'docker inspect doge-speculos --format "{{json .State}}" || true; docker logs doge-speculos 2>&1 | tail -n 85 || true; docker rm -f doge-speculos >/dev/null 2>&1 || true' EXIT
           ready=0
