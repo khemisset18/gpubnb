@@ -408,6 +408,18 @@ struct MediaSendFence {
 }
 
 #[cfg(target_os = "windows")]
+struct MediaSendContext<'a> {
+    control: &'a WorkerPipeClient,
+    media_pipe: &'a WorkerMediaPipeClient,
+    args: &'a WorkerArgs,
+    windows_session_id: u32,
+    spec: WorkerDisplaySpec,
+    fence: MediaSendFence,
+    audio_capture: Option<&'a mut AudioCaptureSession>,
+    audio_target: Option<RenterApplicationIdentity>,
+}
+
+#[cfg(target_os = "windows")]
 fn ensure_console_media_transfer_allowed(
     console_mode: bool,
     windows_session_id: u32,
@@ -446,16 +458,19 @@ fn open_gaming_audio_capture(
 
 #[cfg(target_os = "windows")]
 fn send_encoded_media_frame(
-    control: &WorkerPipeClient,
-    media_pipe: &WorkerMediaPipeClient,
-    args: &WorkerArgs,
-    windows_session_id: u32,
-    spec: WorkerDisplaySpec,
-    fence: MediaSendFence,
-    audio_capture: Option<&mut AudioCaptureSession>,
-    audio_target: Option<RenterApplicationIdentity>,
+    context: MediaSendContext<'_>,
     media: &EncodedMediaFrame,
 ) -> Result<(), WorkerError> {
+    let MediaSendContext {
+        control,
+        media_pipe,
+        args,
+        windows_session_id,
+        spec,
+        fence,
+        audio_capture,
+        audio_target,
+    } = context;
     let MediaSendFence {
         command_sequence,
         console_mode,
@@ -739,19 +754,21 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     ensure_current_renter_input_desktop(windows_session_id)
                         .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
                     send_encoded_media_frame(
-                        &client,
-                        &media_client,
-                        args,
-                        windows_session_id,
-                        spec,
-                        MediaSendFence {
-                            command_sequence,
-                            console_mode: console,
+                        MediaSendContext {
+                            control: &client,
+                            media_pipe: &media_client,
+                            args,
+                            windows_session_id,
+                            spec,
+                            fence: MediaSendFence {
+                                command_sequence,
+                                console_mode: console,
+                            },
+                            audio_capture: audio_capture.as_mut(),
+                            audio_target: gaming_application
+                                .as_ref()
+                                .map(RenterApplicationProcess::identity),
                         },
-                        audio_capture.as_mut(),
-                        gaming_application
-                            .as_ref()
-                            .map(RenterApplicationProcess::identity),
                         &media,
                     )?;
                     media_session = Some(session);
@@ -779,19 +796,21 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                             ensure_current_renter_input_desktop(windows_session_id)
                                 .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
                             send_encoded_media_frame(
-                                &client,
-                                &media_client,
-                                args,
-                                windows_session_id,
-                                spec,
-                                MediaSendFence {
-                                    command_sequence,
-                                    console_mode: console_mode.unwrap_or(false),
+                                MediaSendContext {
+                                    control: &client,
+                                    media_pipe: &media_client,
+                                    args,
+                                    windows_session_id,
+                                    spec,
+                                    fence: MediaSendFence {
+                                        command_sequence,
+                                        console_mode: console_mode.unwrap_or(false),
+                                    },
+                                    audio_capture: audio_capture.as_mut(),
+                                    audio_target: gaming_application
+                                        .as_ref()
+                                        .map(RenterApplicationProcess::identity),
                                 },
-                                audio_capture.as_mut(),
-                                gaming_application
-                                    .as_ref()
-                                    .map(RenterApplicationProcess::identity),
                                 &media,
                             )?;
                         }
@@ -906,19 +925,21 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     ensure_current_renter_input_desktop(windows_session_id)
                         .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
                     send_encoded_media_frame(
-                        &client,
-                        &media_client,
-                        args,
-                        windows_session_id,
-                        spec,
-                        MediaSendFence {
-                            command_sequence,
-                            console_mode: console,
+                        MediaSendContext {
+                            control: &client,
+                            media_pipe: &media_client,
+                            args,
+                            windows_session_id,
+                            spec,
+                            fence: MediaSendFence {
+                                command_sequence,
+                                console_mode: console,
+                            },
+                            audio_capture: audio_capture.as_mut(),
+                            audio_target: gaming_application
+                                .as_ref()
+                                .map(RenterApplicationProcess::identity),
                         },
-                        audio_capture.as_mut(),
-                        gaming_application
-                            .as_ref()
-                            .map(RenterApplicationProcess::identity),
                         &media,
                     )
                     .map_err(|_| WorkerError::new("resume_media_transport_failed", 21))?;
