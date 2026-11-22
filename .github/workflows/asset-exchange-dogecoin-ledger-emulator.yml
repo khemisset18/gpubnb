@@ -1,0 +1,131 @@
+name: DOGE D8 free Ledger emulator diagnostic
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/asset-exchange-dogecoin-ledger-emulator.yml"
+      - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
+
+permissions:
+  contents: read
+
+jobs:
+  ledger-doge-legacy-emulator:
+    if: github.repository == 'khemisset18/gpubnb'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      LEDGER_APP_SHA: "79f3036daec38347747fb498470bed3cfb103440"
+    steps:
+      - name: Fetch exact public Ledger Legacy DOGE application with submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_ROOT="$RUNNER_TEMP/ledger-doge-legacy"
+          echo "APP_ROOT=$APP_ROOT" >> "$GITHUB_ENV"
+          git clone --filter=blob:none https://github.com/LedgerHQ/app-bitcoin-legacy.git "$APP_ROOT"
+          cd "$APP_ROOT"
+          git checkout --detach "$LEDGER_APP_SHA"
+          test "$(git rev-parse HEAD)" = "$LEDGER_APP_SHA"
+          git submodule update --init --recursive
+          git status --porcelain
+      - name: Confirm Dogecoin source identity without claiming a Regtest profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["APP_ROOT"])
+          makefile = (root / "Makefile").read_text()
+          start = makefile.index("else ifeq ($(COIN),dogecoin)")
+          end = makefile.index("else ifeq ($(COIN),dash)", start)
+          block = makefile[start:end]
+          required = (
+              "COIN_P2PKH_VERSION=30", "COIN_P2SH_VERSION=22",
+              "COIN_KIND=COIN_KIND_DOGE", 'APPNAME ="Dogecoin"',
+          )
+          for marker in required:
+              assert marker in block, f"Upstream DOGE definition changed: {marker}"
+          assert "regtest" not in block.lower()
+          result = {
+              "device_family": "Ledger Legacy DOGE (source only)",
+              "source_repo": "LedgerHQ/app-bitcoin-legacy",
+              "pinned_commit": os.environ["LEDGER_APP_SHA"],
+              "doge_mainnet_p2pkh_p2sh_source_defined": True,
+              "doge_regtest_full_htlc_cltv_approval_and_display_qualified": False,
+              "H8_1_to_H8_5_complete": False,
+              "D8_status": "BLOCKED",
+              "no_real_funds": True,
+              "no_mainnet_network_use": True,
+          }
+          pathlib.Path(os.environ["RUNNER_TEMP"], "doge-ledger-source-check.json").write_text(
+              json.dumps(result, indent=2) + "\n"
+          )
+          print(json.dumps(result))
+          PY
+      - name: Build actual Ledger DOGE firmware app with official toolchain, no network inside build
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite:latest
+          docker image inspect ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite:latest --format '{{json .RepoDigests}}'
+          docker run --rm --network none --entrypoint /bin/bash \
+            -v "$APP_ROOT:/app" -w /app \
+            ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite:latest \
+            -lc 'set -euo pipefail; test -d "$NANOS2_SDK"; make -j2 BOLOS_SDK="$NANOS2_SDK" COIN=dogecoin'
+          APP_ELF="$(find "$APP_ROOT" -type f -name 'app.elf' | head -n 1)"
+          test -n "$APP_ELF"
+          cp "$APP_ELF" "$APP_ROOT/doge-test.elf"
+          sha256sum "$APP_ROOT/doge-test.elf" | tee "$RUNNER_TEMP/doge-ledger-elf.sha256"
+          file "$APP_ROOT/doge-test.elf" | grep ELF
+      - name: Start real Ledger Dogecoin app under isolated Speculos and capture emulator display
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull ghcr.io/ledgerhq/speculos:latest
+          docker image inspect ghcr.io/ledgerhq/speculos:latest --format '{{json .RepoDigests}}'
+          docker run -d --rm --network none --name doge-speculos \
+            -v "$APP_ROOT:/speculos/apps:ro" \
+            ghcr.io/ledgerhq/speculos:latest \
+            --model nanosp --display headless --api-port 5000 apps/doge-test.elf
+          trap 'docker logs doge-speculos 2>&1 | tail -n 60 || true; docker rm -f doge-speculos >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for i in $(seq 1 40); do
+            if docker exec doge-speculos python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:5000/",timeout=2).read()' >/dev/null 2>&1; then
+              ready=1; break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          docker exec doge-speculos python3 -c 'import sys,urllib.request; sys.stdout.buffer.write(urllib.request.urlopen("http://127.0.0.1:5000/screenshot",timeout=4).read())' \
+            > "$RUNNER_TEMP/doge-ledger-emulator.png"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          img = (root / "doge-ledger-emulator.png").read_bytes()
+          assert img.startswith(b"\x89PNG\r\n\x1a\n"), "Speculos screenshot is not PNG"
+          report = json.loads((root / "doge-ledger-source-check.json").read_text())
+          report.update({
+              "firmware_elf_built": True,
+              "speculos_doge_app_booted": True,
+              "emulated_screen_captured": True,
+              "doge_regtest_contract_signature_executed": False,
+              "real_physical_screen_tested": False,
+              "hardware_D8_qualified": False,
+              "scope": "EMULATOR_BOOT_AND_SOURCE_ONLY",
+          })
+          (root / "doge-ledger-emulator-report.json").write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report))
+          PY
+      - name: Preserve public emulator evidence even on build failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: doge-d8-ledger-emulator-diagnostic
+          path: |
+            ${{ runner.temp }}/doge-ledger-source-check.json
+            ${{ runner.temp }}/doge-ledger-elf.sha256
+            ${{ runner.temp }}/doge-ledger-emulator.png
+            ${{ runner.temp }}/doge-ledger-emulator-report.json
+          if-no-files-found: warn
+          retention-days: 14
