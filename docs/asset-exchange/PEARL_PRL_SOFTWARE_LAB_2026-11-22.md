@@ -184,3 +184,49 @@ et ses blocages critiques (acteur non authentifié, horloge de test,
 absence de persistance/quotas distribués et de routes réelles).
 
 **P0–P9 et mise en production : NON QUALIFIÉS.**
+
+## Attestation opérateur Ubuntu WSL2 — 94/94 PASS, démonstration conforme
+
+L'opérateur a exécuté la suite entière de la branche
+`experiment/pearl-prl-marketplace-draft-security-20261123`
+dans son Ubuntu WSL2 avec le namespace réseau isolé
+`unshare --user --map-root-user --net` et
+`PYTHONDONTWRITEBYTECODE=1`.
+
+Fin de journal relevée :
+
+```text
+Ran 94 tests in 0.073s
+
+OK
+=== DEMONSTRATION HORS LIGNE ===
+... "draftId": "prl-lab-00000001", "revision": 1,
+    "status": "DRAFT_PREVIEW_ONLY",
+    "actorAuthenticated": false,
+    "realExchangeListingCreated": false,
+    "canPostOffer": false, "canSettle": false
+... "draftId": "prl-lab-00000001", "revision": 2,
+    "status": "CANCELLED_PREVIEW_ONLY",
+    "actorAuthenticated": false,
+    "realExchangeListingCreated": false,
+    "canPostOffer": false, "canSettle": false
+=== ETAT GIT ===
+9c685cc
+## experiment/pearl-prl-marketplace-draft-security-20261123...origin/experiment/pearl-prl-marketplace-draft-security-20261123
+```
+
+Le code testé est le commit
+`9c685ccf0d8ab1fabbc0fd6a01a25de42458620b`.
+**Les 94/94 méthodes sont attestées PASS sur le poste de
+l'opérateur, sans erreur et avec copie Git propre.**
+La démonstration a montré le changement d'état local attendu
+sans offre publiée ni activation de permissions financières.
+
+**Classification : OFFLINE_DRAFT_MODEL_94_PASS /
+PRODUCTION_MARKETPLACE_BLOCKED.** Les identifiants de propriétaires
+ne sont toujours pas authentifiés, l'horloge est contrôlable par
+l'appelant, les données ne sont pas persistées, aucun rate limiting
+distribué n'existe et aucune route API d'offres n'est déployée.
+**P0–P9 restent non qualifiés** pour les transactions / fonds réels.
+Les vérifications ne constituent ni audit indépendant, ni attestation
+de chaîne, ni validation du matériel, ni contrôle de production.
