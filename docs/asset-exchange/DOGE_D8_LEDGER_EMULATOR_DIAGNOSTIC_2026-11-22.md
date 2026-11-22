@@ -12,11 +12,15 @@ avec la chaîne de compilation officielle Ledger pour Nano S+. Si la compilation
 réussit, il démarre l'app ELF dans le conteneur officiel Speculos sur réseau
 **désactivé** et capture seulement l'écran d'accueil émulé et les SHA de l'ELF.
 
-Aucune application client n'est connectée au wallet, aucune transaction n'est
-construite, financée, signée, minée ni diffusée. Il n'y a pas de nœud Dogecoin,
-de RPC, d'adresse utilisateur ou de seed personnelle. Les images Docker officielles
-sont actuellement des tags \`latest\` : leurs digests sont imprimés, mais cette
-première expérience n'est pas un run qualifié avec toutes les dépendances épinglées.
+Aucun wallet personnel ni service client n'est connecté. Les expériences ultérieures
+construisent et signent **deux transactions synthétiques non financées** sous
+Speculos, puis vérifient les signatures hors chaîne. Il n'y a aucun nœud
+Dogecoin, aucune requête RPC, aucun financement réel, aucun minage, aucune
+diffusion ni aucune seed utilisateur. Les images de compilation et d'émulation
+sont maintenant épinglées aux digests exacts précédemment testés :
+- Ledger builder : sha256:45ec491f28489aa0337eea8d50e9962a700ed41054081ee1b639bc1b128e6a32
+- Speculos : sha256:56c7ec84c903147dac28e68706d3241218a3d9beb9562dd4a8c02947b2a24f47
+Ce verrouillage ne qualifie ni le firmware physique ni Regtest P2SH/HTLC.
 
 ## Interpréter les résultats sans tromperie
 
