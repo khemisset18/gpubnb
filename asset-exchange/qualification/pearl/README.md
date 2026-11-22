@@ -1,25 +1,25 @@
 # Pearl (PRL) — separate offline public-offer laboratory
 
 This directory is an **additive, non-operational** research qualification
-for native Pearl L1 (\`PRL\`), **not MTN**, not a wrapped/bridged PRL,
+for native Pearl L1 (`PRL`), **not MTN**, not a wrapped/bridged PRL,
 and not an executable exchange adapter.
 
-The GPUbnb mining selector already shows \`PRL Pearl\`, but with no
+The GPUbnb mining selector already shows `PRL Pearl`, but with no
 hardware-validated profile. The Asset Exchange matrix already lists
-\`pearl-mainnet-native\` with \`MARKETPLACE_ONLY\`,
-\`RESTRICTED\`, and identity not ready. This lab does **not**
+`pearl-mainnet-native` with `MARKETPLACE_ONLY`,
+`RESTRICTED`, and identity not ready. This lab does **not**
 connect live offers, wallets or settlement to either catalog.
 
 Contents:
-- \`address_guard.py\`: public Bech32m witness v1 32-byte \`rprl\`
+- `address_guard.py`: public Bech32m witness v1 32-byte `rprl`
   shape classifier, fails closed for wrong domains, v0/v2, checksum,
-  padding and mutations. **\`rprl\` is shared by regtest and simnet**;
+  padding and mutations. **`rprl` is shared by regtest and simnet**;
   no network identity is proven by parsing an address.
-- \`offline_preflight.py\`: public *fictional* PRL/DOGE marketplace
+- `offline_preflight.py`: public *fictional* PRL/DOGE marketplace
   listing-envelope validator. It cannot post offers or transfer coins.
-- \`fixtures/public_prl_offer_v1.json\`: entirely fictitious
+- `fixtures/public_prl_offer_v1.json`: entirely fictitious
   amount and quote; not executable, not a market price.
-- \`test_address_guard.py\` and \`test_offline_preflight.py\`:
+- `test_address_guard.py` and `test_offline_preflight.py`:
   **47 isolated deterministic methods**. These have run PASS
   in the assistant's local development environment, not yet on WSL2.
 
@@ -27,12 +27,12 @@ Run from the repository root, Pearl-only worktree, offline:
 
     PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/pearl -p 'test_*.py' -v
 
-All reports keep \`canSign=false\`, \`canBroadcast=false\`,
-\`automaticSettlementSupported=false\` and no real-world qualification.
+All reports keep `canSign=false`, `canBroadcast=false`,
+`automaticSettlementSupported=false` and no real-world qualification.
 No node, miner, RPC, wallet, keys, signing, real funds, transaction
 or network access occurs during tests.
 
 Official source snapshot reviewed:
 https://github.com/pearl-research-labs/pearl/tree/29c2b03009143c98f4519271d716bd5535762a18
-See \`docs/asset-exchange/PEARL_PRL_ADAPTER_RESEARCH_V1.md\`
+See `docs/asset-exchange/PEARL_PRL_ADAPTER_RESEARCH_V1.md`
 for the P0–P9 blocked gate matrix and major unknowns.
