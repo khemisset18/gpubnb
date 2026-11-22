@@ -349,3 +349,28 @@ Aucune transaction, wallet, nœud ou RPC. Aucune qualification de
 refund réellement exécutable, de standardness, de sighash, de witness
 stack, de CLTV natif, de frais ou de gestion des reorgs. L1–L9
 restent non qualifiés ou différés. `MARKETPLACE_ONLY` inchangé.
+
+## Complément L3 — 87/87 tests reproduits sur Ubuntu WSL2
+
+Le journal transmis par l'opérateur consigne :
+
+```text
+HEAD is now at 2f7dd83 docs(ltc): explain candidate HTLC byte tests and WSL2 87-test checkpoint
+Ran 87 tests in 0.018s
+OK
+=== ETAT GIT LTC ===
+## HEAD (no branch)
+```
+
+**Résultat vérifié sur le PC : 87/87 méthodes unitaires PASS,
+zéro échec.** Répartition : 39 préflight, 22 garde-fous d'adresse
+Bech32/HRP, 26 inspections de scripts HTLC synthétiques.
+Environnement : `unshare --user --map-root-user --net`,
+`PYTHONDONTWRITEBYTECODE=1`; aucun fichier local modifié au terme
+de l'exécution. Commit testé :
+`2f7dd83cc0841179570a3f71afe59a870f3b04d3`.
+
+**Qualification financière inchangée : BLOQUÉE.** Ces suites sont
+purement hors ligne et n'exécutent ni script dans un vrai nœud Litecoin,
+ni validation de consensus, ni signature, ni remboursement, ni transaction,
+ni wallet. L8 et L9 restent différés et aucune activation n'est permise.
