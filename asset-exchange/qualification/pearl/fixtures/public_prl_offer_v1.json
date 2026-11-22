@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "kind": "SYNTHETIC_NONEXECUTABLE_PUBLIC_OFFER",
+  "domain": "GPUbnb:PRL:OFFLINE_MARKETPLACE_REVIEW:v1",
+  "chainId": "pearl",
+  "network": "regtest",
+  "assetSymbol": "PRL",
+  "protocolVersion": "PRL_MARKETPLACE_RESEARCH_V1",
+  "offer": {
+    "side": "OFFER_PRL",
+    "offeredGrains": "100000000",
+    "requestedAsset": "DOGE",
+    "requestedAtoms": "250000000",
+    "listingMode": "PUBLIC_DISCOVERY_FIXTURE_ONLY",
+    "syntheticOnly": true
+  },
+  "permissions": {
+    "canPostOffer": false,
+    "canTakeOffer": false,
+    "canFund": false,
+    "canSign": false,
+    "canBroadcast": false,
+    "canSettle": false,
+    "automaticSettlementSupported": false,
+    "realFundsUsed": false
+  }
+}
