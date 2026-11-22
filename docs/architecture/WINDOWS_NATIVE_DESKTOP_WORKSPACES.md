@@ -151,7 +151,7 @@ Examples from the current manifests:
 - Cloud Desktop: 2 GiB VRAM minimum.
 - Creator: 6 GiB VRAM minimum.
 - CAD: 6 GiB VRAM minimum.
-- Gaming: 8 GiB VRAM minimum.
+- Gaming: 4 GiB VRAM and 8 GiB system RAM minimum for the workspace, 8 GiB VRAM and 16 GiB RAM recommended. These are host baselines, not qualifications for a specific game; capacity and performance depend on the selected game.
 
 These are minimum compatibility gates, not performance guarantees.
 
