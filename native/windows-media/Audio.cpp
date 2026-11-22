@@ -16,6 +16,7 @@
 #include <new>
 
 using Microsoft::WRL::ComPtr;
+using Microsoft::WRL::ClassicCom;
 using Microsoft::WRL::FtmBase;
 using Microsoft::WRL::Make;
 using Microsoft::WRL::RuntimeClass;
