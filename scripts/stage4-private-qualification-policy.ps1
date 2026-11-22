@@ -45,10 +45,15 @@ function Assert-Stage4PrivateQualificationPolicy {
     if ($Manifest.sourceUnsignedManifestSha256 -cnotmatch '^[0-9a-f]{64}$' -or
         $Manifest.buildIdentitiesSha256 -cnotmatch '^[0-9a-f]{64}$' -or
         $Manifest.protocols.worker -ne 1 -or
-        $Manifest.protocols.mediaTransport -ne 2 -or
-        $Manifest.protocols.browserMedia -ne 1 -or
+        $Manifest.protocols.mediaTransport -ne 3 -or
+        $Manifest.protocols.consoleMediaTransport -ne 4 -or
+        $Manifest.protocols.workerAudioBatch -ne 1 -or
+        $Manifest.protocols.browserMedia -ne 2 -or
+        $Manifest.protocols.browserAudio -ne 1 -or
         $Manifest.protocols.browserInput -ne 1 -or
-        $Manifest.protocols.mediaAbi -ne 2) {
+        $Manifest.protocols.mediaAbi -ne 2 -or
+        $Manifest.protocols.consoleMediaAbi -ne 3 -or
+        $Manifest.protocols.audioCaptureAbi -ne 1) {
         throw 'private_qualification_provenance_invalid'
     }
     $expires=Convert-Stage4ExpiryToUtc $Manifest.expiresUtc
@@ -90,7 +95,16 @@ function Assert-Stage4PrivateBuildIdentity {
         $Identity.helper.workerSignerSha256 -cne $ExpectedPublisherSha256 -or
         $Identity.worker.mediaSignerSha256 -cne $ExpectedPublisherSha256 -or
         $Identity.helper.mutationAuthority -cne 'release-candidate' -or
+        $Identity.helper.workerProtocol -ne 1 -or
+        $Identity.helper.mediaTransportProtocol -ne 3 -or
+        $Identity.helper.consoleMediaTransportProtocol -ne 4 -or
+        $Identity.helper.workerAudioBatchProtocol -ne 1 -or
+        $Identity.helper.browserMediaProtocol -ne 2 -or
+        $Identity.helper.browserAudioProtocol -ne 1 -or
+        $Identity.helper.browserInputProtocol -ne 1 -or
         $Identity.media.mediaAbi -ne 2 -or
+        $Identity.media.consoleMediaAbi -ne 3 -or
+        $Identity.media.audioCaptureAbi -ne 1 -or
         $Identity.media.nvencApi -cne '13.0' -or
         $Identity.agentRuntime.tlsContext -cne $true) {
         throw 'private_qualification_embedded_identity_mismatch'

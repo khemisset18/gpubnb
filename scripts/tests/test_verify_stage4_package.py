@@ -47,10 +47,12 @@ class PackageVerifierTests(unittest.TestCase):
             "agentRuntime": {"idnaCodec": True, "dnsResolution": True, "tlsContext": True},
             "helper": {"sourceCommit": COMMIT, "workerSignerSha256": PUBLISHER,
                        "mutationAuthority": "release-candidate", "workerProtocol": 1,
-                       "mediaTransportProtocol": 2, "browserMediaProtocol": 1,
-                       "browserInputProtocol": 1},
+                       "mediaTransportProtocol": 3, "consoleMediaTransportProtocol": 4,
+                       "workerAudioBatchProtocol": 1, "browserMediaProtocol": 2,
+                       "browserAudioProtocol": 1, "browserInputProtocol": 1},
             "worker": {"sourceCommit": COMMIT, "mediaSignerSha256": PUBLISHER},
-            "media": {"sourceCommit": COMMIT, "mediaAbi": 2, "nvencApi": "13.0"},
+            "media": {"sourceCommit": COMMIT, "mediaAbi": 2, "consoleMediaAbi": 3,
+                      "audioCaptureAbi": 1, "nvencApi": "13.0"},
         }
         identity_path = self.root / "build-identities.json"
         identity_path.write_text(json.dumps(identity), encoding="utf-8")

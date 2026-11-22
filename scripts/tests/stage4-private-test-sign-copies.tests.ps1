@@ -82,11 +82,11 @@ try {
     }
     $identity=@{agent=@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit};
         agentRuntime=@{idnaCodec=$true;dnsResolution=$true;tlsContext=$true};
-        helper=@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate';workerProtocol=1;mediaTransportProtocol=2;browserMediaProtocol=1;browserInputProtocol=1};
-        worker=@{sourceCommit=$commit;mediaSignerSha256=$pin};media=@{sourceCommit=$commit;mediaAbi=2;nvencApi='13.0'}}
+        helper=@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate';workerProtocol=1;mediaTransportProtocol=3;consoleMediaTransportProtocol=4;workerAudioBatchProtocol=1;browserMediaProtocol=2;browserAudioProtocol=1;browserInputProtocol=1};
+        worker=@{sourceCommit=$commit;mediaSignerSha256=$pin};media=@{sourceCommit=$commit;mediaAbi=2;consoleMediaAbi=3;audioCaptureAbi=1;nvencApi='13.0'}}
     $ip=Join-Path $dir 'build-identities.json';[IO.File]::WriteAllText($ip,($identity|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
     $script:m=@{schemaVersion=2;kind='STAGE4_UNSIGNED_PRIVATE_CANDIDATE';signatureStatus='unsigned';sourceCommit=$commit;publisherSha256=$pin;
-        protocols=@{worker=1;mediaTransport=2;browserMedia=1;browserInput=1;mediaAbi=2};installable=$false;publicBookabilityEnabled=$false;iddDriverIncluded=$false;
+        protocols=@{worker=1;mediaTransport=3;consoleMediaTransport=4;workerAudioBatch=1;browserMedia=2;browserAudio=1;browserInput=1;mediaAbi=2;consoleMediaAbi=3;audioCaptureAbi=1};installable=$false;publicBookabilityEnabled=$false;iddDriverIncluded=$false;
         files=$records;buildIdentitiesSha256=(Get-FileHash $ip -Algorithm SHA256).Hash.ToLowerInvariant()}
     Save-Manifest
     $positive=Read-Fixture

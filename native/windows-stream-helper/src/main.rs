@@ -586,10 +586,13 @@ fn build_policy_json() -> Result<String, CliError> {
         "disabled"
     };
     Ok(format!(
-        r#"{{"schemaVersion":1,"sourceCommit":"{source}","workerSignerSha256":"{signer}","mutationAuthority":"{authority}","workerProtocol":{},"mediaTransportProtocol":{},"browserMediaProtocol":{},"browserInputProtocol":{}}}"#,
+        r#"{{"schemaVersion":1,"sourceCommit":"{source}","workerSignerSha256":"{signer}","mutationAuthority":"{authority}","workerProtocol":{},"mediaTransportProtocol":{},"consoleMediaTransportProtocol":{},"workerAudioBatchProtocol":{},"browserMediaProtocol":{},"browserAudioProtocol":{},"browserInputProtocol":{}}}"#,
         gpubnb_windows_stream_helper::worker_protocol::WORKER_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::media_protocol::MEDIA_TRANSPORT_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::media_protocol::MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::media_protocol::WORKER_AUDIO_BATCH_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::browser_media_protocol::BROWSER_MEDIA_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::browser_audio_protocol::BROWSER_AUDIO_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::browser_input_protocol::BROWSER_INPUT_PROTOCOL_VERSION,
     ))
 }
@@ -635,7 +638,12 @@ mod tests {
             assert!(build_policy_json().is_err());
         } else if let Ok(value) = build_policy_json() {
             assert!(value.contains("\"workerProtocol\":1"));
-            assert!(value.contains("\"mediaTransportProtocol\":2"));
+            assert!(value.contains("\"mediaTransportProtocol\":3"));
+            assert!(value.contains("\"consoleMediaTransportProtocol\":4"));
+            assert!(value.contains("\"workerAudioBatchProtocol\":1"));
+            assert!(value.contains("\"browserMediaProtocol\":2"));
+            assert!(value.contains("\"browserAudioProtocol\":1"));
+            assert!(value.contains("\"browserInputProtocol\":1"));
         }
     }
 
