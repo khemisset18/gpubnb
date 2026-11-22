@@ -149,34 +149,19 @@ jobs:
           (root / "doge-ledger-emulator-report.json").write_text(json.dumps(report, indent=2) + "\n")
           print(json.dumps(report))
           PY
-      - name: Attempt one offline synthetic DOGE P2PKH transaction signature
-        shell: bash
-        run: |
-          set -euo pipefail
-          # This process runs inside Speculos with NO outside network; its
-          # only funding is a made-up serialized byte fixture, never chain UTXOs.
-          docker run -d --rm --network none --name doge-speculos-tx \
-            -v "$APP_ROOT:/speculos/apps:ro" \
-            -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py:/speculos/ledger_emulator_probe.py:ro" \
-            -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py:/speculos/ledger_tx_sign_probe.py:ro" \
-            ghcr.io/ledgerhq/speculos:latest \
-            --model nanosp --display headless --api-port 5000 apps/doge-test.elf
-          trap 'docker logs doge-speculos-tx 2>&1 | tail -n 45 || true; docker rm -f doge-speculos-tx >/dev/null 2>&1 || true' EXIT
-          ready=0
-          for i in $(seq 1 35); do
-            if docker exec doge-speculos-tx python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:5000/",timeout=2).read()' >/dev/null 2>&1; then ready=1; break; fi
-            sleep 1
-          done
-          test "$ready" = 1
-          docker exec doge-speculos-tx python3 /speculos/ledger_tx_sign_probe.py \
+          # Reuse the SAME already-running isolated Speculos process. Starting
+          # a second emulator exhausted or killed the original runner process.
+          # Fixture is synthetic, no DOGE chain, RPC or user keys.
+          docker exec doge-speculos python3 /speculos/ledger_tx_sign_probe.py \
             | tee "$RUNNER_TEMP/doge-ledger-synthetic-signature-result.json"
           python3 - <<'PY'
           import json, os, pathlib
           root = pathlib.Path(os.environ["RUNNER_TEMP"])
-          j = json.loads((root / "doge-ledger-synthetic-signature-result.json").read_text())
-          assert j["signature_on_synthetic_transaction_verified"] is True
-          assert j["mutated_transaction_signature_rejected"] is True
-          assert j["D8"] == "BLOCKED" and j["real_DOGE_used"] == 0 and j["broadcasts"] == 0
+          result = json.loads((root / "doge-ledger-synthetic-signature-result.json").read_text())
+          assert result["signature_on_synthetic_transaction_verified"] is True
+          assert result["mutated_transaction_signature_rejected"] is True
+          assert result["D8"] == "BLOCKED"
+          assert result["real_DOGE_used"] == 0 and result["broadcasts"] == 0
           PY
       - name: Preserve public emulator evidence even on build failures
         if: always()
