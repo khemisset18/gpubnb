@@ -194,3 +194,46 @@ effectivement chargé, de namespace réseau effectif pour un démon, de
 mauvais réseau refusé par RPC ou d'isolation native. L2–L7 restent à
 qualifier indépendamment ; L8/L9 restent différés. Aucune transaction,
 signature ou diffusion n'a été effectuée.
+
+## Complément L2 — préfixes LTC transparents / MWEB et adresse Bech32 v0
+
+L'opérateur a contrôlé dans le fichier amont
+`src/chainparams.cpp` du commit source
+`ec1b6489a900d09cf5991e220dce089c77a232a2`, en lecture seule,
+les constantes du regtest :
+
+```text
+L2 : IDENTITES TRANSPARENT / MWEB DISTINCTES
+Transparent : rltc
+MWEB        : tmweb
+MWEB existe dans le profil regtest : exclusion obligatoire
+```
+
+La distinction des HRP est un contrôle de source statique : cela ne
+prouve pas que les chemins MWEB du wallet, du nœud, d'un peg-in/peg-out,
+d'un UTXO ou d'un remboursement complet seraient refusés.
+
+Une nouvelle fonction autonome
+`asset-exchange/qualification/litecoin/transparent_address_guard.py`
+refuse par défaut toutes les chaînes non reconnues comme **adresses
+Bech32 SegWit v0 transparentes `rltc`** à checksum valide et encodage
+canonique : autres réseaux, préfixe `tmweb`, mauvais checksum,
+mauvais programme, version de témoin autre que 0 et caractères
+non conformes. Elle retourne toujours des indicateurs
+`qualified=false`, `mwebExcludedInFullTransaction=false`,
+`canSign=false`, `canBroadcast=false`. Il s'agit d'une
+classification de chaîne de caractères, non d'un décodeur de
+transaction Litecoin ni d'un validateur natif du protocole MWEB.
+
+**22/22 tests supplémentaires PASS dans l'environnement local de
+construction isolé**, y compris vecteurs de contrôle P2WPKH/P2WSH
+publics et mutations. Les tests complémentaires ne sont pas encore
+attestés par Ubuntu WSL2 de l'opérateur ; après récupération de la
+branche de travail, le nombre attendu sera 61 méthodes distinctes
+(39 préexistantes + 22 nouvelles).
+
+**L2 statut : SOURCE_HRPS_PASS + ADDRESS_SHAPE_GUARD_PASS /
+NATIVE_MWEB_REJECTION_BLOCKED.** L0 source/distribution partiellement
+prouvée, L1 réseau natif non exécuté, L3–L7 non qualifiés, L8–L9
+différés. Aucun ajout au registre de règlement, aucune clé, signature,
+transaction, RPC ou diffusion.
