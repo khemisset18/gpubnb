@@ -314,8 +314,10 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
 
     value->audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (value->audioEvent == nullptr) return HRESULT_FROM_WIN32(GetLastError());
-    ComPtr<AudioActivationHandler> handler = Make<AudioActivationHandler>(value->audioEvent);
+    ComPtr<AudioActivationHandler> handler = Make<AudioActivationHandler>();
     if (!handler) return E_OUTOFMEMORY;
+    hr = handler->RuntimeClassInitialize(value->audioEvent);
+    if (FAILED(hr)) return hr;
 
     AUDIOCLIENT_ACTIVATION_PARAMS activation = {};
     activation.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
