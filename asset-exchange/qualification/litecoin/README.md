@@ -142,3 +142,30 @@ ne donne **jamais** une autorisation : `canRefund=false`,
 à confirmer sur l'Ubuntu WSL2 de l'opérateur. Le nouveau total
 attendu est **110 tests distincts** (87 attestés sur WSL2 + 23 nouveaux).
 Ne pas confondre comparaison simulée et acceptation par consensus.
+
+## L6 — spécimen de dossier public (NON récupérable)
+
+Le nouveau `public_evidence_specimen.py` associe une **demande
+synthétique** au **script HTLC candidat**, avec des hash SHA-256
+du contenu public, un contrôle de hauteur CLTV et des refus pour
+mauvais réseau, mauvais genesis, MWEB, frais, scripts, doublons JSON
+et permissions financières.
+
+`test_public_evidence_specimen.py` fournit **30 tests unitaires
+locaux PASS**. L'ensemble des fichiers de la branche compte
+**140 tests attendus**, dont **110 ont déjà été attestés sur WSL2**
+et **30 attendent confirmation sur WSL2**.
+
+Ce spécimen ne contient ni préimage ni clé privée et **ne produit
+aucun remboursement signable ou opérationnel**. Son checksum est
+non authentifiant : la cohérence du contenu ne dit rien de
+l'authenticité ni de la présence des UTXO/transactions sur une
+chaîne réelle. Le statut `independentRecoveryVerified` reste false
+et la gate L6 est toujours BLOQUÉE.
+
+Commande depuis le worktree LTC séparé :
+
+    PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
+
+Ne jamais importer ces exemples dans un wallet ni les utiliser pour
+financer ou signer une transaction.
