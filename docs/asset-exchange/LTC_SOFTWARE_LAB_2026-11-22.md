@@ -476,10 +476,11 @@ Le test de récupération indépendante L6 est toujours BLOQUÉ.
 Aucun nœud, wallet, clé, vraie transaction, signature, diffusion
 ou fonds réels utilisés.
 
-## Complément L3/L6 — 110/110 tests WSL2 et inventaire public de récupération
+## Complément L3 — 110/110 tests reproduits sur Ubuntu WSL2
 
-Le journal transmis par l'opérateur montre le worktree LTC détaché
-au commit `d1d6ec15449c3396b606959a34689686e58bff0d` et la sortie :
+Le journal transmis par l'opérateur confirme l'exécution dans le
+worktree LTC détaché au commit
+`d1d6ec15449c3396b606959a34689686e58bff0d` :
 
 ```text
 === LTC : 110 TESTS HORS LIGNE ===
@@ -489,48 +490,22 @@ OK
 ## HEAD (no branch)
 ```
 
-**110/110 méthodes distinctes PASS sur Ubuntu WSL2**, sans erreur et
-sans fichiers locaux modifiés. Répartition : 39 préflight + 22 formes
-d'adresse + 26 octets HTLC candidats + 23 simulations de hauteurs CLTV.
-Environnement : `PYTHONDONTWRITEBYTECODE=1` et
+**110/110 méthodes unitaires distinctes PASS sur Ubuntu WSL2**,
+0 échec, 0 erreur, worktree propre. Répartition : 39 validations
+d'enveloppe, 22 adresses transparentes, 26 scripts HTLC candidats,
+23 simulations CLTV et finalité hypothétique. La commande employait
+`PYTHONDONTWRITEBYTECODE=1` et
 `unshare --user --map-root-user --net`.
 
-### Nouveau contrôle de forme du dossier de récupération, L6 partiel
+Un deuxième inventaire L6 expérimental a été retiré car il doublonnait
+le spécimen de preuve publique existant dans cette même branche.
+Les deux fichiers conservés `public_evidence_specimen.py` et
+`test_public_evidence_specimen.py` apportent **30 nouveaux tests**,
+sans exécution WSL2 encore confirmée par l'opérateur :
+**total attendu de 140 tests (110 attestés + 30 nouveaux)**.
 
-Les fichiers ajoutés
-`asset-exchange/qualification/litecoin/public_recovery_inventory.py`
-et `test_public_recovery_inventory.py` définissent et éprouvent une
-**liste d'inventaire public synthétique, expressément NON exécutable**,
-liant le hash canonique de la requête, les octets fictifs du script,
-son hash P2WSH, la hauteur de remboursement, la destination publique,
-les montants et l'outpoint de démonstration, la source Core et le
-genesis regtest.
-
-Le contrôleur compare strictement les données à leurs références
-synthétiques, refuse les champs nouveaux (y compris tentatives de
-clé, seed, portefeuille ou transaction signée), les mauvais réseaux,
-la modification d'un digest ou d'un paramètre, les incohérences
-script/hauteur et toute permission non autorisée. Une empreinte SHA-256 du JSON canonique est retournée à titre
-d'identifiant. **Sans référence de hash épinglée et authentifiée
-indépendamment, elle ne démontre pas qu'un dossier n'a pas été
-falsifié**. La comparaison aux données sources synthétiques n'est
-pas une authentification : un dossier et ses sources tous deux
-falsifiés, mais auto-cohérents, restent possibles.
-
-**29 nouvelles méthodes de test sont présentes dans GitHub mais
-leur exécution n'est pas encore attestée** sur l'environnement de
-l'opérateur, ni sur le runner de cette étape. Total à vérifier :
-**139 méthodes (110 déjà attestées + 29 nouvelles)**.
-
-Les sorties imposent
-`independentRecoveryAvailable=false`,
-`nativeRecoveryVerified=false`, `canRecover=false`,
-`canSign=false`, `canBroadcast=false` et
-`automaticSettlementSupported=false`.
-
-**L6 reste NON QUALIFIÉ** : aucun bundle signé ou signable,
-aucun outil de recovery indépendant, aucune dépense native, aucun
-remboursement prouvé, aucune preuve d'origine authentifiée.
-L1–L5 et L7 restent bloqués ; L8/L9 différés. Aucun nœud,
-wallet, signature, broadcast ou fonds réels ; aucun code DOGE,
-registre financier ou déploiement modifié.
+**L6 n'est pas validé** : le spécimen est expressément non
+récupérable, et son SHA-256 sans clé n'authentifie pas les données.
+Aucun wallet, nœud, signataire, transaction, remboursement,
+broadcast ni fonds réels ; L1–L9 natifs restent non qualifiés
+ou différés. `MARKETPLACE_ONLY` inchangé.
