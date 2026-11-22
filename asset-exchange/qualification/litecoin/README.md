@@ -73,3 +73,28 @@ source officielle intégrale ou identité de nœud n'a été vérifiée par ce t
 Ne pas utiliser le candidat documentaire comme preuve L0.
 
 Source amont : https://github.com/litecoin-project/litecoin/releases/tag/v0.21.5.8.
+
+## L2 — contrôle complémentaire des chaînes d'adresses publiques
+
+`transparent_address_guard.py` ajoute une classification pure de
+chaînes Bech32 transparentes **regtest v0 uniquement** (HRP `rltc`,
+checksum BIP173, P2WPKH et P2WSH). `test_transparent_address_guard.py`
+contient **22 méthodes supplémentaires**, testées avec succès dans
+l'environnement local de construction. Avec les 39 tests antérieurs,
+**61 tests sont attendus après actualisation dans WSL2**, et ne doivent
+pas être revendiqués comme vérifiés sur WSL2 avant exécution.
+
+Ce contrôle **ne s'intègre à aucun runtime financier** ; il n'accepte
+aucune autre chaîne et refuse également les préfixes MWEB (`tmweb`)
+et les adresses Mainnet/testnet. Il ne lit ni wallet ni transaction,
+et ne prouve pas l'exclusion MWEB des données réellement relayées,
+des peg-ins/outs, du change ou de la récupération. Les indicateurs
+financiers et de qualification restent toujours `false`.
+
+Pour exécuter les deux suites (sans clé, réseau ou signature) depuis
+la racine du worktree :
+
+    PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
+
+Aucun changement au registre, au nœud, au signer, au workflow ou
+à la branche DOGE.
