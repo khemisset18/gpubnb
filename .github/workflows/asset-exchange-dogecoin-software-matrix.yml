@@ -6,11 +6,15 @@ on:
     paths:
       - ".github/workflows/asset-exchange-dogecoin-software-matrix.yml"
       - "asset-exchange/qualification/dogecoin/d8/run-full-offline-matrix.sh"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_tx_sign_probe.py"
       - "docs/asset-exchange/DOGE_FULL_OFFLINE_MATRIX_2026-11-22.md"
   pull_request:
     paths:
       - ".github/workflows/asset-exchange-dogecoin-software-matrix.yml"
       - "asset-exchange/qualification/dogecoin/d8/run-full-offline-matrix.sh"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_tx_sign_probe.py"
 
 permissions:
   contents: read
