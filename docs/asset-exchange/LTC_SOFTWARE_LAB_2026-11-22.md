@@ -71,3 +71,34 @@ pas une autorisation d'échanger des LTC.
 
 Références : docs/asset-exchange/ASSET_ACTIVATION_MATRIX_V1.md ;
 https://github.com/litecoin-project/litecoin/releases/tag/v0.21.5.8.
+
+## Complément L0 — contrôles reproduits sur Ubuntu WSL2, 22 novembre
+
+Le compte rendu fourni par l'opérateur pour le worktree détaché
+`4be5e58` consigne à nouveau **39/39 méthodes de préflight PASS,
+0 FAIL**, dans `unshare --user --map-root-user --net`. Git affiche
+`## HEAD (no branch)`, avec aucun fichier local modifié.
+
+Une seconde commande lecture seule, effectuée par l'opérateur dans ce
+worktree, a donné :
+
+- Tag officiel distant `refs/tags/v0.21.5.8` :
+  `ee2aea3fc3fd95213d1a041d561b52e07ae6dc63`.
+- Ligne du manifeste `SHA256SUMS.asc` accessible par HTTPS :
+  `43200c9f9d65ebc126ea5833ca9429e144c4b3273da6bb9f4e89fd7450ab1be9  litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz`.
+
+La lecture de l'objet tag GitHub public rattache ce tag annoté au
+commit source `ec1b6489a900d09cf5991e220dce089c77a232a2`.
+Il n'y a donc pas de contradiction entre les deux SHA.
+
+**Portée : L0 REFERENCES_PUBLIEES_CONCORDANTES / BLOCKED.**
+À cette étape, la signature PGP du manifeste n'a pas été vérifiée
+indépendamment sur le poste ; ni la clé de signature, ni l'archive Linux
+n'ont été authentifiées par comparaison cryptographique de leurs octets.
+La publication d'une ligne SHA via HTTPS ne constitue pas, seule,
+l'authentification de la distribution. Aucun binaire LTC n'a été exécuté.
+
+La prochaine preuve L0 devra vérifier la signature PGP avec l'empreinte
+de clé complète officiellement publiée, contrôler l'intégrité de
+l'archive si téléchargée et enregistrer les identités sans modifier
+les seuils de confiance ni activer LTC.
