@@ -8,6 +8,7 @@ from concurrent.futures import Future
 import hashlib
 import json
 import sys
+import re
 import threading
 import time
 import urllib.request
@@ -31,6 +32,18 @@ G = (0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798,
 
 def sha256d(value):
     return hashlib.sha256(hashlib.sha256(value).digest()).digest()
+
+
+def synthetic_destination_address():
+    """Encode the fixed fixture destination for exact screen comparison."""
+    payload = bytes([30]) + DUMMY_DESTINATION_HASH
+    encoded = payload + sha256d(payload)[:4]
+    n = int.from_bytes(encoded, "big")
+    out = ""
+    while n:
+        n, d = divmod(n, 58)
+        out = identity.ALPHABET[d] + out
+    return out
 
 
 def hash160(pub):
@@ -202,6 +215,7 @@ def review_synthetic_finalize(paid_outputs):
     history = []
     saw_amount = False
     saw_address = False
+    expected_destination = synthetic_destination_address()
     saw_fee = False
     approved_output = False
     approved_fee = False
@@ -221,7 +235,10 @@ def review_synthetic_finalize(paid_outputs):
         if "amount" in lower or "4.99" in text:
             saw_amount |= "4.99" in text
         if "address" in lower:
-            saw_address = True
+            # Nano S+ wraps a long DOGE address over visual lines. Compare
+            # *all* Base58Check characters, not merely the "Address" title.
+            normalized = re.sub(r"[^A-Za-z0-9]", "", text)
+            saw_address = expected_destination in normalized
         if "fees" in lower or "0.01" in text:
             saw_fee |= "0.01" in text
         if "reject" in lower and "accept" not in lower:
@@ -245,7 +262,7 @@ def review_synthetic_finalize(paid_outputs):
     if not (approved_output and approved_fee):
         raise ValueError("emulator transaction returned without complete reviewed approval")
     return {"emulator_approval_automated": True,
-            "screen_amount_observed": saw_amount, "screen_address_title_observed": saw_address,
+            "screen_amount_observed": saw_amount, "screen_exact_destination_verified": saw_address,
             "screen_fee_observed": saw_fee, "simulated_screen_sequence": history[-25:]}
 
 

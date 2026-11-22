@@ -96,6 +96,18 @@ def probe():
     if tx.check_signature(der, spend_digest(funding, mutated_redeem, outputs), pub):
         raise ValueError("mutated contract redeemScript signature unexpectedly valid")
     scriptsig = synthetic_scriptsig(der + b"\x01", redeem)
+    visible = " ".join(review["simulated_screen_sequence"]).lower()
+    terms = {
+        "regtest_network": "regtest" in visible,
+        "refund_role": "refund" in visible,
+        "cltv_lock_1351": "1351" in visible or "cltv" in visible,
+        "nonfinal_sequence": str(SEQUENCE) in visible,
+        "funding_outpoint": tx.sha256d(funding)[::-1].hex() in visible,
+        "contract_redeem": redeem.hex() in visible,
+    }
+    # Observe the actual UI: normal Ledger DOGE mainnet signing screen
+    # cannot supply authenticated GPUbnb D2/H8 contract terms.
+    assert not all(terms.values()), "Unexpected complete H8 data; audit UI manually"
     # Mainnet DOGE firmware UI does not prove network/genesis, refund role,
     # CLTV height, sequence, commitment, claim/refund keys or funding outpoint.
     return {
@@ -111,6 +123,8 @@ def probe():
         "mutated_refund_lock_rejected": True,
         "mutated_redeem_rejected": True,
         "emulator_screen": review,
+        "screen_htlc_terms_observed": terms,
+        "missing_htlc_fields": [field for field, seen in terms.items() if not seen],
         "ledger_app_network": "DOGE_MAINNET_PARAMETERS",
         "independent_on_device_htlc_terms_displayed": False,
         "dogecoin_regtest_network_authenticated": False,

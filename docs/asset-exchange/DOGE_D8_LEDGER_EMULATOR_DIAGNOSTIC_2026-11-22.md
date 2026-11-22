@@ -90,3 +90,12 @@ indépendamment tous les champs \`signer_review_fields\` de GPUbnb
 Même si ECDSA et les mutations passent, le résultat **ne valide PAS D8**.
 Il ne fait aucune dépense, ne diffuse rien, ne communique avec aucun nœud
 ou service et conserve les preuves comme diagnostic isolé en PR brouillon.
+
+
+## Résultats démontrés (test réel en émulation)
+
+- [GitHub Actions #45058735752](https://github.com/khemisset18/gpubnb/actions/runs/45058735752) : **PASS**, après correction de la séparation \`scriptLength / script+sequence\`. Ledger signe un digest de transaction DOGE P2PKH fictive, ECDSA vérifié indépendamment ; mutation de sortie rejetée.
+- [GitHub Actions #45059081817](https://github.com/khemisset18/gpubnb/actions/runs/45059081817) : **PASS**, Ledger signe aussi un digest de remboursement correspondant à la structure D2 P2SH/HTLC/CLTV de GPUbnb, avec hauteur1351 et séquence nonfinale, alors que le code du firmware utilise les paramètres mainnet. ECDSA et refus des mutations montant/lock/redeemScript vérifiés.
+- **Manque critique** : les écrans réellement observés montrent uniquement sortie/amount/adresse/frais ; PAS les champs Regtest/genesis, rôle refund, lock/CLTV, séquence, outpoint. Cette insuffisance d'affichage interdit une qualification D8 de cette application sans solution de présentation/revue complète côté appareil.
+- L'ensemble reste sans réseau blockchain ni funding réel : ces scénarios ne démontrent ni exécution CLTV par consensus, ni scriptSig acceptée nativement, ni D8 matériel.
+- Extension : vérification **octet pour octet** de l'adresse DOGE Mainnet affichée à l'écran de l'émulateur avant toute approbation, en supprimant seulement les blancs de coupure de ligne.

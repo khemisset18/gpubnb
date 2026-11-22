@@ -41,6 +41,11 @@ class FixtureTests(unittest.TestCase):
         self.assertTrue(p.check_signature(der, digest, pub))
         self.assertFalse(p.check_signature(der, p.sha256d(b"changed"), pub))
 
+    def test_exact_display_address_is_valid_base58check(self):
+        address = p.synthetic_destination_address()
+        self.assertEqual(address, "DBBSWfQdrDxq7S7YwZ6vi67BXZMvNKkAxe")
+        self.assertEqual(p.identity.base58check(address), bytes([30]) + p.DUMMY_DESTINATION_HASH)
+
     def test_fixed_synthetic_preimage_mutation_changes_digest(self):
         script = p.p2pkh_script(bytes([2] * 20))
         funding = p.synth_funding(script)
