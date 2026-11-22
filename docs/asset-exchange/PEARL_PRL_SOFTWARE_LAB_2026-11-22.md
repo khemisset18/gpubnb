@@ -311,3 +311,33 @@ Après installation ou découverte d'un Node.js compatible et
 de confiance, les tests Node devront être relancés uniquement
 dans le namespace réseau isolé. Rien ne nécessite d'accéder
 au répertoire ni au code de minage.
+
+## Diagnostic complémentaire de l'outil WSL2 — 23 novembre 2026
+
+Le journal opérateur complémentaire a confirmé explicitement :
+
+```text
+PRETTY_NAME="Ubuntu 26.04 LTS"
+VERSION_CODENAME=resolute
+x86_64
+=== NODE.JS DISPONIBLE ? ===
+NODE.JS ABSENT DE WSL2
+=== ETAT GIT EXCHANGE PRL ===
+60a3934
+## experiment/pearl-prl-architecture-hardening-20261123...origin/experiment/pearl-prl-architecture-hardening-20261123
+```
+
+**Le clone de la branche d'architecture PRL est propre et sur le
+commit `60a39344ac662b7811725ea89f77192f206f64b6`.**
+Le diagnostic direct confirme l'absence de `node` et
+`nodejs` dans le PATH Ubuntu, ce qui explique que les tests
+JavaScript ne se sont pas lancés. **Ce n'est pas un résultat FAIL
+du code**. Les 94 tests Python PASS restent confirmés.
+
+Pour respecter la séparation avec tout minage, le plan
+privilégié est un exécutable Node.js officiel vérifié par SHA256,
+installé dans un dossier spécifique au laboratoire Exchange,
+sans `sudo`, sans `apt` global, sans `npm install`, sans changer
+le PATH permanent ni les autres worktrees. Les tests Node
+seront lancés en isolement réseau uniquement après la
+vérification du binaire. Pas de route API démarrée.
