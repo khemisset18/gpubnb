@@ -230,3 +230,38 @@ distribué n'existe et aucune route API d'offres n'est déployée.
 **P0–P9 restent non qualifiés** pour les transactions / fonds réels.
 Les vérifications ne constituent ni audit indépendant, ni attestation
 de chaîne, ni validation du matériel, ni contrôle de production.
+
+## Contrôle d'architecture Exchange PRL — 23 novembre 2026 (en attente de tests Node)
+
+Branche : `experiment/pearl-prl-architecture-hardening-20261123`.
+La dernière campagne opérateur confirmée reste **94/94
+tests Python PASS** sur le commit `9c685cc`.
+
+L'analyse statique de l'Exchange réel a identifié :
+- ticker incorrect `PEARL` dans le registre Asset Exchange ;
+- `newOffersEnabled=true` par défaut pour un actif Pearl
+  avec `identityReady=false` ;
+- absence de garde spécifique PRL dans la couche de
+  publication des offres malgré l'identité native non qualifiée ;
+- README API G5 obsolète, alors que des modules routes,
+  sessions, PostgreSQL et offer-service existent dans les sources.
+
+Les corrections proposées sont **uniquement dans l'Exchange** :
+symbole `PRL` ; `newOffersEnabled=false` pour Pearl ;
+refus des offres Pearl sur les côtés give/want avant toute
+signature ou toute écriture au dépôt ; clarification documentaire.
+
+Le fichier `test_prl_exchange_gate.mjs` apporte **10 méthodes
+Node.js nouvelles non encore exécutées/attestées sur Ubuntu**.
+Ces tests n'exécutent aucun signataire, n'ouvrent aucun
+service, ne créent aucune transaction et ne touchent aucun fonds.
+
+**Bloqueur restant critique :** la politique d'acceptation
+d'anciennes offres PRL, et les contrôles au niveau de la
+base de données atomique, ne sont pas encore qualifiés.
+L'authentification publique, le déploiement et les preuves
+natives Pearl restent non qualifiés.
+
+Aucun fichier de minage ni aucun autre domaine hors
+Asset Exchange n'est modifié. Aucune capacité de
+publication PRL ou de règlement n'est activée.
