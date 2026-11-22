@@ -130,3 +130,42 @@ ni comparée bit à bit au SHA-256 contenu dans le manifeste signé. Pas de
 vérification indépendante de la provenance de la clé par un second canal
 documentée. L1–L9 restent non qualifiés ou différés. Aucun exécutable LTC,
 nœud, signature de transaction, broadcast ou fonds réels impliqué.
+
+## Complément L0 — archive Linux contrôlée par SHA-256 sur WSL2
+
+Après un premier essai bloqué par HTTP 404 (absence du répertoire
+`linux/` dans l'URL), l'opérateur a téléchargé avec succès
+`https://download.litecoin.org/litecoin-0.21.5.8/linux/litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz`.
+Le journal du contrôle affiche exactement :
+
+```text
+=== VERIFICATION SHA-256 ===
+/tmp/tmp.JCnz1iJnhl/litecoin-0.21.5.8-x86_64-linux-gnu.tar.gz: OK
+L0 : ARCHIVE CONFORME AU MANIFESTE SIGNE
+```
+
+SHA-256 retenu, conforme à la ligne vérifiée préalablement par PGP :
+`43200c9f9d65ebc126ea5833ca9429e144c4b3273da6bb9f4e89fd7450ab1be9`.
+
+**État actualisé : L0 archive hash PASS + manifeste PGP PASS, profil
+LTC global toujours BLOCKED.** Le téléchargement corrigé utilisait
+l'empreinte littérale fixée précédemment et signée, sans répéter la
+vérification GPG dans le même shell ; la liaison à la signature repose
+sur les deux journaux successifs. L'identité du propriétaire de la clé
+n'a pas été établie par un canal indépendant dans ce rapport. L'archive
+a été supprimée automatiquement après la vérification (trap temporaire).
+Aucun binaire exécuté, nœud démarré, portefeuille ouvert, signature ou
+diffusion de transaction.
+
+Pour L1, la lecture de `src/chainparams.cpp` du commit upstream
+`ec1b6489a900d09cf5991e220dce089c77a232a2` identifie les
+**constantes candidates du regtest Litecoin** suivantes, sans prouver
+encore l'identité d'un nœud exécuté :
+
+- genesis : `530827f38f93b43ed12af0b3ad25a288dc02ed74d6d7857862df51fc56c416f9`;
+- message-start : `fa bf b5 da`;
+- port pair-à-pair par défaut : `19444`;
+- HRP Bech32 transparent : `rltc`.
+
+L1 reste NON QUALIFIÉ tant que la configuration d'un nœud réellement
+isolé, ses paramètres et l'observation réseau n'ont pas été vérifiés.
