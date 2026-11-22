@@ -76,6 +76,38 @@ test('page mounts the client without exposing a capability in URL or DOM', () =>
   assert.equal(closed, 1);
 });
 
+test('gaming workspace reports game stream state instead of desktop state', () => {
+  const canvas = {};
+  const status = { textContent: '' };
+  const optionsSeen = [];
+  const documentObject = {
+    body: { dataset: { workspaceKind: 'gaming' } },
+    querySelector(selector) {
+      return {
+        '#nativeDesktopCanvas': canvas,
+        '#nativeDesktopStatus': status,
+        '#nativeDesktopClose': { addEventListener() {} },
+      }[selector] ?? null;
+    },
+  };
+  const mounted = mountWindowsNativeDesktop({
+    documentObject,
+    locationObject: {
+      href: 'https://example.test/gaming-workspace.html?session=sess-game',
+      search: '?session=sess-game',
+    },
+    clientFactory(options) {
+      optionsSeen.push(options);
+      return { bindDom: () => () => {}, start() {}, close() {} };
+    },
+  });
+
+  assert.equal(mounted.streamPath, '/workspace-gateway/sess-game/native-stream');
+  optionsSeen[0].onState({ state: 'ready' });
+  assert.equal(status.textContent, 'Flux du jeu actif');
+  assert.doesNotMatch(status.textContent, /bureau/iu);
+});
+
 test('fullscreen and pointer lock are user controlled and released on authority revocation', async () => {
   const listeners = new Map();
   const makeButton = () => ({

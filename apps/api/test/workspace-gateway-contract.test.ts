@@ -216,7 +216,7 @@ test('windows native grant redirect is an absolute HTTPS URL', () => {
   );
   assert.match(
     api,
-    /new URL\([\s\S]*\/windows-native-desktop\.html\?session=\$\{encodeURIComponent\(sessionId\)\}[\s\S]*`https:\/\/\$\{host\}`[\s\S]*\)\.toString\(\)/,
+    /const workspacePage=row\.machineWorkspace\.workspace\.slug==='gaming'[\s\S]*\? '\/gaming-workspace\.html'[\s\S]*: '\/windows-native-desktop\.html'[\s\S]*new URL\([\s\S]*\$\{workspacePage\}\?session=\$\{encodeURIComponent\(sessionId\)\}[\s\S]*`https:\/\/\$\{host\}`[\s\S]*\)\.toString\(\)/,
   );
   assert.match(
     api,

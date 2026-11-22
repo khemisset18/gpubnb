@@ -1,0 +1,29 @@
+html,body{background:#0b1018;color:#f3f6fb}
+.gaming-header{min-height:60px;padding:10px 18px;background:#111a27;border-bottom:1px solid #253247;gap:12px}
+.gaming-brand{display:flex;align-items:center;gap:10px;min-width:190px}
+.gaming-brand>div{display:flex;flex-direction:column;line-height:1.15}
+.gaming-brand>div span{margin-top:3px;color:#9caec4;font-size:.78rem}
+.gaming-mark{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#8b5cf6;color:white;font-weight:800}
+.gaming-status{color:#b9c7d8;font-size:.85rem}
+.gaming-manage{color:#cbd5e1;text-decoration:none;font-size:.9rem}
+.gaming-header button,.gaming-manage{border:1px solid #34445b;border-radius:8px;background:#192536;color:#f3f6fb;padding:8px 11px}
+.gaming-header button{cursor:pointer}
+.gaming-header .gaming-stop{border-color:#7f3039;background:#431d27;color:#ffd9dd}
+.gaming-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;align-items:center;gap:22px;width:min(1600px,100%);margin:auto;padding:22px;box-sizing:border-box}
+.gaming-player{min-width:0;overflow:hidden;border:1px solid #29384c;border-radius:14px;background:#080c12;box-shadow:0 18px 60px #0005}
+.gaming-player-bar,.gaming-player-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;color:#9eacc0;font-size:.8rem}
+.gaming-player-bar{border-bottom:1px solid #1d2938;letter-spacing:.07em}
+.gaming-player-bar span:first-child{color:#a98bff;font-weight:700}
+.gaming-player canvas{display:block;width:100%;height:auto;max-height:calc(100vh - 145px);object-fit:contain;background:#000}
+.gaming-player-footer{border-top:1px solid #1d2938}
+.gaming-player-footer button{border:0;background:transparent;color:#c7d2e1;font:inherit;cursor:pointer}
+.gaming-panel{align-self:center;padding:8px 0}
+.gaming-kicker{color:#a98bff;font-size:.74rem;font-weight:700;letter-spacing:.12em}
+.gaming-panel h1{margin:8px 0 10px;font-size:1.65rem;line-height:1.15}
+.gaming-panel>p:not(.gaming-kicker):not(.gaming-private-note){color:#aab8ca;line-height:1.55}
+.gaming-card{margin-top:14px;padding:14px;border:1px solid #29384c;border-radius:10px;background:#111a27}
+.gaming-card strong{font-size:.9rem}
+.gaming-card p{margin:7px 0 0;color:#aab8ca;font-size:.83rem;line-height:1.5}
+.gaming-private-note{margin-top:18px;color:#8b9bb0;font-size:.78rem}
+@media(max-width:900px){.gaming-layout{grid-template-columns:minmax(0,1fr);gap:16px;padding:14px}.gaming-panel{display:grid;grid-template-columns:1fr 1fr;gap:10px}.gaming-panel h1,.gaming-panel>p:not(.gaming-kicker):not(.gaming-private-note){grid-column:1/-1}.gaming-card{margin:0}.gaming-private-note{grid-column:1/-1}}
+@media(max-width:650px){.gaming-header{flex-wrap:wrap}.gaming-brand{flex-basis:calc(50% - 12px)}.gaming-status{order:2;flex-basis:100%}.gaming-layout{padding:8px}.gaming-player-bar,.gaming-player-footer{font-size:.72rem}.gaming-panel{display:block}.gaming-card{margin-top:10px}.gaming-player canvas{max-height:calc(100vh - 210px)}}
