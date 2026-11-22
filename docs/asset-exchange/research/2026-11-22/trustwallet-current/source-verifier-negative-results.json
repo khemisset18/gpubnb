@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "scope": "OFFICIAL_CRX_PUBLIC_SOURCE_EVIDENCE_ONLY",
+  "cases": [
+    {
+      "case": "changed_signed_zip",
+      "result": "PASS_EXPECTED_REFUSAL",
+      "error": "InvalidSignature",
+      "successEvidenceWritten": false
+    },
+    {
+      "case": "wrong_extension_id",
+      "result": "PASS_EXPECTED_REFUSAL",
+      "error": "AssertionError",
+      "successEvidenceWritten": false
+    },
+    {
+      "case": "optimized_python",
+      "result": "PASS_EXPECTED_REFUSAL",
+      "error": "RuntimeError",
+      "successEvidenceWritten": false
+    }
+  ],
+  "tests": 3,
+  "pass": 3,
+  "fail": 0,
+  "skips": 0,
+  "newDogeNativeScenarios": 0,
+  "extensionCodeExecuted": false
+}

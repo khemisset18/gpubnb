@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "observedDateUtc": "2026-11-22",
+  "sourceCodeCandidate": "d349a4cedee0b6ccf183d563e42aaab0c9965503",
+  "targetSelection": "LATEST_PUBLISHED_OFFICIAL_RELEASES_AS_REQUESTED_NOT_INSTALLED_DEVICE_OBSERVATION",
+  "extensionVersion": "26.45.1",
+  "inpageSha256": "e08b30b60549f969d58731751f884340217910c4709358fa2381a590c4c2c87c",
+  "inpageBytes": 1386742,
+  "staticReview": {
+    "registeredDappNetworks": [
+      "ethereum",
+      "solana",
+      "binance",
+      "tron",
+      "bitcoin"
+    ],
+    "registrationByteOffset": 1384857,
+    "dogeLiteralCount": 0,
+    "regtestLiteralCount": 0,
+    "unknownNetworkRefusalCode": 4200,
+    "walletStandardDeclaredUtxoChains": [
+      "bitcoin:mainnet"
+    ],
+    "bitcoinProviderMethods": [
+      "connect",
+      "requestAccounts",
+      "signMessage",
+      "signPSBT",
+      "pushPSBT"
+    ],
+    "interpretation": "NO_DOGE_DAPP_PROVIDER_REGISTERED_IN_THIS_SIGNED_INPAGE_BUNDLE; NOT_AN_INTERACTIVE_WALLET_TEST"
+  },
+  "trustConnectSdk": {
+    "commit": "70f84de35dceaae36efe3a7602d81111c4f2a748",
+    "declaredBip122GenesisIds": [
+      "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+      "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943",
+      "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"
+    ],
+    "dogecoinRegtestGenesis": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+    "dogecoinGenesisInDeclaredSet": false,
+    "bitcoinRegtestIsNotDogecoinRegtest": true
+  },
+  "mobile": {
+    "androidPublishedVersion": "26.46.9",
+    "iosPublishedVersion": "26.46.9",
+    "actualAppsExecuted": false,
+    "dogeRegtestRawSigningStatus": "NOT_DEMONSTRATED"
+  },
+  "qualification": {
+    "publishedArchiveAuthenticity": "PASS_BOUNDED_SOURCE_CHECK",
+    "gpubnbExistingSoftwareEvidence": "UNCHANGED",
+    "trustWalletFullDogeProfile": "BLOCKED",
+    "d2ProfileFreeze": "BLOCKED",
+    "d8Hardware": "NOT_TESTED",
+    "independentExternalAudit": "NOT_PERFORMED_OUTSIDE_MISSION"
+  },
+  "effects": {
+    "walletConnected": false,
+    "extensionInstalled": false,
+    "extensionCodeExecuted": false,
+    "privateKeysUsed": 0,
+    "newKeysGenerated": 0,
+    "dogeSignaturesRequested": 0,
+    "chainRpcCalls": 0,
+    "broadcasts": 0,
+    "newNativeScenarios": 0
+  },
+  "analysisRuntime": {
+    "python": "3.12.14",
+    "cryptography": "50.0.0"
+  }
+}

@@ -1,5 +1,9 @@
 # DOGE — candidat interne et signataire externe, 22 novembre 2026
 
+> Complément : la [revue des dernières versions officielles de Trust Wallet](TRUST_WALLET_DOGE_REVIEW_2026-11-22.md)
+> conserve les versions publiées, l'authentification du CRX et le blocage du
+> fournisseur de signature DOGE. Elle ne modifie pas le code qualifié ci-dessous.
+
 **Adaptateur externe logiciel : PASS dans la portée mesurée ci-dessous.**
 **DOGE — VALIDATION TECHNIQUE INTERNE COMPLÈTE : BLOCKED.**
 Le transport, l'appairage et le journal logiciel manquants sont maintenant

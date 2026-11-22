@@ -1,0 +1,11 @@
+{
+  "source": "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=159.0.8154.13&acceptformat=crx3&x=id%3Degjidjbpglichdcondbcbdnbeeppgdph%26installsource%3Dondemand%26uc",
+  "extensionId": "egjidjbpglichdcondbcbdnbeeppgdph",
+  "execution": "DOWNLOAD_ONLY_NO_INSTALL_NO_EXECUTION",
+  "status": 200,
+  "finalHost": "clients2.googleusercontent.com",
+  "contentType": "application/x-chrome-extension",
+  "bytes": 14882111,
+  "sha256": "798e41ee33fa382ebb23ae7b9e33943bc71267d873cd9230360456d95d786391",
+  "magic": "43723234"
+}
