@@ -237,3 +237,30 @@ NATIVE_MWEB_REJECTION_BLOCKED.** L0 source/distribution partiellement
 prouvée, L1 réseau natif non exécuté, L3–L7 non qualifiés, L8–L9
 différés. Aucun ajout au registre de règlement, aucune clé, signature,
 transaction, RPC ou diffusion.
+
+## Complément L2 — 61/61 tests reproduits sur Ubuntu WSL2
+
+Le compte rendu fourni par l'opérateur pour le worktree LTC séparé rapporte :
+
+```text
+HEAD is now at a327f02 docs(ltc lab): explain 22 address guard tests and WSL2 run
+Ran 61 tests in 0.057s
+OK
+=== ETAT GIT LTC ===
+## HEAD (no branch)
+```
+
+**Résultat : 39/39 tests du précontrôle initial + 22/22 tests de
+classification d'adresses Bech32 v0 = 61/61 méthodes unitaires distinctes
+PASS sur Ubuntu WSL2**, exécutées via
+`unshare --user --map-root-user --net` et
+`PYTHONDONTWRITEBYTECODE=1`. Aucun fichier local modifié.
+Le commit testé `a327f029bf8fe653620b9aebd14e2bb3ea03aa9c`
+contient tous les contrôles mentionnés ; les ajouts ultérieurs de
+documentation à la PR n'altèrent pas les fichiers de test.
+
+**Portée : contrôles d'enveloppe et d'adresses publiques uniquement.**
+Aucun script HTLC Litecoin ni dépense/redeem/refund native testée,
+aucun RPC, nœud, wallet, matériel, signature ou diffusion.
+L'exclusion native de MWEB reste bloquée, et les qualifications
+L1–L9 complètes restent non acquises.
