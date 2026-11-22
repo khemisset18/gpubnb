@@ -1,5 +1,6 @@
 'use strict';
 
+import { WindowsNativeGamepadBridge } from './windows-native-gamepad.js?v=20261122-1';
 import {
   CanvasVideoFrameRenderer,
   WindowsNativeWebCodecsSession,
@@ -249,6 +250,15 @@ export class WindowsNativeDesktopClient {
     );
   }
 
+  mouseRelative(dx, dy) {
+    const input = this.#requireInput();
+    if (!input || typeof input.mouseRelative !== 'function') return false;
+    // Browser gamepad aims through the same bounded, epoch-fenced input encoder.
+    if (!Number.isSafeInteger(dx) || !Number.isSafeInteger(dy) ||
+        Math.abs(dx) > 14 || Math.abs(dy) > 14 || (dx === 0 && dy === 0)) return false;
+    return input.mouseRelative(dx, dy);
+  }
+
   pointerButton(button, keyUp = false) {
     const input = this.#requireInput();
     if (!input) return false;
@@ -300,11 +310,49 @@ export class WindowsNativeDesktopClient {
     // typed while navigating the site may accidentally operate the rented PC.
     // Losing focus always releases held input through the current stream epoch.
     let keyboardArmed = false;
+    // Compatibility mode: standard Gamepad API -> ordinary keyboard/mouse.
+    // There is intentionally no virtual XInput injection or new privileged
+    // protocol. The gamepad is polled only while the renter focuses the canvas.
+    const gamepad = new WindowsNativeGamepadBridge({
+      key: (code, up) => this.key(code, up),
+      pointerButton: (button, up) => this.pointerButton(button, up),
+      mouseRelative: (dx, dy) => this.mouseRelative(dx, dy),
+    });
+    let gamepadFrame = null;
+    const pumpGamepad = () => {
+      gamepadFrame = null;
+      if (!keyboardArmed || this.closed || this.socketError || keyboardTarget.hidden === true) {
+        gamepad.release();
+        return;
+      }
+      let pads = [];
+      try { pads = globalThis.navigator?.getGamepads?.() ?? []; } catch {}
+      try { gamepad.update(pads); } catch {
+        // A revoked or failed input transport must stop gamepad polling rather
+        // than continue to inject held commands on a later frame.
+        disarmKeyboard();
+        return;
+      }
+      if (typeof globalThis.requestAnimationFrame === 'function') {
+        gamepadFrame = globalThis.requestAnimationFrame(pumpGamepad);
+      }
+    };
     const disarmKeyboard = () => {
       keyboardArmed = false;
+      if (gamepadFrame !== null) {
+        globalThis.cancelAnimationFrame?.(gamepadFrame);
+        gamepadFrame = null;
+      }
+      gamepad.release();
       this.#releasePressedInput();
     };
-    const focusCanvas = () => { if (keyboardTarget.hidden !== true) keyboardArmed = true; };
+    const focusCanvas = () => {
+      if (keyboardTarget.hidden === true) return;
+      keyboardArmed = true;
+      if (gamepadFrame === null && typeof globalThis.requestAnimationFrame === 'function') {
+        gamepadFrame = globalThis.requestAnimationFrame(pumpGamepad);
+      }
+    };
     const focusMoved = (event) => {
       if (event?.target === this.canvas) focusCanvas();
       else disarmKeyboard();
