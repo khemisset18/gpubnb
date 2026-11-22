@@ -1,35 +1,63 @@
-# Render — plan manuel prêt pour autorisation, non exécuté
+# Render — qualification privée, état et plan soumis à validation
 
-## État relu le 18 octobre 2026
+**Aucun réglage Render ni déploiement n'a été modifié.** L'accès utilisé pour
+ce constat était strictement en lecture seule.
 
-Service [gpubnb-stage3-private](https://dashboard.render.com/web/srv-dau86i2d0e5s73elmk10), ID `srv-dau86i2d0e5s73elmk10`. Dépôt `khemisset18/gpubnb`, branche `qualification/stage3-windows-native-private-3c3e21e6`, autoDeploy `no`, région Frankfurt, une instance, Docker, contexte `.`, Dockerfile `./apps/api/Dockerfile`, healthCheckPath `/health`.
+## État relu le 21 novembre 2026
 
-Déploiement actif relu : `dep-db4j8gom7kps73c1u4p0`, statut `live`, commit `6b655614d3b9c3fda7912742b539601ba22598f1`. Le contrôle public `/release` confirme ce même SHA. `/health` répond `mainnetEnabled=false`, `escrowConfigured=false` ; `/ready` répond JSON `ok=true`. Le WSS santé répond exactement `gpubnb-ws-ok`.
+Service [`gpubnb-stage3-private`](https://dashboard.render.com/web/srv-dau86i2d0e5s73elmk10),
+ID `srv-dau86i2d0e5s73elmk10`, dépôt `khemisset18/gpubnb`.
 
-Le connecteur ne fournit pas ici de lecture des variables d'environnement : **la valeur actuelle de `BETA_TEST_DEV_BYPASS` n'est pas attestée**. Aucun secret n'a été lu ou modifié. Vérifier dans le Dashboard habilité `BETA_TEST_DEV_BYPASS=true` ET `ESCROW_PROGRAM_ID=NOT_DEPLOYED_YET` ; toute autre combinaison bloque la qualification privée. Ne pas afficher les autres valeurs.
+- Branche du service : `stage4-private-pc1-23a7-qualification-20261115`.
+- Auto-déploiement : `no` / déclencheur `off`.
+- Déploiement actif : `dep-dbsut9tg1s2s7389m1q0`, SHA
+  `23a7a2950ecf365866f3531ddbf76920d9fcb295`, statut `live`.
+- Type Docker, Dockerfile `./apps/api/Dockerfile`, santé `/health`, une instance,
+  région Frankfurt; aucun port de contrôle supplémentaire déclaré ouvert.
+- L'allow-list HTTP comprend `0.0.0.0/0`, donc le service web est accessible
+  depuis Internet. La page n'est pas privée au sens d'un filtrage réseau.
+- La page active sert une ancienne qualification Stage 3 à un seul bouton,
+  pas les quatre sélections de la PR #380. Elle affiche « Prêt. » avant toute
+  preuve hôte; ne pas prendre ce texte comme un statut de sécurité ou de média.
+- Aucune valeur d'environnement n'a été lue ou changée. `BETA_TEST_DEV_BYPASS`
+  et `ESCROW_PROGRAM_ID` ne sont donc pas attestés sur le service live.
 
-## Cible et préparation
+Référence de blocage complète :
+[`WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md`](../WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md).
 
-Branche cible unique : `audit/ssj12007-consolidation`, PR #303. Le SHA à autoriser est **le `sourceCommit` complet du paquet final remis**, avec CI du même HEAD verte. Ne pas choisir automatiquement la dernière branche ou un ancien dernier run vert. Les commits de préparation utilisent `[skip render]` et ne constituent pas une autorisation de déployer.
+## Plan de déploiement privé à valider par l'opérateur
 
-Le Dockerfile existant embarque API et `apps/web` dans le même runtime, exécuté avec l'utilisateur `app`. Conserver cette architecture et le contrat de port Render, l'écoute `0.0.0.0`, les paramètres privés existants et les secrets. L'origine privée HTTPS sert l'authentification, le préflight et la gateway WSS ; aucun frontend Netlify à republier pour ce test. La configuration privée expose le SHA complet runtime via `/config.js` et échoue sans identité de release.
+Le service reste en l'état et auto-déploiement OFF jusqu'à une approbation
+explicite. La PR #380 ne doit pas être déployée tant que l'audio Cloud Desktop,
+le package signé, la qualification des sessions de travail, les licences et
+la revue indépendante HEAD-exacte sont incomplets.
 
-Avant toute action, relever les réglages non sensibles, le deploy ID et la disponibilité de son ancien artefact. La différence de migrations avec le Stage 3 est `20261006020000_stage4_supabase_internal_rls` : elle active RLS sur DiagnosticRun/MachineQuarantineEvent et révoque des privilèges futurs aux rôles navigateur. Vérifier le rôle Prisma effectif, la propriété des tables ou BYPASSRLS et les grants existants avant de l'appliquer ; ne pas désactiver RLS pour contourner une erreur.
+Quand ces portes seront fermées :
 
-**Le Dockerfile réellement configuré (`apps/api/Dockerfile`) démarre `node dist/server.js` et ne lance pas `prisma migrate deploy`.** Ne pas supposer que le déploiement appliquera la migration. Depuis un environnement opérateur autorisé connecté à la bonne base avec les identifiants protégés déjà prévus, contrôler `prisma migrate status`, sauvegarder l'état nécessaire et, seulement après autorisation de migration, exécuter `prisma migrate deploy` depuis `apps/api` au SHA cible. Aucun identifiant ne doit être envoyé dans le chat ni écrit dans une commande publiée. Si l'opérateur n'a pas ce chemin autorisé, bloquer le déploiement plutôt qu'accorder des privilèges excessifs. Son statut d'application réel n'a pas été lu ici.
+1. Relire le SHA exact de la PR #380 et les résultats CI associés. Obtenir une
+   revue GitHub formelle `APPROVED` sur ce SHA exact; aucun commit postérieur
+   ne peut hériter de cette approbation.
+2. Vérifier l'artefact CI issu de ce SHA : provenance, manifeste, SHA-256,
+   signature du Host/Agent/tunnel/helper/worker/DLL et signature du pilote
+   IddCx si requis. Un candidat unsigned reste non-installable.
+3. Avant d'exposer la page, faire approuver l'accès du Stage et réduire
+   l'ingress public ou mettre en place une allow-list vérifiée. La configuration
+   Render actuelle autorise `0.0.0.0/0`; ne pas appeler cela « accès privé ».
+4. Dans le service exact ci-dessus, conserver auto-déploiement OFF. Un opérateur
+   autorisé sélectionne le SHA précis avec Manual Deploy; aucune mise à jour du
+   site public, du Blueprint public ou des variables Render ne doit être faite
+   dans le cadre de cette PR sans accord séparé.
+5. Vérifier `/health`, `/ready`, `/release`, le `releaseCommit` navigateur,
+   l'authentification et le refus du préflight anonyme. Vérifier le mode privé
+   sans paiement sans exposer de valeurs de secrets. Ne pas créer de réservation
+   comme test de santé.
+6. Sur PC1 dédié et non sensible, vérifier le SHA du package, les signatures
+   Windows, le compte locataire standard, la session WTS exclusive, la source
+   d'écran locataire, le GPU NVIDIA exact, l'isolation réseau et le nettoyage
+   STOP. PC2 ne reçoit qu'une session navigateur authentifiée.
+7. N'ouvrir la qualification que pour les Workspaces effectivement activés,
+   avec un plan de stop et d'escalade. Aucun paiement réel, publication
+   marketplace, changement de quarantaine ou site public.
 
-Le retour Stage 3 ne retire pas RLS et ne restaure pas les anciennes permissions : vérifier que le même rôle serveur reste compatible. Ne pas appliquer le Blueprint public `render.yaml` à ce service privé existant.
-
-## Exécution, exclusivement après accord explicite
-
-1. Dans le service exact ci-dessus, conserver auto-deploy OFF. Autoriser séparément toute modification nécessaire de la branche ou des paramètres privés ; ne pas modifier de secret. Sélectionner le commit précis remis dans Manual Deploy / Deploy a specific commit, ou sélectionner la branche de consolidation puis ce SHA. Contrôler de nouveau le SHA avant validation.
-2. Conserver le nouvel ID de déploiement, suivre jusqu'au statut `live` et vérifier les étapes build, migration et démarrage. Une acceptation de la demande n'est pas une preuve de succès. `/health` demeure le chemin configuré ; contrôler aussi `/ready` pour PostgreSQL/Redis et les capacités requises.
-3. Exiger `/release.commit == SHA cible`, `/config.js.releaseCommit == SHA cible`, les pages et scripts Stage 4 réellement servis, le GET préflight anonyme refusé, puis le GET authentifié positif depuis le navigateur de l'utilisateur. Vérifier WSS `/ws-health`, Agent compatible `0.6.6`, paquet au même SHA, mode privé sans paiement. Ne lancer aucune réservation comme contrôle de déploiement.
-
-## Rollback, également soumis à autorisation
-
-Le déploiement cible de retour est `dep-db4j8gom7kps73c1u4p0` / SHA `6b655614d3b9c3fda7912742b539601ba22598f1`, seulement si son artefact est encore conservé. Le Dashboard Rollback crée un nouveau déploiement depuis cet artefact ; vérifier son statut live et `/release`. Si l'artefact n'est plus disponible, préparer une reconstruction manuelle de ce SHA plutôt que prétendre que le rollback est immédiat.
-
-Les réglages du service et groupes d'environnement n'ont pas tous la même sémantique de retour ; comparer les valeurs non sensibles et contrôler les secrets uniquement dans leur gestionnaire autorisé. Les disques et effets PostgreSQL ne sont pas annulés. Vérifier la compatibilité des migrations avant le déploiement initial. Contrôler ensuite branche et auto-deploy OFF. Un retour backend seul ne valide pas les nouveaux binaires PC1.
-
-Références officielles relues : [déploiements](https://render.com/docs/deploys), [santé](https://render.com/docs/health-checks), [rollback](https://render.com/docs/rollbacks). Aucun déploiement ou rollback n'a été déclenché ici.
+Ce plan ne constitue pas une autorisation de déployer. À l'état présent, le
+résultat approprié demeure **NO-GO**.

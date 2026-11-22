@@ -116,6 +116,8 @@ test('full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking ->
       ownerId: owner.id,
       agentPublicKey: `agentkey_${suffix}`,
       agentVersion: '0.6.2',
+      // Compute preparation in this test uses the Linux container runtime.
+      operatingSystem: 'Linux',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.AVAILABLE,
       moderationStatus: ModerationStatus.CLEAR,

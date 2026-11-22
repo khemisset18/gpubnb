@@ -196,16 +196,16 @@ test('a stale diagnostic result cannot close a booking after a Developer session
   const jobQuery = calls.find(call => call.area === 'job.findMany');
   assert.ok(jobQuery);
   const queryBooking = (jobQuery.args.where as {
-    booking: { workspaceSessions: { none: { machineWorkspace: { workspace: { slug: string } } } } };
+    booking: { workspaceSessions: { none: { machineWorkspace: { workspace: { slug: { not: string } } } } } };
   }).booking;
-  assert.equal(queryBooking.workspaceSessions.none.machineWorkspace.workspace.slug, 'developer');
+  assert.deepEqual(queryBooking.workspaceSessions.none.machineWorkspace.workspace.slug, { not: 'compute' });
 
   const bookingUpdate = calls.find(call => call.area === 'tx.booking.updateMany');
   assert.ok(bookingUpdate);
   const atomicWhere = bookingUpdate.args.where as {
-    workspaceSessions: { none: { machineWorkspace: { workspace: { slug: string } } } };
+    workspaceSessions: { none: { machineWorkspace: { workspace: { slug: { not: string } } } } };
   };
-  assert.equal(atomicWhere.workspaceSessions.none.machineWorkspace.workspace.slug, 'developer');
+  assert.deepEqual(atomicWhere.workspaceSessions.none.machineWorkspace.workspace.slug, { not: 'compute' });
   assert.equal(calls.some(call => call.area === 'tx.machine.update'), false);
 });
 

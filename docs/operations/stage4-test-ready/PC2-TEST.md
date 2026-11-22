@@ -1,28 +1,51 @@
-# PC2 — navigateur uniquement, test réservé à l'utilisateur
+# PC2 — statut du test navigateur Windows natif
 
-## URL vérifiées le 18 octobre 2026
+**NO-GO au 21 novembre 2026. Aucun essai PC1 → PC2 ne doit être lancé depuis
+la version actuellement servie.** Cette note remplace le déroulé positif daté
+du 18 octobre ci-dessous : son ancienne attente `allowed=true` et son bouton de
+démarrage ne s'appliquent plus à l'état courant.
 
-- Connexion : https://gpubnb-stage3-private.onrender.com/auth.html
-- Entrée privée : https://gpubnb-stage3-private.onrender.com/stage3-windows-native.html
-- Bureau : https://gpubnb-stage3-private.onrender.com/windows-native-desktop.html — l'identifiant et l'accès sont attribués par l'API après une qualification autorisée, jamais inventés.
-- API : https://gpubnb-stage3-private.onrender.com
-- Santé WebSocket : wss://gpubnb-stage3-private.onrender.com/ws-health — upgrade et message `gpubnb-ws-ok` vérifiés.
-- Flux privé défini dans le code : `/workspace-gateway/<sessionId>/native-stream` à la même origine WSS, authentifié et binaire. Aucune session réelle n'a été ouverte pour le vérifier.
+## État live vérifié en lecture seule
 
-Le service live annonce encore le SHA Stage 3 `6b655614d3b9c3fda7912742b539601ba22598f1`. Sa page bureau n'a pas le compteur Stage 4 et le préflight Stage 4 absent renvoie du HTML : **ne pas démarrer le test sur ce déploiement**. `https://gpubnb.netlify.app/config.js` annonce `16c13e0` et `https://gpubnb.onrender.com` ; ne pas utiliser ce parcours public pour le test privé.
+- Service : [`gpubnb-stage3-private`](https://dashboard.render.com/web/srv-dau86i2d0e5s73elmk10)
+- URL de la page actuellement servie : <https://gpubnb-stage3-private.onrender.com/stage3-windows-native.html>
+- Déploiement actif : `dep-dbsut9tg1s2s7389m1q0`, SHA
+  `23a7a2950ecf365866f3531ddbf76920d9fcb295`, branche
+  `stage4-private-pc1-23a7-qualification-20261115`
+- Auto-déploiement : désactivé.
+- La page live ne présente pas les quatre choix de la PR #380. Elle affiche
+  encore un seul bouton « Démarrer le test Windows » et le statut « Prêt. »
+  avant toute preuve de PC1. Ce libellé ne prouve ni le Host ni le streaming.
+- La liste d'adresses autorisées Render inclut `0.0.0.0/0`; ne pas confondre
+  l'absence de publication marketplace avec une restriction réseau du site.
+- Les valeurs des variables Render ne sont pas vérifiées ici; l'état live du
+  mode privé sans paiement reste inconnu.
 
-## Prérequis préparés
+## État du code PR #380
 
-Après déploiement manuel autorisé du SHA exact retenu, `/release` et le `releaseCommit` de `/config.js` doivent correspondre au paquet et à l'Agent. Le frontend privé partage l'origine HTTPS de l'API ; la politique CSP autorise explicitement son hôte WSS. Aucun logiciel à installer sur PC2.
+La branche de la PR contient les boutons Cloud Desktop, Creator / Blender,
+CAD / FreeCAD et Gaming / Steam, mais **aucun bouton de lancement n'est actif**.
+Le préflight API est en lecture seule. Le serveur refuse les réservations et
+sessions privées tant que le streaming audio Windows → navigateur n'est pas
+implémenté et qualifié; les chemins Cloud Desktop, Creator, CAD et Gaming
+restent donc indisponibles. Les choix ne doivent jamais rediriger vers un autre
+Workspace.
 
-Le script opérateur `qualification-preflight-pc-b.ps1 -PrivateSameOrigin` contrôle en lecture seule cette origine, le SHA exact, les réponses JSON, les pages, le compteur effectivement déployé, le refus du préflight anonyme et WSS santé. Utiliser la même origine privée pour ses trois paramètres et le SHA complet pour `-ExpectedReleaseCommit`. Ce script peut être exécuté depuis un poste opérateur ; il n'est pas une dépendance de PC2 et ne démarre aucune session.
+Référence actuelle des blocages, du package et du plan de déploiement :
+[`WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md`](../WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md).
 
-## Déroulé utilisateur après autorisations PC1 et Render
+## Quand un test pourra être autorisé
 
-1. Ouvrir l'URL privée d'entrée puis s'authentifier avec le compte prévu (Google/e-mail). Le client vérifie `/auth/me`, puis effectue le GET authentifié `/qualification/windows-native/preflight`. Il doit recevoir du JSON avec `privateNoPaymentMode=true` ET `allowed=true`. Aucune demande de paiement, signature wallet, dépôt escrow ou publication publique n'est admise. Le POST privé revérifie les préconditions ; un ancien GET positif n'autorise pas un Host devenu indisponible.
-2. Cliquer une seule fois sur « Démarrer le test Windows ». Cette action crée uniquement la réservation bêta privée prévue par le code, sans paiement réel. Le navigateur attend les états serveur avant d'obtenir son accès. Une session expirée renvoie à la connexion ; aucune erreur ne doit être contournée par une réservation publique.
-3. Observer le bureau locataire, jamais le bureau fournisseur. Tester souris et clavier sur une application locale dans le compte locataire. Le compteur ne progresse que sur de nouvelles images H.264 réellement décodées et rendues. Il faut 300 secondes entre ces observations ; une actualisation d'interface, des paquets reçus seuls, un rejeu ou une image figée ne suffisent pas. Une coupure, un nouvel epoch, un dépassement du délai de trame ou une reconnexion remet la continuité à zéro, y compris après un résultat déjà affiché.
-4. Relever les identifiants de session/réservation, SHA et horodatages sans conserver les cookies, tokens ou images privées. Le résultat vidéo ne prouve pas l'effet clavier/souris ni l'isolation matérielle : ces points sont à confirmer manuellement.
-5. « Fermer la vidéo » ferme le transport et libère l'état des entrées ; il ne prétend pas terminer la location. Utiliser « Gérer la session », puis le bouton d'arrêt existant. Attendre la fin serveur et la confirmation Agent du nettoyage (worker, autorité, display virtuel de session, entrées et ressources). Ne pas déclarer PASS si la session reste active, QUARANTINED ou si le nettoyage n'est pas confirmé. Aucune facturation réelle ne doit apparaître.
+Reprendre le test uniquement après revue formelle `APPROVED` sur le HEAD exact,
+CI réussie sur ce même SHA, package Windows signé et vérifié, média complet
+pour le profil visé, confirmation des licences commerciales, et preuve
+d'isolation/STOP sur un Host Windows dédié sans données personnelles. Déployer
+manuellement uniquement vers le service privé après approbation de l'opérateur;
+ne pas utiliser le service public.
 
-Les tests automatiques simulent DOM, réseau et sessions ou utilisent des pairs WebSocket locaux. Ils couvrent refus et expiration d'authentification, préflight désactivé, escrow réel, Host devenu indisponible, reconnexion, binaire contre texte, révocation de flux ouverts et continuité décodée. Ils ne constituent pas le test PC1 → PC2. **Celui-ci n'a pas été effectué par Codex.**
+Après ces autorisations, PC2 pourra se connecter au site privé, sélectionner
+le Workspace effectivement autorisé par le serveur, exécuter le préflight et
+ouvrir uniquement l'accès lié à la réservation et au GPU exact. Ne pas créer
+de réservation si l'API ne renvoie pas une autorisation cohérente pour le même
+SHA, le même Workspace et le même Host. Aucun test de streaming physique n'a
+été effectué par Codex.

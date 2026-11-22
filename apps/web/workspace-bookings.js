@@ -42,6 +42,32 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
   const securityLabActionInFlight=new Set();
   const securityLabErrors=new Map();
   const securityLabDetailByBooking=new Map();
+  // Desktop sessions are independent of the legacy Compute/GPU_PROOF flow.
+  const windowsNativeProfiles=Object.freeze({
+    'cloud-desktop':{label:'Cloud Desktop'},
+    creator:{label:'Creator / Blender'},
+    cad:{label:'CAD / FreeCAD'},
+    gaming:{label:'Gaming (expérimental)'},
+  });
+  const windowsNativeDetails=new Map();
+  const windowsNativeErrors=new Map();
+  const windowsNativeBusy=new Set();
+  // One route profile keeps new Linux container Workspaces on their exact
+  // selected slug, while the four desktop slugs use their separate desktop
+  // backend. Legacy NULL bookings retain the historic Compute/Developer path.
+  const selectedWorkspaceProfiles=Object.freeze({
+    developer:{label:'Developer',create:'/workspace/developer',status:'/workspace',access:'/workspace/access'},
+    data:{label:'Data',create:'/workspace/data',status:'/workspace/data/status',access:'/workspace/data/access'},
+    ai:{label:'IA',create:'/workspace/ai',status:'/workspace/ai/status',access:'/workspace/ai/access'},
+    video:{label:'Video',create:'/workspace/video',status:'/workspace/video/status',access:'/workspace/video/access'},
+    audio:{label:'Audio',create:'/workspace/audio',status:'/workspace/audio/status',access:'/workspace/audio/access'},
+    api:{label:'API',create:'/workspace/api',status:'/workspace/api/status',access:'/workspace/api/access'},
+    mobile:{label:'Mobile',create:'/workspace/mobile',status:'/workspace/mobile/status',access:'/workspace/mobile/access'},
+    'security-lab':{label:'Security Lab',create:'/workspace/security-lab',status:'/workspace/security-lab/status',access:'/workspace/security-lab/access'},
+  });
+  const selectedWorkspaceDetails=new Map();
+  const selectedWorkspaceErrors=new Map();
+  const selectedWorkspaceBusy=new Set();
 
   async function request(path,options={}){
     const headers={accept:'application/json',...(options.headers||{})};
@@ -283,8 +309,62 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     return `<article class="list-row" data-security-lab-row="${escapeHTML(booking.id)}"><div><strong>Security Lab · ${title}</strong>${errorHTML}</div><div class="actions">${action}${badge}</div></article>`;
   }
 
+  function windowsNativeBlockHTML(booking,detail,errorMessage){
+    const slug=booking.requestedWorkspaceSlug;
+    const profile=windowsNativeProfiles[slug];
+    if(!profile||!preparableBookingStatuses.has(booking.status))return '';
+    const id=escapeHTML(booking.id);
+    const name=escapeHTML(profile.label);
+    const title=escapeHTML(booking.listing?.title||'Réservation GPU');
+    const err=errorMessage?'<div class="muted" role="alert">'+escapeHTML(errorMessage)+'</div>':'';
+    const step=detail?.preparation?.step||detail?.blockedReason||'En attente de la passerelle Windows';
+    const phase=detail?.status||'À créer';
+    const ended=['COMPLETED','CANCELLED','FAILED','TIMED_OUT','QUARANTINED'].includes(phase);
+    const attrs='data-native-booking="'+id+'" data-native-slug="'+escapeHTML(slug)+'"';
+    let button='';
+    if(!detail){
+      button='<button type="button" class="button button-primary" data-native-action="create" '+attrs+'>Démarrer mon Workspace</button>';
+    }else if(detail.canOpen){
+      button='<button type="button" class="button button-primary" data-native-action="open" '+attrs+'>Ouvrir le bureau Windows</button>';
+    }else if(!ended){
+      button='<span class="muted">'+escapeHTML(step)+'</span>';
+    }
+    const badge='<span class="badge '+(ended?'warn':'')+'">'+escapeHTML(phase)+'</span>';
+    const gaming=slug==='gaming'?'<div class="muted">Audio et manettes non implémentés ; l’accès commercial reste désactivé.</div>':'';
+    return '<article class="list-row"><div><strong>'+name+' · '+title+'</strong>'+gaming+err+'</div><div class="actions">'+button+badge+'</div></article>';
+  }
+
+  function selectedWorkspaceBlockHTML(booking,detail,errorMessage){
+    const profile=selectedWorkspaceProfiles[booking.requestedWorkspaceSlug];
+    if(!profile||!preparableBookingStatuses.has(booking.status))return '';
+    const id=escapeHTML(booking.id);
+    const name=escapeHTML(profile.label);
+    const title=escapeHTML(booking.listing?.title||'Réservation GPU');
+    const error=errorMessage?'<div class="muted" role="alert">'+escapeHTML(errorMessage)+'</div>':'';
+    const phase=detail?.preparation?.phase||detail?.blockedReason||detail?.status||'À créer';
+    let action='';
+    let badge='<span class="badge warn">'+escapeHTML(phase)+'</span>';
+    if(!detail){
+      action='<button type="button" class="button button-primary" data-selected-workspace-action="create" data-booking="'+id+'">Démarrer '+name+'</button>';
+    }else if(detail.canOpen===true){
+      action='<button type="button" class="button button-primary" data-selected-workspace-action="open" data-booking="'+id+'">Ouvrir '+name+'</button>';
+      badge='<span class="badge ok">PRÊT</span>';
+    }else if(detail.retryable===true){
+      action='<button type="button" class="button" data-selected-workspace-action="retry" data-booking="'+id+'">Réessayer '+name+'</button>';
+    }
+    return '<article class="list-row"><div><strong>'+name+' · '+title+'</strong><div class="muted">Workspace demandé lors de la réservation ; aucun autre Workspace ne sera ouvert.</div>'+error+'</div><div class="actions">'+action+badge+'</div></article>';
+  }
+
   function rowHTML(booking,job,history=false){
     const title=escapeHTML(booking.listing?.title||'Réservation GPU');
+    if(windowsNativeProfiles[booking.requestedWorkspaceSlug]){
+      const label=escapeHTML(windowsNativeProfiles[booking.requestedWorkspaceSlug].label);
+      return '<article class="list-row"><div><strong>'+label+' · '+title+'</strong><div class="muted">Workspace exact demandé : '+escapeHTML(booking.status)+'. Aucun Workspace de substitution.</div></div><span class="badge">'+escapeHTML(booking.status)+'</span></article>';
+    }
+    if(booking.requestedWorkspaceSlug&&booking.requestedWorkspaceSlug!=='compute'){
+      const label=escapeHTML(selectedWorkspaceProfiles[booking.requestedWorkspaceSlug]?.label||booking.requestedWorkspaceSlug);
+      return '<article class="list-row"><div><strong>'+label+' · '+title+'</strong><div class="muted">Workspace exact demandé : '+escapeHTML(booking.status)+'. Aucun Workspace de substitution.</div></div><span class="badge">'+escapeHTML(booking.status)+'</span></article>';
+    }
     if(!job){
       if(booking.status==='AWAITING_DEPOSIT'){
         return `<article class="list-row"><div><strong>${title}</strong><div class="muted">Financement en cours. Compute démarrera uniquement après le passage à FUNDED.</div></div><span class="badge warn">AWAITING_DEPOSIT</span></article>`;
@@ -342,7 +422,7 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
       // button reflects real server state on first paint, not an optimistic guess.
       // A booking with an in-flight create/open action keeps its cached detail
       // untouched this pass, so a slow poll tick can't clobber a pending click.
-      const eligible=active.filter(row=>row.job&&row.job.status==='COMPLETED'&&preparableBookingStatuses.has(row.booking.status));
+      const eligible=active.filter(row=>!row.booking.requestedWorkspaceSlug&&row.job&&row.job.status==='COMPLETED'&&preparableBookingStatuses.has(row.booking.status));
       await Promise.all(eligible.filter(row=>!developerActionInFlight.has(row.booking.id)).map(async row=>{
         try{
           const detail=await request(`/bookings/${encodeURIComponent(row.booking.id)}/workspace`);
@@ -449,7 +529,36 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
         row.booking,row.job,securityLabDetailByBooking.get(row.booking.id)||null,securityLabErrors.get(row.booking.id),
       )).join('');
 
-      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
+      const nativeRows=active.filter(row=>windowsNativeProfiles[row.booking.requestedWorkspaceSlug]
+        && preparableBookingStatuses.has(row.booking.status));
+      await Promise.all(nativeRows.filter(row=>!windowsNativeBusy.has(row.booking.id)).map(async row=>{
+        const slug=row.booking.requestedWorkspaceSlug;
+        try{
+          const detail=await request('/bookings/'+encodeURIComponent(row.booking.id)
+            +'/workspace/'+encodeURIComponent(slug)+'/status');
+          windowsNativeDetails.set(row.booking.id,detail);
+        }catch(error){
+          if(error.status===404)windowsNativeDetails.set(row.booking.id,null);
+        }
+      }));
+      const windowsNativeHTML=nativeRows.map(row=>windowsNativeBlockHTML(row.booking,
+        windowsNativeDetails.get(row.booking.id)||null,windowsNativeErrors.get(row.booking.id))).join('');
+
+      const selectedRows=active.filter(row=>selectedWorkspaceProfiles[row.booking.requestedWorkspaceSlug]
+        && preparableBookingStatuses.has(row.booking.status));
+      await Promise.all(selectedRows.filter(row=>!selectedWorkspaceBusy.has(row.booking.id)).map(async row=>{
+        const profile=selectedWorkspaceProfiles[row.booking.requestedWorkspaceSlug];
+        const path='/bookings/'+encodeURIComponent(row.booking.id)+profile.status;
+        try{
+          selectedWorkspaceDetails.set(row.booking.id,await request(path));
+        }catch(error){
+          if(error.status===404)selectedWorkspaceDetails.set(row.booking.id,null);
+        }
+      }));
+      const selectedWorkspaceHTML=selectedRows.map(row=>selectedWorkspaceBlockHTML(row.booking,
+        selectedWorkspaceDetails.get(row.booking.id)||null,selectedWorkspaceErrors.get(row.booking.id))).join('');
+
+      root.innerHTML=`${active.length?active.map(row=>rowHTML(row.booking,row.job)).join(''):'<div class="empty-state"><p class="muted">Aucune réservation active.</p></div>'}${developerHTML}${dataHTML}${aiHTML}${videoHTML}${audioHTML}${apiHTML}${mobileHTML}${securityLabHTML}${windowsNativeHTML}${selectedWorkspaceHTML}${failureNotice}${history.length?`<details class="workspace-history"><summary>Historique des réservations (${history.length})</summary>${history.map(row=>rowHTML(row.booking,row.job,true)).join('')}</details>`:''}`;
 
       root.querySelectorAll('[data-prepare-compute]').forEach(button=>button.addEventListener('click',async()=>{
         button.disabled=true;button.textContent='Préparation Compute…';
@@ -787,6 +896,69 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
           const url=resolveWorkspaceOpenUrl(GATEWAY,access);
           window.open(url,'_blank','noopener');
         });
+      }));
+      root.querySelectorAll('[data-native-action]').forEach(button=>button.addEventListener('click',async()=>{
+        const bookingId=button.dataset.nativeBooking;
+        const slug=button.dataset.nativeSlug;
+        if(!bookingId||!windowsNativeProfiles[slug]||windowsNativeBusy.has(bookingId))return;
+        windowsNativeBusy.add(bookingId);
+        windowsNativeErrors.delete(bookingId);
+        const action=button.dataset.nativeAction;
+        const original=button.textContent;
+        button.disabled=true;
+        button.textContent=action==='open'?'Connexion…':'Création…';
+        try{
+          const endpoint='/bookings/'+encodeURIComponent(bookingId)+'/workspace/'+encodeURIComponent(slug);
+          if(action==='create'){
+            await request(endpoint,{method:'POST'});
+          }else if(action==='open'){
+            // Open the tab on this trusted user click before awaiting the grant.
+            const tab=window.open('about:blank','_blank');
+            try{
+              const access=await request(endpoint+'/access',{method:'POST'});
+              const href=resolveWorkspaceOpenUrl(GATEWAY,access);
+              if(tab)tab.location.replace(href);else window.location.assign(href);
+            }catch(error){if(tab)tab.close();throw error;}
+          }else throw new Error('windows_native_invalid_action');
+        }catch(error){
+          windowsNativeErrors.set(bookingId,error.message||'Action Windows indisponible.');
+          button.disabled=false;button.textContent=original;
+        }finally{
+          windowsNativeBusy.delete(bookingId);
+          await render();
+        }
+      }));
+      root.querySelectorAll('[data-selected-workspace-action]').forEach(button=>button.addEventListener('click',async()=>{
+        const bookingId=button.dataset.booking;
+        const action=button.dataset.selectedWorkspaceAction;
+        const booking=active.find(row=>row.booking.id===bookingId)?.booking;
+        const profile=booking&&selectedWorkspaceProfiles[booking.requestedWorkspaceSlug];
+        if(!booking||!profile||selectedWorkspaceBusy.has(bookingId))return;
+        selectedWorkspaceBusy.add(bookingId);
+        selectedWorkspaceErrors.delete(bookingId);
+        const original=button.textContent;
+        button.disabled=true;
+        button.textContent=action==='open'?'Connexion…':action==='retry'?'Nouvelle tentative…':'Création…';
+        let tab=null;
+        try{
+          const base='/bookings/'+encodeURIComponent(bookingId);
+          if(action==='create')await request(base+profile.create,{method:'POST'});
+          else if(action==='retry')await request(base+'/workspace/retry',{method:'POST'});
+          else if(action==='open'){
+            tab=window.open('about:blank','_blank');
+            const access=await request(base+profile.access,{method:'POST'});
+            const href=resolveWorkspaceOpenUrl(GATEWAY,access);
+            if(tab)tab.location.replace(href);else window.location.assign(href);
+          }else throw new Error('workspace_action_invalid');
+        }catch(error){
+          if(tab)tab.close();
+          selectedWorkspaceErrors.set(bookingId,error.message||'Action impossible.');
+          button.disabled=false;
+          button.textContent=original;
+        }finally{
+          selectedWorkspaceBusy.delete(bookingId);
+          await render();
+        }
       }));
     }catch(error){root.innerHTML=`<div class="empty-state"><p class="muted">${escapeHTML(error.message||'Impossible de charger les réservations GPU.')}</p></div>`;}
   }

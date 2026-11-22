@@ -445,6 +445,8 @@ model Booking {
   buyerId String
   listingId String
   idempotencyKey String
+  // Selected commercial workspace; cannot change when payment has been initiated.
+  requestedWorkspaceSlug String? @db.VarChar(80)
   startsAt DateTime
   endsAt DateTime
   quotedLamports BigInt

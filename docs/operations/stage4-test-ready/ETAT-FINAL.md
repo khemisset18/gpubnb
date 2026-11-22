@@ -1,6 +1,13 @@
 # GPUbnb Stage 4 — état de préparation
 
-La préparation logicielle est consolidée exclusivement dans [la PR #303](https://github.com/khemisset18/gpubnb/pull/303), branche `audit/ssj12007-consolidation`. Aucune fusion, installation PC1, signature PC1, réservation, qualification physique ou modification Render n'a été effectuée.
+**Rapport historique du 18 octobre 2026 sur la PR #303.** Il ne décrit pas la
+PR #380 courante ni l'état Render relu le 21 novembre. Pour le statut actuel,
+consulter [`WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md`](../WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md)
+et [`PC2-TEST.md`](PC2-TEST.md). Les SHAs, certificats, run CI et déploiements
+ci-dessous sont historiques; ne pas les utiliser pour une installation ou un
+test PC1 → PC2 sans nouvelle vérification.
+
+La préparation historique était consolidée exclusivement dans [la PR #303](https://github.com/khemisset18/gpubnb/pull/303), branche `audit/ssj12007-consolidation`. Aucune fusion, installation PC1, signature PC1, réservation, qualification physique ou modification Render n'avait été effectuée dans cette campagne.
 
 ## Paquet et preuve attendue
 
@@ -25,12 +32,12 @@ Les régressions couvrent notamment le hash/commit/pin erroné, le PE x86, les f
 
 Les résultats complets et artefacts à retenir sont ceux du **HEAD final**. Une CI verte d'un ancien SHA ou un workflow qui ne construit qu'un helper ne vaut pas preuve 4/4.
 
-## État externe vérifié le 18 octobre 2026
+## État externe relu le 18 octobre 2026 — obsolète
 
 Render : service `srv-dau86i2d0e5s73elmk10`, branche `qualification/stage3-windows-native-private-3c3e21e6`, autoDeploy `no`, Dockerfile `apps/api/Dockerfile`, santé `/health`. Déploiement actif `dep-db4j8gom7kps73c1u4p0`, SHA `6b655614d3b9c3fda7912742b539601ba22598f1`. `/health`, `/ready` et `/release` répondent ; WSS `/ws-health` renvoie exactement `gpubnb-ws-ok`.
 
 Le frontend privé est servi à la même origine que l'API. Le frontend public Netlify annonce `16c13e0` et une autre gateway ; il n'est pas le parcours privé Stage 4. Le Stage 3 live renvoie encore du HTML au préflight Stage 4 absent : un HTTP 200 seul n'est donc jamais accepté.
 
-PC1 : observations historiques fournies par l'utilisateur conservées dans `PC1-PREPARATION.md`. Aucun accès à son matériel, à ses sessions ou à ses magasins de certificats n'a été établi. Le certificat observé expire le **20 octobre 2026 à 22:23:47 UTC**, soit le 21 octobre à 00:23:47 Paris.
+PC1 : observations historiques fournies par l'utilisateur conservées dans `PC1-PREPARATION.md`. Aucun accès à son matériel, à ses sessions ou à ses magasins de certificats n'a été établi. Le certificat était noté comme expirant le **20 octobre 2026 à 22:23:47 UTC** ; cette observation est maintenant passée et ne valide aucun certificat actuellement disponible.
 
 **Préparation logicielle, signature privée et qualification matérielle sont trois états distincts. Ne pas annoncer « PRÉPARATION TERMINÉE » tant que les critères restants de BLOCAGES.md ne sont pas satisfaits.**

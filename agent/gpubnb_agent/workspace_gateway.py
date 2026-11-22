@@ -1050,6 +1050,13 @@ def run_workspace_gateway_forever(
     stop_event: threading.Event | None = None,
     error_callback: Callable[[Exception], None] | None = None,
 ) -> None:
+    # Select the actual Windows-native, exact-GPU and STOP-fenced supervisor on
+    # Windows. Merely importing v10 does not enable a commercial rental; the
+    # server-side native booking gate and signed helper proofs still apply.
+    import platform
+    if platform.system() == "Windows":
+        from .workspace_gateway_v10 import install as install_windows_native_gateway
+        install_windows_native_gateway()
     config = load_config()
     machine_id = config.get("machineId")
     if not isinstance(machine_id, str) or not machine_id:

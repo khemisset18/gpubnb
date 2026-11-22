@@ -10,7 +10,8 @@ import test from 'node:test';
 // after harmless fallback values are in place. Mirrors the pattern already used by
 // orphaned-deposit-booking-reconciler.test.ts.
 process.env.NODE_ENV ??= 'test';
-process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.DATABASE_URL ??= 'postgresql://unused:unused@127.0.0.1:1/unused';
+process.env.REDIS_URL ??= 'redis://127.0.0.1:1';
 process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef';
 process.env.INTERNAL_SERVICE_TOKEN ??= 'test-internal-token-0123456789abcdef';
 process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';

@@ -24,21 +24,26 @@ export function isExecutableWorkspaceSlug(value: string): value is ExecutableWor
 
 function isWorkspaceRuntimeAvailable(machine: MachineCapabilities, slug: string): boolean {
   if (!isExecutableWorkspaceSlug(slug)) return false;
-  if (!linuxDesktopWorkspaceSlugs.has(slug)) return true;
-
-  // This capability describes the qualified Linux/Selkies path and nothing
-  // else. Require Linux positively rather than merely excluding Windows: a
-  // future/unknown OS must never inherit a desktop backend by accident. The
-  // Windows-native backend gets its own independently measured branch.
   const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
+  if (os.startsWith('windows')) {
+    // Machine capabilities alone cannot prove exact-listing GPU allocation,
+    // owner consent, current heartbeat, or payment readiness. The Windows
+    // marketplace replaces these four verdicts with nativeRentalEligibility;
+    // every other Windows slug must remain unbookable (never Docker/WSL2).
+    return false;
+  }
+  // Unknown and non-Linux hosts cannot inherit a Docker/Selkies runtime.
   if (!os.startsWith('linux')) return false;
-  return machine.desktopGpuRenderingAvailable;
+  return !linuxDesktopWorkspaceSlugs.has(slug) || machine.desktopGpuRenderingAvailable;
 }
 
 export function compatibleWorkspaceChoices(machine: MachineCapabilities) {
   // Legacy pre-booking endpoint kept for compatibility with older clients. The
   // modern chooser uses the full catalogue endpoint and only enables cards that
   // are both compatible and bookable.
+  // This endpoint only advertises Compute, which is a Linux container/GPU-proof
+  // path. Never expose it as a Windows-native Workspace or a WSL2 fallback.
+  if ((machine.operatingSystem ?? '').trim().toLowerCase().startsWith('windows')) return [];
   return workspaceManifests
     .filter((manifest) => manifest.release === 'BETA' && manifest.slug === 'compute')
     .map((manifest) => {
@@ -80,10 +85,19 @@ export async function ensureCompatibleMachineWorkspace(
       cudaVersion: true, dockerAvailable: true, nvidiaRuntimeAvailable: true,
       operatingSystem: true, virtualizationAvailable: true,
       desktopGpuRenderingAvailable: true,
+      gpuUuid: true, nativeDesktopStreamingAvailable: true,
+      nativeDesktopStreamingGpuUuid: true,
     },
   });
   if (!machine) throw new Error('machine_not_found');
 
+  // The old ensureCompatibleMachineWorkspace path creates a Docker-prepared
+  // session. Windows native sessions need a separate, exact-GPU allocation and
+  // helper-authorized READY path; never reinterpret them as Docker sessions.
+  if ((machine.operatingSystem ?? '').trim().toLowerCase().startsWith('windows')
+      && linuxDesktopWorkspaceSlugs.has(slug)) {
+    throw new Error('windows_native_workspace_requires_native_route');
+  }
   const compatibility = analyzeWorkspace(machine, manifest);
   if (compatibility.state !== 'READY' && compatibility.state !== 'LIMITED') {
     throw new Error(`${slug}_workspace_incompatible`);

@@ -58,6 +58,25 @@ test('API gateway accepts the same four persistent desktop slugs',async()=>{
   const source=await readFile(new URL('../src/workspace-gateway.ts',import.meta.url),'utf8');
   for(const slug of desktopSlugs)assert.match(source,new RegExp(`['\"]${slug}['\"]`));
   assert.match(source,/slug:\{in:GATEWAY_WORKSPACE_SLUGS\}/);
+  // Native PREPARING is admitted only to the signed Agent desired/register
+  // lifecycle. Browser admission and the default revocation fence stay active-only.
+  const desired=source.slice(source.indexOf("app.get('/agent/workspace-gateway/:machineId/desired'"));
+  const registration=source.slice(source.indexOf("app.post('/agent/workspace-gateway/:sessionId/register'"));
+  assert.match(desired,/runtimeBackend:WorkspaceRuntimeBackend\.WINDOWS_NATIVE,status:WorkspaceSessionStatus\.PREPARING/);
+  assert.match(registration,/allowPreparing:true/);
+  assert.match(source,/options\.allowPreparing===true/);
+  assert.match(source,/async function activeGatewaySession[\s\S]*status:\{in:\[WorkspaceSessionStatus\.READY,WorkspaceSessionStatus\.RUNNING\]\}/);
+});
+
+test('Windows native rental creation stays PREPARING until the authenticated Agent registers',async()=>{
+  const source=await readFile(new URL('../src/desktop-workspace-routes.ts',import.meta.url),'utf8');
+  const start=source.indexOf('async function createWindowsNativeRentalSession');
+  const end=source.indexOf('\n}',start);
+  assert.ok(start>=0&&end>start);
+  const body=source.slice(start,end);
+  assert.match(body,/status: WorkspaceSessionStatus\.PREPARING/);
+  assert.match(body,/preparationProgress: 5/);
+  assert.match(body,/preparationStep: 'WINDOWS_NATIVE_START_AUTHORIZED'/);
 });
 
 test('desktop routes are registered in the application route graph',async()=>{

@@ -295,17 +295,35 @@ export class WindowsNativeDesktopClient {
 
     if (typeof this.canvas.setAttribute === 'function') this.canvas.setAttribute('tabindex', '0');
 
+    // The browser page has its own controls. Forward input to Windows only
+    // after the renter explicitly focuses the remote canvas; otherwise a key
+    // typed while navigating the site may accidentally operate the rented PC.
+    // Losing focus always releases held input through the current stream epoch.
+    let keyboardArmed = false;
+    const disarmKeyboard = () => {
+      keyboardArmed = false;
+      this.#releasePressedInput();
+    };
+    const focusCanvas = () => { if (keyboardTarget.hidden !== true) keyboardArmed = true; };
+    const focusMoved = (event) => {
+      if (event?.target === this.canvas) focusCanvas();
+      else disarmKeyboard();
+    };
+    const visibilityChanged = () => {
+      if (keyboardTarget.hidden === true) disarmKeyboard();
+    };
     const keydown = (event) => {
-      if (this.key(event.code, false)) event.preventDefault?.();
+      if (keyboardArmed && this.key(event.code, false)) event.preventDefault?.();
     };
     const keyup = (event) => {
-      if (this.key(event.code, true)) event.preventDefault?.();
+      if (keyboardArmed && this.key(event.code, true)) event.preventDefault?.();
     };
     const pointermove = (event) => {
-      if (this.pointerAbsolute(event.clientX, event.clientY)) event.preventDefault?.();
+      if (keyboardArmed && this.pointerAbsolute(event.clientX, event.clientY)) event.preventDefault?.();
     };
     const pointerdown = (event) => {
       this.canvas.focus?.({ preventScroll: true });
+      focusCanvas();
       if (this.pointerAbsolute(event.clientX, event.clientY)) {
         this.pointerButton(event.button, false);
         try { pointerTarget.setPointerCapture?.(event.pointerId); } catch {}
@@ -313,16 +331,21 @@ export class WindowsNativeDesktopClient {
       }
     };
     const pointerup = (event) => {
-      if (this.pointerButton(event.button, true)) event.preventDefault?.();
+      if (keyboardArmed && this.pointerButton(event.button, true)) event.preventDefault?.();
     };
     const wheel = (event) => {
-      if (this.wheel(event.deltaY)) event.preventDefault?.();
+      if (keyboardArmed && this.wheel(event.deltaY)) event.preventDefault?.();
     };
     const contextmenu = (event) => event.preventDefault?.();
-    const blur = () => this.#releasePressedInput();
+    const blur = () => disarmKeyboard();
 
     keyboardTarget.addEventListener('keydown', keydown);
     keyboardTarget.addEventListener('keyup', keyup);
+    keyboardTarget.addEventListener('focusin', focusMoved);
+    keyboardTarget.addEventListener('visibilitychange', visibilityChanged);
+    pointerTarget.addEventListener('focus', focusCanvas);
+    pointerTarget.addEventListener('blur', blur);
+    pointerTarget.addEventListener('lostpointercapture', blur);
     globalThis.addEventListener?.('blur', blur);
     pointerTarget.addEventListener('pointermove', pointermove);
     pointerTarget.addEventListener('pointerdown', pointerdown);
@@ -334,6 +357,11 @@ export class WindowsNativeDesktopClient {
     return () => {
       keyboardTarget.removeEventListener?.('keydown', keydown);
       keyboardTarget.removeEventListener?.('keyup', keyup);
+      keyboardTarget.removeEventListener?.('focusin', focusMoved);
+      keyboardTarget.removeEventListener?.('visibilitychange', visibilityChanged);
+      pointerTarget.removeEventListener?.('focus', focusCanvas);
+      pointerTarget.removeEventListener?.('blur', blur);
+      pointerTarget.removeEventListener?.('lostpointercapture', blur);
       globalThis.removeEventListener?.('blur', blur);
       pointerTarget.removeEventListener?.('pointermove', pointermove);
       pointerTarget.removeEventListener?.('pointerdown', pointerdown);
@@ -341,7 +369,7 @@ export class WindowsNativeDesktopClient {
       pointerTarget.removeEventListener?.('pointercancel', pointerup);
       pointerTarget.removeEventListener?.('wheel', wheel);
       pointerTarget.removeEventListener?.('contextmenu', contextmenu);
-      this.#releasePressedInput();
+      disarmKeyboard();
     };
   }
 

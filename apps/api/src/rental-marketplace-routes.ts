@@ -23,6 +23,8 @@ import {
   listPublicExactGpuListings,
 } from './rental-public-listings.js';
 import { allWorkspaceCompatibility, compatibleWorkspaceChoices } from './machine-workspace-catalog.js';
+import { nativeRentalEligibility } from './windows-native-rental-eligibility.js';
+import { isWindowsNativeDesktopSlug, WINDOWS_NATIVE_DESKTOP_SLUGS } from './windows-native-workspace-policy.js';
 
 const listingInput = z.object({
   machineId: z.string().cuid(),
@@ -136,9 +138,40 @@ export function registerRentalMarketplaceRoutes(
       config.HEARTBEAT_OFFLINE_SECONDS,
     );
     if (!listing) return reply.code(404).send({ error: 'listing_unavailable' });
+    const catalogue = allWorkspaceCompatibility(listing.machine);
+    const os = (listing.machine.operatingSystem || '').trim().toLowerCase();
+    if (!os.startsWith('windows')) return { ...listing, workspaces: catalogue };
+
+    // A Windows-native host is not a Linux Docker host. Evaluate its four
+    // candidate stream profiles against the selected physical accelerator and
+    // current signed heartbeat, and never expose the GPU UUID to the browser.
+    const decisions = await Promise.all(WINDOWS_NATIVE_DESKTOP_SLUGS.map(async slug => ({
+      slug,
+      verdict: await nativeRentalEligibility(db, listing.id, slug),
+    })));
+    const eligible = new Map(decisions.map(item => [item.slug, item.verdict]));
     return {
       ...listing,
-      workspaces: allWorkspaceCompatibility(listing.machine),
+      workspaces: catalogue.map(item => {
+        if (!isWindowsNativeDesktopSlug(item.slug)) return item;
+        const verdict = eligible.get(item.slug);
+        const bookable = verdict?.eligible === true;
+        return {
+          ...item,
+          // The release label never overrides physical/owner authorization.
+          release: bookable ? (item.slug === 'gaming' ? 'EXPERIMENTAL' as const : 'BETA' as const) : item.release,
+          compatible: bookable,
+          bookable,
+          compatibility: {
+            score: bookable ? 100 : 0,
+            state: bookable ? 'READY' as const : 'INCOMPATIBLE' as const,
+            reasons: bookable ? ['Windows natif : GPU exact et consentement hôte attestés'] : [],
+            missing: bookable ? [] : [verdict?.reason ?? 'windows_native_unavailable'],
+            reasonCodes: [],
+            missingCodes: [],
+          },
+        };
+      }),
     };
   });
 

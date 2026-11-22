@@ -35,8 +35,11 @@ const LIVE_ALLOCATION_STATUSES: ResourceAllocationStatus[] = [
   ResourceAllocationStatus.ACTIVE,
 ];
 
+// Every interactive desktop holds physical rental authority, not just
+// Developer. A Windows-native READY/RUNNING session must never have its booking
+// released by a legacy dev-bypass reconciler that only looked for Developer.
 const DEVELOPER_SESSION_FILTER = {
-  machineWorkspace: { workspace: { slug: 'developer' } },
+  machineWorkspace: { workspace: { slug: { not: 'compute' } } },
 } as const;
 
 export function betaTestDevBypassActive(): boolean {
@@ -213,7 +216,9 @@ export async function reconcileDevelopmentBookings(db: PrismaClient, now = new D
           nvidiaRuntimeAvailable: true,
         },
       },
-      workspaceSessions: { none: { machineWorkspace: { workspace: { slug: 'developer' } } } },
+      workspaceSessions: { none: DEVELOPER_SESSION_FILTER },
+      // A selected Windows desktop does not require a Docker GPU_DIAGNOSTIC.
+      OR: [{ requestedWorkspaceSlug: null }, { requestedWorkspaceSlug: 'compute' }],
     },
     select: { id: true, buyerId: true, listing: { select: { machineId: true } } },
     take: 50,

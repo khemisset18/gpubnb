@@ -114,6 +114,8 @@ test('Developer Workspace full lifecycle: booking -> GPU proof -> Workspace read
   const machine = await prisma.machine.create({
     data: {
       ownerId: owner.id, agentPublicKey: `agentkey_deve2e_${suffix}`, agentVersion: '0.6.2',
+      // This E2E exercises the Developer container runtime on a Linux host.
+      operatingSystem: 'Linux',
       connectivity: MachineConnectivity.ONLINE, operational: MachineOperational.AVAILABLE, moderationStatus: ModerationStatus.CLEAR,
       lastHeartbeatAt: now, lastCudaProbeOk: true, dockerAvailable: true, nvidiaRuntimeAvailable: true,
       virtualizationAvailable: true, verifiedAt: now, ramTotalMiB: 16_384, diskTotalMiB: 51_200,

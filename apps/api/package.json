@@ -41,12 +41,13 @@
   "overrides": {
     "brace-expansion": "5.0.12",
     "deepmerge-ts": "8.0.0",
-    "fast-uri": "3.1.7",
+    "fast-uri": "3.1.9",
     "fast-json-stringify": {
-      "fast-uri": "4.1.4"
+      "fast-uri": "4.2.3"
     },
     "find-my-way": "9.7.0",
-    "uuid": "11.1.1"
+    "uuid": "11.1.1",
+    "jayson": "5.0.0"
   },
   "engines": {
     "node": ">=22.0.0"

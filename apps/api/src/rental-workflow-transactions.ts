@@ -11,6 +11,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import { requestPreparation, requestRentalStop, type ExecutableRentalWorkspace } from './rental-delivery-service.js';
+import { runBookingTransaction } from './booking-transaction-retry.js';
 
 export type TransactionClient = Prisma.TransactionClient;
 
@@ -58,7 +59,7 @@ export async function prepareComputeRental(
   bookingId: string,
   renterId: string,
 ): Promise<PreparationResult> {
-  return db.$transaction(async (tx) => {
+  return runBookingTransaction(db, async (tx) => {
     const booking = await tx.booking.findFirst({
       where: {
         id: bookingId,
@@ -176,7 +177,7 @@ export async function stopRentalSession(
   sessionId: string,
   actorId: string,
 ): Promise<{ id: string; status: WorkspaceSessionStatus }> {
-  return db.$transaction(async (tx) => {
+  return runBookingTransaction(db, async (tx) => {
     const session = await tx.workspaceSession.findFirst({
       where: {
         id: sessionId,

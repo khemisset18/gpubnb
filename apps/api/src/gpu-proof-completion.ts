@@ -13,6 +13,7 @@ import {
 import { STALLED_ACTIVATION_GRACE_MS } from './dev-booking-reconciler.js';
 import { runBookingTransaction } from './booking-transaction-retry.js';
 import { ensureCompatibleMachineWorkspace } from './machine-workspace-catalog.js';
+import { isWindowsNativeDesktopSlug } from './windows-native-workspace-policy.js';
 
 export type GpuProofCompletionOutcome = {
   bookingStatus: typeof BookingStatus.STARTING | typeof BookingStatus.COMPLETED;
@@ -54,11 +55,46 @@ export async function completeGpuProofJob(
   bookingId: string,
   machineId: string,
 ): Promise<GpuProofCompletionOutcome> {
+  // Native Windows Workspaces intentionally do not use a Docker GPU_PROOF job.
+  // Even if a stale/legacy job is finalized for a booking which already chose
+  // a native desktop, it must NEVER auto-queue Developer on that paid GPU.
+  const selected = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { requestedWorkspaceSlug: true },
+  });
+  if (selected?.requestedWorkspaceSlug
+      && isWindowsNativeDesktopSlug(selected.requestedWorkspaceSlug)) {
+    return {
+      bookingStatus: BookingStatus.STARTING,
+      machineReleased: false,
+      developerWorkspaceSessionId: null,
+      developerPreparationQueued: false,
+      changed: false,
+    };
+  }
+  // A GPU proof may only prepare Compute itself or the legacy unselected
+  // Developer flow. An explicitly selected Data/AI/desktop/etc. booking must
+  // never be rewritten into a Developer session by a stale or misrouted job.
+  if (selected?.requestedWorkspaceSlug
+      && selected.requestedWorkspaceSlug !== 'compute') {
+    return {
+      bookingStatus: BookingStatus.STARTING,
+      machineReleased: false,
+      developerWorkspaceSessionId: null,
+      developerPreparationQueued: false,
+      changed: false,
+    };
+  }
   let developerWorkspaceCompatible = null;
-  try {
-    developerWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, 'developer');
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== 'developer_workspace_incompatible') throw error;
+  // Only the legacy NULL selection keeps the historical proof → Developer
+  // handoff. An explicit Compute request ends with the proof and never opens
+  // the different Developer Workspace.
+  if (!selected?.requestedWorkspaceSlug) {
+    try {
+      developerWorkspaceCompatible = await ensureCompatibleMachineWorkspace(db, machineId, 'developer');
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'developer_workspace_incompatible') throw error;
+    }
   }
 
   return runBookingTransaction(db, async (tx) => {

@@ -52,6 +52,8 @@ test('a fresh Compute rental needs no second renter click after verified GPU_PRO
         ownerId,
         agentPublicKey: `agentkey_auto_${suffix}`,
         agentVersion: '0.6.2',
+        // This compatibility fixture uses the existing Linux container runtime.
+        operatingSystem: 'Linux',
         connectivity: MachineConnectivity.ONLINE,
         operational: MachineOperational.RESERVED,
         moderationStatus: ModerationStatus.CLEAR,

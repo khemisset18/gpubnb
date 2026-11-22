@@ -52,6 +52,8 @@ async function seedBooking(prisma: PrismaClient, suffix: string, options: { book
   const machine = await prisma.machine.create({
     data: {
       ownerId: owner.id, agentPublicKey: `agentkey_stopset_${suffix}`, agentVersion: '0.6.2',
+      // This fixture drives the legacy Developer container lifecycle.
+      operatingSystem: 'Linux',
       connectivity: MachineConnectivity.ONLINE, operational: MachineOperational.RESERVED, moderationStatus: ModerationStatus.CLEAR,
       lastHeartbeatAt: now, lastCudaProbeOk: true, dockerAvailable: true, nvidiaRuntimeAvailable: true,
       virtualizationAvailable: true, verifiedAt: now, ramTotalMiB: 16_384, diskTotalMiB: 51_200,

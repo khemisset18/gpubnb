@@ -1,5 +1,5 @@
-import { BookingStatus, MachineConnectivity, MachineOperational, ModerationStatus, PrismaClient, WorkspaceSessionStatus } from '@prisma/client';
-import { ensureCompatibleMachineWorkspace } from '../../src/machine-workspace-catalog.js';
+import { BookingStatus, MachineConnectivity, MachineOperational, MachineWorkspaceState, ModerationStatus, PrismaClient, WorkspaceRelease, WorkspaceSessionStatus } from '@prisma/client';
+import { workspaceManifest } from '../../src/workspace-manifests.js';
 
 export async function seedReadySession(prisma: PrismaClient, suffix: string, options: {
   bookingStatus: BookingStatus;
@@ -8,6 +8,10 @@ export async function seedReadySession(prisma: PrismaClient, suffix: string, opt
   bookingEndsAt?: Date;
   workspaceActivatedAt?: Date | null;
 }) {
+  // This helper seeds database-only gateway fixtures. It deliberately does not
+  // call ensureCompatibleMachineWorkspace(), which is a production capability
+  // gate and must remain closed for Windows until a native runtime is qualified.
+  // No Agent, desktop, container, or Workspace process is launched by this fixture.
   const now = new Date();
   const owner = await prisma.user.create({ data: { wallet: `owner_act_${suffix}`, pseudonym: `owner_act_${suffix}`, canHost: true } });
   const renter = await prisma.user.create({ data: { wallet: `renter_act_${suffix}`, pseudonym: `renter_act_${suffix}` } });
@@ -15,22 +19,58 @@ export async function seedReadySession(prisma: PrismaClient, suffix: string, opt
     data: {
       ownerId: owner.id,
       agentPublicKey: `agentkey_act_${suffix}`,
+      operatingSystem: 'Windows 11',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.RESERVED,
       moderationStatus: ModerationStatus.CLEAR,
       lastHeartbeatAt: now,
-      lastCudaProbeOk: true,
-      cudaVersion: '12.4',
-      vramMiB: 4_096,
-      dockerAvailable: true,
-      nvidiaRuntimeAvailable: true,
-      virtualizationAvailable: true,
       verifiedAt: now,
       ramTotalMiB: 16_384,
       diskTotalMiB: 51_200,
     },
   });
-  const machineWorkspace = await ensureCompatibleMachineWorkspace(prisma, machine.id, 'developer');
+  const manifest = workspaceManifest('cloud-desktop');
+  if (!manifest) throw new Error('test_fixture_workspace_manifest_missing');
+  const definition = await prisma.workspaceDefinition.upsert({
+    where: { slug: manifest.slug },
+    update: {
+      version: 1,
+      name: manifest.name,
+      category: manifest.category,
+      release: manifest.release as WorkspaceRelease,
+      manifest: JSON.parse(JSON.stringify(manifest)),
+    },
+    create: {
+      slug: manifest.slug,
+      version: 1,
+      name: manifest.name,
+      category: manifest.category,
+      release: manifest.release as WorkspaceRelease,
+      manifest: JSON.parse(JSON.stringify(manifest)),
+    },
+  });
+  const fixtureAnalysis = {
+    fixtureOnly: true,
+    runtimeBackend: 'WINDOWS_NATIVE',
+    runtimeStarted: false,
+    validation: 'database-only-gateway-contract',
+  };
+  const machineWorkspace = await prisma.machineWorkspace.upsert({
+    where: { machineId_workspaceId: { machineId: machine.id, workspaceId: definition.id } },
+    update: {
+      compatibilityScore: 100,
+      state: MachineWorkspaceState.READY,
+      analysis: fixtureAnalysis,
+      analyzedAt: now,
+    },
+    create: {
+      machineId: machine.id,
+      workspaceId: definition.id,
+      compatibilityScore: 100,
+      state: MachineWorkspaceState.READY,
+      analysis: fixtureAnalysis,
+    },
+  });
   const listing = await prisma.gpuListing.create({
     data: {
       ownerId: owner.id, machineId: machine.id,
@@ -55,7 +95,7 @@ export async function seedReadySession(prisma: PrismaClient, suffix: string, opt
   const job = await prisma.job.create({
     data: {
       bookingId: booking.id, renterId: renter.id, machineId: machine.id,
-      type: 'WORKSPACE_PREPARE', parameters: { workspaceSlug: 'developer', timeoutSeconds: 1200 },
+      type: 'WORKSPACE_PREPARE', parameters: { workspaceSlug: manifest.slug, timeoutSeconds: 1200 },
       status: 'COMPLETED', finishedAt: now,
     },
   });

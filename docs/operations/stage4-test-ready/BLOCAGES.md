@@ -1,5 +1,26 @@
 # Blocages et autorisations restantes
 
+## État courant PR #380 — vérifié le 21 novembre 2026
+
+Les observations de cette page sans en-tête de date ci-dessous proviennent
+d'une campagne antérieure et ne qualifient pas le HEAD de la PR #380 ni le
+déploiement Stage actif. Pour l'état actuel, voir
+[`WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md`](../WINDOWS_NATIVE_PRIVATE_QUALIFICATION_BLOCKERS.md).
+
+- Le service `gpubnb-stage3-private` sert le SHA
+  `23a7a2950ecf365866f3531ddbf76920d9fcb295` sur une ancienne branche; le
+  déploiement est `live`, auto-déploiement OFF, ingress `0.0.0.0/0`.
+- La page live présente encore une qualification Stage 3 à un seul bouton et
+  affiche « Prêt. » sans preuve PC1. **Ne pas y lancer de test.** Les valeurs
+  du mode bêta sans paiement n'ont pas été inspectées et restent inconnues.
+- Sur la branche PR, les quatre Workspaces sont sélectionnables pour examen,
+  mais tout lancement est fermé. Le Cloud Desktop n'a pas d'audio navigateur
+  end-to-end; Creator/CAD n'ont pas de qualification physique; Gaming n'a pas
+  d'audio ni de manette de bout en bout.
+- Le candidat Windows CI n'est pas une signature de production. Aucun PC1,
+  PC2, pilote, matériel, compte Windows ou service de production n'a été
+  touché dans cette campagne.
+
 ## À ne pas confondre avec un défaut du build
 
 - **Signature privée non effectuée.** Le certificat et la confiance Windows actuels ne sont pas accessibles depuis cet environnement. Le pin réel historique est connu ; son expiration observée est le 20/10/2026 à 22:23:47 UTC. L'audit local signale un renouvellement dès 72 heures restantes et bloque la signature sous 24 heures. [SIGNATURE-PRIVEE.md](SIGNATURE-PRIVEE.md) fournit les commandes pour le certificat existant et la préparation locale du remplacement non exportable, sans nouvelle confiance automatique. Un certificat nouveau exige un nouveau pin réel et une reconstruction cohérente avant signature. L'autorisation de signature ne résout pas l'absence d'accès local à la clé.
