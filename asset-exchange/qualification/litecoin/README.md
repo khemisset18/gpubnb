@@ -1,0 +1,207 @@
+# GPUbnb LTC — contrôles hors ligne (22 novembre 2026)
+
+**Profil : LTC_BASECHAIN_TRANSPARENT_V1.** Extension additive à la spécification
+existante docs/asset-exchange/LITECOIN_ADAPTER_SPEC_V1.md.
+
+**Résultat local préalable : 39/39 méthodes Python PASS, zéro échec** dans
+l'environnement de construction isolé. Les sous-tests négatifs sont inclus
+dans les 39 méthodes. Ces contrôles ne prouvent ni la qualification Litecoin
+Core, ni des scripts HTLC exécutables, ni un remboursement réel, ni la sécurité
+de MWEB, ni les étapes L0–L9 complètes.
+
+## Fichiers et périmètre
+
+- offline_preflight.py : valide strictement une enveloppe publique fictive.
+  Ne contient aucun appel réseau/RPC, nœud, clé, signature, wallet, construction
+  de transaction, diffusion, minage ou capacité de règlement.
+- test_offline_preflight.py : 39 tests, dont mutations de réseau,
+  MWEB, montants, autorisations, séquence et sérialisation.
+- fixtures/transparent_request_v1.json : montant public fictif de
+  1.00000000 LTC, frais fictifs de 0.00100000 LTC et remboursement
+  fictif de 0.99900000 LTC. Outpoint, script de destination et hauteur 450
+  **non exécutables et non qualifiés**.
+
+## Exécution dans Ubuntu WSL2 (depuis la racine du dépôt)
+
+    unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
+
+Pour lire l'état du seul exemple public :
+
+    unshare --user --map-root-user --net python3 asset-exchange/qualification/litecoin/offline_preflight.py
+
+Aucune installation, aucun vrai LTC, aucune phrase secrète, aucun portefeuille,
+aucune transaction Mainnet et aucune signature n'est nécessaire.
+
+## Protections et limites
+
+Le précontrôle refuse les champs JSON inconnus ou dupliqués, les autres
+réseaux ou cryptos, les déclarations MWEB, les autorisations de signer,
+financer ou diffuser, les montants mal formés et les incohérences de frais,
+les variantes du sighash et de la séquence, et les faux champs de qualification.
+
+Même accepté, le rapport fixe toujours : qualified=false, canSign=false,
+canBroadcast=false, nativeConsensusVerified=false,
+networkIdentityVerified=false, sourceAuthenticityVerified=false,
+hardwareQualified=false, automaticSettlementSupported=false.
+
+**Un JSON falsifié mais cohérent peut passer** : ce contrôle ne vérifie pas
+son origine, ne prouve pas les règles de consensus et ne donne aucune
+autorisation financière.
+
+## Reste à qualifier selon la spécification existante
+
+| Gate | État |
+| --- | --- |
+| L0 — Intégrité Litecoin Core 0.21.5.8 et provenance | NON QUALIFIÉ |
+| L1 — Réseau/genesis exact en regtest privé | NON QUALIFIÉ |
+| L2 — Refus MWEB par le logiciel de protocole et le nœud | Contrôles d'enveloppe seuls PASS |
+| L3 — Script/witness/CLTV/CSV/sighash natifs | NON QUALIFIÉ |
+| L4 — Lock, claim, remboursement et refus natifs | NON QUALIFIÉ |
+| L5 — Frais, dust, RBF et pinning Litecoin | NON QUALIFIÉ |
+| L6 — Récupération indépendante avant lock | NON QUALIFIÉ |
+| L7 — Réorganisations et watchers indépendants | NON QUALIFIÉ |
+| L8 — Signataire matériel | DIFFÉRÉ / BLOQUÉ |
+| L9 — Audit et activation | DIFFÉRÉ / BLOQUÉ |
+
+Le statut LTC reste MARKETPLACE_ONLY, automaticSettlementSupported=false,
+et la route financière reste absente. Aucun code DOGE, registre de capacités,
+runtime financier ou workflow n'est modifié par cette branche.
+
+La spécification actuelle identifie Litecoin Core v0.21.5.8 et une empreinte
+candidate du binaire Linux. Aucune signature de distribution, archive téléchargée,
+source officielle intégrale ou identité de nœud n'a été vérifiée par ce travail.
+Ne pas utiliser le candidat documentaire comme preuve L0.
+
+Source amont : https://github.com/litecoin-project/litecoin/releases/tag/v0.21.5.8.
+
+## L2 — contrôle complémentaire des chaînes d'adresses publiques
+
+`transparent_address_guard.py` ajoute une classification pure de
+chaînes Bech32 transparentes **regtest v0 uniquement** (HRP `rltc`,
+checksum BIP173, P2WPKH et P2WSH). `test_transparent_address_guard.py`
+contient **22 méthodes supplémentaires**, testées avec succès dans
+l'environnement local de construction. Avec les 39 tests antérieurs,
+**61 tests sont attendus après actualisation dans WSL2**, et ne doivent
+pas être revendiqués comme vérifiés sur WSL2 avant exécution.
+
+Ce contrôle **ne s'intègre à aucun runtime financier** ; il n'accepte
+aucune autre chaîne et refuse également les préfixes MWEB (`tmweb`)
+et les adresses Mainnet/testnet. Il ne lit ni wallet ni transaction,
+et ne prouve pas l'exclusion MWEB des données réellement relayées,
+des peg-ins/outs, du change ou de la récupération. Les indicateurs
+financiers et de qualification restent toujours `false`.
+
+Pour exécuter les deux suites (sans clé, réseau ou signature) depuis
+la racine du worktree :
+
+    PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
+
+Aucun changement au registre, au nœud, au signer, au workflow ou
+à la branche DOGE.
+
+## L3 — script HTLC candidat en octets publics, sans opération blockchain
+
+`candidate_htlc.py` propose **uniquement un format d'octets de
+script P2WSH fictif** pour examen : branche de preimage SHA-256
+32 octets et clé redeem, branche de hauteur CLTV + clé refund.
+Les données publiques de démonstration ne sont pas garanties comme
+des points valides et ne représentent aucun portefeuille.
+
+`test_candidate_htlc.py` ajoute **26 tests unitaires** (encodage
+ScriptNum minimal et bornes, calcul SHA-256 du script, structure
+IF/ELSE/ENDIF, mutations et refus). Ils ont été exécutés avec
+succès dans l'environnement local de construction ; le worktree
+WSL2 de l'opérateur n'a **pas encore** été retesté depuis cet ajout.
+
+Le total à confirmer sur le PC est maintenant **87 méthodes (61+26)** :
+
+    PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
+
+Ce module **ne génère pas de transactions, ne signe rien, ne fait
+aucun appel réseau ni RPC et ne prouve aucune standardness ou consensus
+natif**. L'exécution et la validité d'un refund Litecoin restent
+bloquées jusqu'aux essais natifs. Ne pas intégrer au runtime financier.
+
+## L3 — modèle hypothétique de finalité de remboursement (sans transaction)
+
+`refund_height_model.py` utilise uniquement des **entiers et des
+valeurs publiques fictives** pour modéliser partiellement les
+comparaisons `CheckLockTime` et `IsFinalTx` observées dans Litecoin
+Core v0.21.5.8. Il montre par exemple qu'à hauteur cible 450,
+la hauteur hypothétique 450 est encore insuffisante pour le test
+de finalité, tandis que 451 satisfait ces comparaisons restreintes.
+
+**ATTENTION : il ne connaît ni la chaîne ni son état, ne peut pas
+déterminer une hauteur réelle, ne vérifie aucun script/witness/sighash,
+n'interagit avec aucun nœud et ne produit aucune transaction.**
+Le résultat `SIMULATED_SCALAR_CONDITIONS_MET_NO_CHAIN_PROOF`
+ne donne **jamais** une autorisation : `canRefund=false`,
+`canSign=false`, `canBroadcast=false`, `qualified=false`.
+
+`test_refund_height_model.py` ajoute **23 tests locaux PASS**,
+à confirmer sur l'Ubuntu WSL2 de l'opérateur. Le nouveau total
+attendu est **110 tests distincts** (87 attestés sur WSL2 + 23 nouveaux).
+Ne pas confondre comparaison simulée et acceptation par consensus.
+
+## L6 — spécimen de dossier public (NON récupérable)
+
+Le nouveau `public_evidence_specimen.py` associe une **demande
+synthétique** au **script HTLC candidat**, avec des hash SHA-256
+du contenu public, un contrôle de hauteur CLTV et des refus pour
+mauvais réseau, mauvais genesis, MWEB, frais, scripts, doublons JSON
+et permissions financières.
+
+`test_public_evidence_specimen.py` fournit **30 tests unitaires
+locaux PASS**. L'ensemble des fichiers de la branche compte
+**140 tests attendus**, dont **110 ont déjà été attestés sur WSL2**
+et **30 attendent confirmation sur WSL2**.
+
+Ce spécimen ne contient ni préimage ni clé privée et **ne produit
+aucun remboursement signable ou opérationnel**. Son checksum est
+non authentifiant : la cohérence du contenu ne dit rien de
+l'authenticité ni de la présence des UTXO/transactions sur une
+chaîne réelle. Le statut `independentRecoveryVerified` reste false
+et la gate L6 est toujours BLOQUÉE.
+
+Commande depuis le worktree LTC séparé :
+
+    PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
+
+Ne jamais importer ces exemples dans un wallet ni les utiliser pour
+financer ou signer une transaction.
+
+## Actualisation WSL2 — 110/110, prochaine étape 140 tests
+
+Le journal de l'opérateur confirme les **110 tests PASS** sur
+Ubuntu WSL2 au commit `d1d6ec1` avec un worktree propre.
+
+Le spécimen public L6 (non récupérable) ajoute **30 méthodes**.
+Le total attendu après mise à jour du worktree est **140 méthodes**.
+Les 30 méthodes du spécimen ne sont **pas encore attestées sur WSL2**.
+
+Un inventaire L6 redondant de 29 tests, ajouté temporairement, a
+été retiré pour éviter de dupliquer le contrôle du spécimen public.
+La seule validation L6 recherchée à ce stade est la cohérence des
+preuves publiques fictives ; aucune garantie de récupération native.
+
+## L7 — comparaison de deux observations publiques fictives
+
+`synthetic_watcher_disagreement.py` refuse par défaut les
+observations qui ne respectent pas le schéma `litecoin/regtest`,
+ainsi que les champs MWEB, valeurs de types incorrects, txid
+incompatibles et sources insuffisantes ou dupliquées.
+Les statuts CONFLICTED, REORGED, UNKNOWN, le désaccord sur
+les hauteurs, confirmations ou hash de bloc et les données
+périmées produisent une classification `SIMULATED_UNCERTAIN_...`.
+
+Même lorsque deux observations fictives s'accordent,
+`canAdvance=false`, `canRefund=false`,
+`canSign=false`, `canBroadcast=false` et
+`realChainEvidenceVerified=false`. Les libellés de source
+n'attestent pas l'indépendance réelle.
+
+`test_synthetic_watcher_disagreement.py` apporte **32 nouvelles
+méthodes** dont l'exécution WSL2 reste à confirmer.
+**172 tests attendus = 140 déjà PASS sur Ubuntu + 32 ajoutés**.
+Ce n'est pas un watcher, ni une source RPC ou une preuve de reorg :
+**L7 reste non qualifié**.
