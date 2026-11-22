@@ -327,7 +327,12 @@ export class WindowsNativeDesktopClient {
       }
       let pads = [];
       try { pads = globalThis.navigator?.getGamepads?.() ?? []; } catch {}
-      gamepad.update(pads);
+      try { gamepad.update(pads); } catch {
+        // A revoked or failed input transport must stop gamepad polling rather
+        // than continue to inject held commands on a later frame.
+        disarmKeyboard();
+        return;
+      }
       if (typeof globalThis.requestAnimationFrame === 'function') {
         gamepadFrame = globalThis.requestAnimationFrame(pumpGamepad);
       }
