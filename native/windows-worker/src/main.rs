@@ -614,7 +614,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         ensure_current_renter_input_desktop(windows_session_id)
                             .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
                         let application = launch_qualified_gaming_application(windows_session_id)
-                            .map_err(|_| WorkerError::new("gaming_application_launch_failed", 21))?;
+                            .map_err(|_| {
+                                WorkerError::new("gaming_application_launch_failed", 21)
+                            })?;
                         gaming_application = Some(application);
                     }
 
