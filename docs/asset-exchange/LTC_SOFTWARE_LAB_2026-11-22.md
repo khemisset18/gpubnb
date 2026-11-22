@@ -509,3 +509,29 @@ récupérable, et son SHA-256 sans clé n'authentifie pas les données.
 Aucun wallet, nœud, signataire, transaction, remboursement,
 broadcast ni fonds réels ; L1–L9 natifs restent non qualifiés
 ou différés. `MARKETPLACE_ONLY` inchangé.
+
+## Complément L6 — 140/140 méthodes confirmées sur Ubuntu WSL2
+
+Le compte rendu fourni par l'opérateur le 22 novembre 2026 contient
+la sortie suivante :
+
+```text
+Ran 140 tests in 0.034s
+
+OK
+=== ETAT GIT LTC ===
+## HEAD (no branch)
+```
+
+**140/140 méthodes unitaires distinctes PASS**, zéro échec dans le
+journal, worktree LTC séparé sans modification détectée.
+Répartition : 39 préflight, 22 adresses transparentes, 26 octets
+du script candidat HTLC, 23 simulations de hauteur/finalité et
+30 tests du spécimen de preuves publiques strictement fictives.
+Les 30 tests du spécimen sont désormais aussi attestés sur Ubuntu WSL2.
+
+**L6 demeure BLOQUÉ** : le spécimen ne contient aucune transaction
+récupérable ou signée, aucune preuve de chaîne ni de contrôle des fonds.
+Le SHA-256 public non authentifié n'est pas une preuve de provenance.
+Aucune activation, signature, émission, nœud, RPC ou fonds réels.
+L8 et L9 restent différés.
