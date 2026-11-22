@@ -576,3 +576,51 @@ client RPC. Tous les résultats renvoient `canAdvance=false`,
 authentifiée, aucune démonstration native de reorg et aucune preuve
 de finalité financière. Ce module ne modifie ni le runtime, ni DOGE,
 ni le registre d'activation. L8/L9 restent différés.
+
+## Complément L7 — 172/172 tests confirmés sur Ubuntu WSL2
+
+Le journal transmis par l'opérateur après actualisation de la branche
+LTC séparée rapporte exactement :
+
+```text
+HEAD is now at 55abbe2 docs(ltc): describe offline simulated watcher disagreements and 172-test checkpoint
+=== LTC : 172 TESTS HORS LIGNE ===
+Ran 172 tests in 0.041s
+OK
+=== ETAT GIT LTC ===
+## HEAD (no branch)
+```
+
+**172/172 méthodes distinctes PASS, zéro échec**, exécutées sous
+`PYTHONDONTWRITEBYTECODE=1` et
+`unshare --user --map-root-user --net` avec un worktree LTC
+propre/détaché. Le commit attesté est
+`55abbe24335c6285ff6928bb443500767f044618`.
+
+Répartition : 39 préflight + 22 gardes d'adresse Bech32 / MWEB
+synthétique + 26 octets de scripts HTLC candidats + 23 bornes
+CLTV et finalité hypothétiques + 30 spécimens publics non récupérables
++ 32 modèles de divergences d'observateurs synthétiques = **172**.
+
+Les résultats L7 démontrent les classifications du **modèle de
+dictionnaires publics fictifs uniquement**. Deux labels différents ne
+prouvent pas deux sources indépendantes ; même un accord simulé ne
+fournit pas d'attestation de chaîne, d'UTXO, de confirmations ou de
+finalité. Toute permission financière reste `false`.
+
+### Décision de périmètre : suspendre l'escalade du compteur
+
+Les preuves purement Python ne permettent pas, à elles seules,
+de franchir les gates natives restantes. Ne pas présenter L1/L2/L3/L4/
+L5/L6/L7 comme qualifiées sans exécution indépendante du vrai protocole,
+de tests d'isolation, d'observateurs et de remboursement, lesquels
+restent **hors périmètre selon les contraintes de l'opérateur**.
+L8 (signer matériel) et L9 (audit/activation) sont différés.
+
+Le chemin de travail sûr est maintenant une revue statique
+du contrat de données, des dépendances, des limitations et de l'inventaire
+des preuves ; aucun nouvel adaptateur financier, ni permission,
+ni clé, ni nœud, ni signature, ni transaction, ni fonds réel.
+
+**État final de ce checkpoint : SOFTWARE_OFFLINE_172_PASS /
+LTC_MARKETPLACE_ONLY / FINANCIAL_SETTLEMENT_BLOCKED.**
