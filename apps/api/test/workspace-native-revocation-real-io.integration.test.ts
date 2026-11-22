@@ -191,6 +191,10 @@ integration('PostgreSQL session row lock orders native send commits against STOP
   const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
   const fixture = await seedReadySession(db, crypto.randomBytes(8).toString('hex'), {
     bookingStatus: BookingStatus.STARTING, expectedSeconds: 900,
+  }).catch(async (error: unknown) => {
+    redis.disconnect();
+    await db.$disconnect();
+    throw error;
   });
   const barrier = () => {
     let open!: () => void;
@@ -291,6 +295,10 @@ integration('activated native frames are generation-fenced without delaying STOP
   const redis = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: 2 });
   const fixture = await seedReadySession(db, crypto.randomBytes(8).toString('hex'), {
     bookingStatus: BookingStatus.STARTING, expectedSeconds: 900,
+  }).catch(async (error: unknown) => {
+    redis.disconnect();
+    await db.$disconnect();
+    throw error;
   });
   const channelId = crypto.randomUUID();
   const channelKey = 'workspace-gateway:ws-channel:' + channelId;

@@ -150,6 +150,8 @@ test('gateway register is the only thing that makes a Developer workspace openab
     data: {
       ownerId: owner.id,
       agentPublicKey: machinePublicKey,
+      // The registration contract here is for a Developer container host.
+      operatingSystem: 'Linux',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.RESERVED,
       moderationStatus: ModerationStatus.CLEAR,

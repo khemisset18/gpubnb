@@ -74,6 +74,8 @@ async function seedBookedMachine(prisma: PrismaClient, suffix: string) {
       ownerId: owner.id,
       agentPublicKey: `agentkey_fin_${suffix}`,
       agentVersion: '0.6.2',
+      // Booking auto-prepares the legacy Linux Developer container runtime.
+      operatingSystem: 'Linux',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.RESERVED,
       moderationStatus: ModerationStatus.CLEAR,

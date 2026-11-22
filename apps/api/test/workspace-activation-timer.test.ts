@@ -53,6 +53,8 @@ async function seedReadySession(prisma: PrismaClient, suffix: string, options: {
     data: {
       ownerId: owner.id,
       agentPublicKey: `agentkey_act_${suffix}`,
+      // This fixture tests the legacy Developer container runtime.
+      operatingSystem: 'Linux',
       connectivity: MachineConnectivity.ONLINE,
       operational: MachineOperational.RESERVED,
       moderationStatus: ModerationStatus.CLEAR,
