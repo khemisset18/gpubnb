@@ -76,6 +76,199 @@ test('page mounts the client without exposing a capability in URL or DOM', () =>
   assert.equal(closed, 1);
 });
 
+test('fullscreen and pointer lock are user controlled and released on authority revocation', async () => {
+  const listeners = new Map();
+  const makeButton = () => ({
+    textContent: '',
+    attributes: new Map(),
+    handlers: new Map(),
+    addEventListener(name, handler) { this.handlers.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (this.handlers.get(name) === handler) this.handlers.delete(name);
+    },
+    setAttribute(name, value) { this.attributes.set(name, value); },
+  });
+  const canvas = { focus() {} };
+  const status = { textContent: '' };
+  const closeButton = makeButton();
+  const fullscreenButton = makeButton();
+  const pointerLockButton = makeButton();
+  const documentObject = {
+    fullscreenElement: null,
+    pointerLockElement: null,
+    listeners,
+    addEventListener(name, handler) { listeners.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (listeners.get(name) === handler) listeners.delete(name);
+    },
+    emit(name) { listeners.get(name)?.(); },
+    documentElement: {
+      requestFullscreen() {
+        documentObject.fullscreenElement = documentObject.documentElement;
+        documentObject.emit('fullscreenchange');
+        return Promise.resolve();
+      },
+    },
+    exitFullscreen() {
+      this.fullscreenElement = null;
+      this.emit('fullscreenchange');
+      return Promise.resolve();
+    },
+    exitPointerLock() {
+      this.pointerLockElement = null;
+      this.emit('pointerlockchange');
+    },
+    querySelector(selector) {
+      return {
+        '#nativeDesktopCanvas': canvas,
+        '#nativeDesktopStatus': status,
+        '#nativeDesktopClose': closeButton,
+        '#nativeDesktopFullscreen': fullscreenButton,
+        '#nativeDesktopPointerLock': pointerLockButton,
+      }[selector] ?? null;
+    },
+  };
+  canvas.requestPointerLock = () => {
+    documentObject.pointerLockElement = canvas;
+    documentObject.emit('pointerlockchange');
+    return Promise.resolve();
+  };
+  const windowObject = { addEventListener() {}, removeEventListener() {} };
+  const client = {
+    bindDom() { return () => {}; },
+    start() {},
+    close() {},
+  };
+  let clientOptions;
+
+  mountWindowsNativeDesktop({
+    documentObject,
+    windowObject,
+    locationObject: {
+      href: 'https://example.test/windows-native-desktop.html?session=sess-1',
+      search: '?session=sess-1',
+    },
+    clientFactory: (options) => { clientOptions = options; return client; },
+  });
+  await fullscreenButton.handlers.get('click')();
+  await pointerLockButton.handlers.get('click')();
+  assert.equal(fullscreenButton.textContent, 'Quitter le plein écran');
+  assert.equal(fullscreenButton.attributes.get('aria-pressed'), 'true');
+  assert.equal(pointerLockButton.textContent, 'Libérer la souris');
+  assert.equal(pointerLockButton.attributes.get('aria-pressed'), 'true');
+
+  clientOptions.onState({ state: 'closed', closeCode: 1008, wasClean: true });
+  assert.equal(documentObject.fullscreenElement, null);
+  assert.equal(documentObject.pointerLockElement, null);
+  assert.equal(fullscreenButton.textContent, 'Plein écran');
+  assert.equal(pointerLockButton.textContent, 'Verrouiller la souris');
+});
+
+test('stop session calls the authenticated API route and closes the viewer on success', async () => {
+  const makeButton = () => ({
+    disabled: false,
+    handlers: new Map(),
+    addEventListener(name, handler) { this.handlers.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (this.handlers.get(name) === handler) this.handlers.delete(name);
+    },
+  });
+  const canvas = { focus() {} };
+  const status = { textContent: '' };
+  const closeButton = makeButton();
+  const stopButton = makeButton();
+  const documentObject = {
+    querySelector(selector) {
+      return {
+        '#nativeDesktopCanvas': canvas,
+        '#nativeDesktopStatus': status,
+        '#nativeDesktopClose': closeButton,
+        '#nativeDesktopStopSession': stopButton,
+      }[selector] ?? null;
+    },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const windowObject = {
+    GPUBNB_CONFIG: { apiBase: 'https://api.example.test/' },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  let closed = 0;
+  let request;
+  const client = {
+    bindDom() { return () => {}; },
+    start() {},
+    close() { closed += 1; },
+  };
+  mountWindowsNativeDesktop({
+    documentObject,
+    windowObject,
+    locationObject: {
+      href: 'https://example.test/windows-native-desktop.html?session=cm123456789012345678901234',
+      search: '?session=cm123456789012345678901234',
+    },
+    clientFactory: () => client,
+    apiFetch: async (url, options) => {
+      request = { url, options };
+      return { ok: true };
+    },
+  });
+
+  await stopButton.handlers.get('click')();
+
+  assert.equal(request.url, 'https://api.example.test/workspace-sessions/cm123456789012345678901234/stop');
+  assert.equal(request.options.method, 'POST');
+  assert.equal(request.options.credentials, 'include');
+  assert.equal(request.options.body, '{}');
+  assert.equal(closed, 1);
+  assert.equal(status.textContent, 'Arrêt confirmé — GPUbnb libère la session.');
+  assert.equal(stopButton.handlers.has('click'), false);
+});
+
+test('failed server STOP keeps the session open and allows a retry', async () => {
+  const button = {
+    disabled: false,
+    handlers: new Map(),
+    addEventListener(name, handler) { this.handlers.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (this.handlers.get(name) === handler) this.handlers.delete(name);
+    },
+  };
+  const status = { textContent: '' };
+  const client = { bindDom() { return () => {}; }, start() {}, close() {} };
+  const documentObject = {
+    querySelector(selector) {
+      return {
+        '#nativeDesktopCanvas': { focus() {} },
+        '#nativeDesktopStatus': status,
+        '#nativeDesktopClose': { addEventListener() {} },
+        '#nativeDesktopStopSession': button,
+      }[selector] ?? null;
+    },
+  };
+  let attempts = 0;
+  mountWindowsNativeDesktop({
+    documentObject,
+    windowObject: { GPUBNB_API_URL: 'https://api.example.test', addEventListener() {}, removeEventListener() {} },
+    locationObject: {
+      href: 'https://example.test/windows-native-desktop.html?session=cm123456789012345678901234',
+      search: '?session=cm123456789012345678901234',
+    },
+    clientFactory: () => client,
+    apiFetch: async () => ({ ok: ++attempts > 1 }),
+  });
+
+  await button.handlers.get('click')();
+  assert.equal(attempts, 1);
+  assert.equal(button.disabled, false);
+  assert.match(status.textContent, /Arrêt non confirmé/u);
+
+  await button.handlers.get('click')();
+  assert.equal(attempts, 2);
+  assert.match(status.textContent, /Arrêt confirmé/u);
+});
+
 
 test('unexpected transport close reconnects with a fresh client', () => {
   const canvas = {};
