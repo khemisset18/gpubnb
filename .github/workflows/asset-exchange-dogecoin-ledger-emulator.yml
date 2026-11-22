@@ -17,6 +17,8 @@ on:
       - "asset-exchange/qualification/dogecoin/d8/test_physical_request_preflight.py"
       - "asset-exchange/qualification/dogecoin/d8/ledger_native_consensus.py"
       - "asset-exchange/qualification/dogecoin/d8/test_ledger_native_consensus.py"
+      - "asset-exchange/qualification/dogecoin/d8/frozen_experimental_d2_profile_v1.json"
+      - "asset-exchange/qualification/dogecoin/d8/test_frozen_experimental_d2_profile.py"
       - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
   pull_request:
     paths:
@@ -85,6 +87,8 @@ jobs:
           assert data["chainHeightSourceAuthenticated"] is False
           assert data["broadcasts"] == data["realFundsUsed"] == 0
           PY
+      - name: Assert exact experimental D2 profile invariants remain frozen
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_frozen_experimental_d2_profile.py' -v
       - name: Test signed synthetic Ledger refund native bridge before loading Dogecoin
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_native_consensus.py' -v
       - name: Fetch exact public Ledger Legacy DOGE application with submodules
