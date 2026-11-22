@@ -1,10 +1,11 @@
 'use strict';
 
 import { WindowsNativeGamepadBridge } from './windows-native-gamepad.js?v=20261122-1';
+import { BrowserAVClock, WindowsNativeAudioPlayback } from './windows-native-audio.js?v=20261122-audio-2';
 import {
   CanvasVideoFrameRenderer,
   WindowsNativeWebCodecsSession,
-} from './windows-native-media.js?v=20261003-input-arraybuffer-1';
+} from './windows-native-media.js?v=20261122-av-audio-1';
 import {
   WindowsNativeInputEncoder,
 } from './windows-native-input.js?v=20261003-input-arraybuffer-1';
@@ -49,6 +50,8 @@ export class WindowsNativeDesktopClient {
     onError = () => {},
     webSocketFactory = (url) => new globalThis.WebSocket(url),
     mediaFactory,
+    audioFactory = (options) => new WindowsNativeAudioPlayback(options),
+    avClockFactory = (options) => new BrowserAVClock(options),
     inputFactory = (options) => new WindowsNativeInputEncoder(options),
   }) {
     if (!canvas || typeof canvas.getBoundingClientRect !== 'function') {
@@ -57,7 +60,8 @@ export class WindowsNativeDesktopClient {
     if (typeof onState !== 'function' || typeof onError !== 'function') {
       fail('windows_native_client_callback');
     }
-    if (typeof webSocketFactory !== 'function' || typeof inputFactory !== 'function') {
+    if (typeof webSocketFactory !== 'function' || typeof inputFactory !== 'function' ||
+        typeof audioFactory !== 'function' || typeof avClockFactory !== 'function') {
       fail('windows_native_client_factory');
     }
 
@@ -77,6 +81,11 @@ export class WindowsNativeDesktopClient {
     this.mediaQueue = Promise.resolve();
     this.pressedKeys = new Set();
     this.pressedButtons = new Set();
+    this.avClock = avClockFactory({ latencyMs: 80 });
+    if (!this.avClock || typeof this.avClock.observeVideo !== 'function') {
+      fail('windows_native_av_clock_config');
+    }
+    this.pendingVideoFrames = new Set();
 
     const renderer = new CanvasVideoFrameRenderer({
       canvas,
@@ -90,7 +99,30 @@ export class WindowsNativeDesktopClient {
         try { frame?.close?.(); } catch {}
         return;
       }
-      renderer.render(frame, metadata);
+      const dueAt = metadata?.presentationTimeMs;
+      const now = globalThis.performance?.now?.() ?? Date.now();
+      if (!Number.isFinite(dueAt)) {
+        // Custom test and diagnostic media adapters may not carry a host clock.
+        renderer.render(frame, metadata);
+        return;
+      }
+      if (dueAt < now - 150) {
+        try { frame?.close?.(); } catch {}
+        return;
+      }
+      const pending = { frame, timer: null };
+      this.pendingVideoFrames.add(pending);
+      const render = () => {
+        this.pendingVideoFrames.delete(pending);
+        if (this.closed || this.socketError) {
+          try { frame?.close?.(); } catch {}
+          return;
+        }
+        renderer.render(frame, metadata);
+      };
+      const delay = dueAt - now;
+      if (delay > 2) pending.timer = globalThis.setTimeout(render, delay);
+      else render();
     };
     this.media = mediaFactory
       ? mediaFactory({
@@ -100,9 +132,19 @@ export class WindowsNativeDesktopClient {
       : new WindowsNativeWebCodecsSession({
           output: outputFrame,
           onError: (error) => this.#fatal(error),
+          clock: this.avClock,
         });
     if (!this.media || typeof this.media.push !== 'function' || typeof this.media.close !== 'function') {
       fail('windows_native_media_session_required');
+    }
+    this.audio = audioFactory({
+      clock: this.avClock,
+      onState: (state) => this.#state(state),
+    });
+    if (!this.audio || typeof this.audio.push !== 'function' ||
+        typeof this.audio.close !== 'function' || typeof this.audio.resume !== 'function' ||
+        typeof this.audio.setStreamEpoch !== 'function' || typeof this.audio.setVolume !== 'function') {
+      fail('windows_native_audio_session_required');
     }
   }
 
@@ -140,6 +182,16 @@ export class WindowsNativeDesktopClient {
     try { this.renderer.context?.clearRect?.(0, 0, this.canvas.width, this.canvas.height); } catch {}
   }
 
+  #clearPendingVideoFrames() {
+    for (const pending of this.pendingVideoFrames) {
+      if (pending.timer !== null) {
+        try { globalThis.clearTimeout(pending.timer); } catch {}
+      }
+      try { pending.frame?.close?.(); } catch {}
+    }
+    this.pendingVideoFrames.clear();
+  }
+
   #onRendered(metadata) {
     if (this.closed || this.socketError) return;
     if (this.streamEpoch !== metadata.streamEpoch) {
@@ -147,6 +199,7 @@ export class WindowsNativeDesktopClient {
       // A reconnect/new stream must never strand a key/button in the renter OS.
       this.#releasePressedInput();
       this.streamEpoch = metadata.streamEpoch;
+      this.audio.setStreamEpoch(metadata.streamEpoch);
       this.input = this.inputFactory({
         streamEpoch: metadata.streamEpoch,
         send: (frame) => this.#send(frame),
@@ -190,7 +243,22 @@ export class WindowsNativeDesktopClient {
           // A previously enqueued packet must not decode after an error or
           // revoked input boundary, even when the promise settles later.
           if (this.closed || this.socketError) return;
-          return this.media.push(event.data);
+          const bytes = event.data instanceof Uint8Array
+            ? event.data
+            : new Uint8Array(event.data instanceof ArrayBuffer
+              ? event.data
+              : event.data.buffer.slice(event.data.byteOffset, event.data.byteOffset + event.data.byteLength));
+          if (bytes[0] === 0x47 && bytes[1] === 0x42 && bytes[2] === 0x4e && bytes[3] === 0x41) {
+            const epoch = this.media.streamEpoch;
+            if (typeof epoch === 'bigint') this.audio.setStreamEpoch(epoch);
+            this.audio.push(bytes);
+            return;
+          }
+          return Promise.resolve(this.media.push(event.data)).then((result) => {
+            const epoch = this.media.streamEpoch;
+            if (typeof epoch === 'bigint') this.audio.setStreamEpoch(epoch);
+            return result;
+          });
         })
         .catch((error) => this.#fatal(error));
     });
@@ -201,7 +269,9 @@ export class WindowsNativeDesktopClient {
       // initiating a synthetic 1000 close that would hide the actual 1006/1008.
       this.#releasePressedInput();
       this.input = null;
+      this.#clearPendingVideoFrames();
       this.media.close();
+      this.audio.close();
       this.#blackout();
       this.onError(new Error('windows_native_gateway_socket_error'));
       // Per WebSocket, the actual CloseEvent follows an error. The close
@@ -211,7 +281,9 @@ export class WindowsNativeDesktopClient {
       if (this.closed) return;
       if (!this.socketError) this.#releasePressedInput();
       this.closed = true;
+      this.#clearPendingVideoFrames();
       if (!this.socketError) this.media.close();
+      this.audio.close();
       this.#blackout();
       // Only bounded standard close metadata crosses the UI boundary: never
       // emit a peer-supplied reason, URL, capability, cookie or frame bytes.
@@ -225,6 +297,22 @@ export class WindowsNativeDesktopClient {
   #requireInput() {
     if (!this.input || this.closed || this.socketError) return null;
     return this.input;
+  }
+
+  async enableAudio() {
+    if (this.closed || this.socketError) return false;
+    try {
+      return await this.audio.resume();
+    } catch {
+      // Browser output/autoplay failures are local audio state, not a reason
+      // to tear down an otherwise authorized video and input session.
+      this.#state({ audioState: 'blocked' });
+      return false;
+    }
+  }
+
+  setAudioVolume(value) {
+    this.audio.setVolume(value);
   }
 
   key(code, keyUp = false) {
@@ -348,6 +436,10 @@ export class WindowsNativeDesktopClient {
     };
     const focusCanvas = () => {
       if (keyboardTarget.hidden === true) return;
+      // AudioContext playback is gated by browser policy until a user gesture.
+      // Calling resume directly in the focus/pointer gesture keeps the game
+      // audio path usable without autoplay exceptions.
+      void this.enableAudio();
       keyboardArmed = true;
       if (gamepadFrame === null && typeof globalThis.requestAnimationFrame === 'function') {
         gamepadFrame = globalThis.requestAnimationFrame(pumpGamepad);
@@ -459,7 +551,9 @@ export class WindowsNativeDesktopClient {
     if (this.closed) return;
     this.#releasePressedInput();
     this.closed = true;
+    this.#clearPendingVideoFrames();
     if (!this.socketError) this.media.close();
+    this.audio.close();
     this.#blackout();
     try {
       if (this.socket && this.socket.readyState < 2) this.socket.close(1000, 'client_close');

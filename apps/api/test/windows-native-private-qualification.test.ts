@@ -21,6 +21,7 @@ const allocation = fs.readFileSync(
   new URL('../src/resource-allocation-service.ts', import.meta.url),
   'utf8',
 );
+const config = fs.readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8');
 
 test('Windows-native Stage 3 qualification remains private and explicit', () => {
   assert.match(desktop, /qualification === 'windows-native'/);
@@ -69,28 +70,44 @@ test('public Windows desktop catalogue remains fail closed', () => {
   );
 });
 
-test('rental GPU authority recognizes only Windows-native Cloud Desktop sessions', () => {
+test('rental GPU authority recognizes the native workspaces used by private qualification', () => {
   assert.match(
     authority,
     /runtimeBackend: WorkspaceRuntimeBackend\.WINDOWS_NATIVE/,
   );
   assert.match(
     authority,
-    /slug: 'cloud-desktop'/,
+    /slug: \{ in: \['cloud-desktop', 'gaming'\] \}/,
   );
   assert.doesNotMatch(
     authority,
     /'security-lab', 'cloud-desktop'/,
   );
 });
-test('private qualification only reads the global Cloud Desktop definition', () => {
+test('private qualification reads the selected global workspace definition', () => {
   assert.match(desktop, /workspaceDefinition\.findUnique/);
   assert.match(
     desktop,
-    /windows_native_qualification_cloud_desktop_definition_missing/,
+    /windows_native_qualification_\$\{slug\.replaceAll\('-', '_'\)\}_definition_missing/,
   );
   assert.doesNotMatch(desktop, /workspaceDefinition\.upsert/);
   assert.doesNotMatch(desktop, /WorkspaceRelease\.UPCOMING/);
+});
+
+test('private Gaming attempt preserves workspace identity and requires a separate no-payment test gate', () => {
+  assert.match(desktop, /requestedWorkspaceSlug: slug/);
+  assert.match(desktop, /workspace: \{ slug \}/);
+  assert.match(desktop, /const spec = workspaceSpec\[slug\]/);
+  assert.match(desktop, /action: slug === 'gaming'[\s\S]*?WINDOWS_NATIVE_GAMING_SESSION_REQUESTED/);
+  assert.match(desktop, /privateQualificationSourceAllowed\(slug, qualifiedSource, machine\.ownerId, renterId\)/);
+  assert.match(desktop, /function windowsNativePrivateAttemptEnabled\(slug: WindowsNativePrivateWorkspaceSlug\): boolean/);
+  assert.match(desktop, /config\.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED === 'true'/);
+  assert.match(desktop, /config\.WINDOWS_NATIVE_RENTALS_ENABLED === 'false'/);
+  assert.match(desktop, /qualificationPassed: false/);
+  assert.match(desktop, /publicEligible: false/);
+  assert.match(desktop, /windowsNativePrivateAttemptEnabled\(slug\)/);
+  assert.match(config, /WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED:[\s\S]{0,180}\.default\('false'\)/);
+  assert.match(config, /Private Gaming test attempts require no-payment beta mode and disabled Windows-native rentals/);
 });
 
 

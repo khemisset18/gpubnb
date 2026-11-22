@@ -15,6 +15,7 @@ import {
 function packet({
   epoch = 1n,
   sequence = 1n,
+  qpc = 1_000_000n + sequence * 100_000n,
   width = 1920,
   height = 1080,
   frameBytes,
@@ -35,6 +36,7 @@ function packet({
   view.setUint32(32, frameBytes, true);
   view.setUint32(36, offset, true);
   view.setUint32(40, payload.length, true);
+  view.setBigUint64(44, qpc, true);
   bytes.set(payload, BROWSER_MEDIA_HEADER_SIZE);
   return bytes;
 }
@@ -55,6 +57,7 @@ test('reassembles only a complete contiguous keyframe', () => {
   );
   assert.equal(frame.streamEpoch, 1n);
   assert.equal(frame.frameSequence, 1n);
+  assert.equal(frame.qpcPosition100ns, 1_100_000n);
   assert.equal(frame.keyframe, true);
   assert.deepEqual([...frame.bytes], [1, 2, 3, 4, 5, 6]);
 });
@@ -170,6 +173,20 @@ test('an incomplete frame times out and is never emitted', () => {
   );
 });
 
+test('video QPC is stable across chunks and strictly advances within a stream epoch', () => {
+  const reassembler = new WindowsNativeMediaReassembler();
+  assert.throws(() => {
+    reassembler.push(packet({ frameBytes: 4, keyframe: true, payload: Uint8Array.of(1, 2) }), 1);
+    reassembler.push(packet({ qpc: 1_100_001n, frameBytes: 4, offset: 2, keyframe: true, payload: Uint8Array.of(3, 4) }), 2);
+  }, /windows_native_media_frame_mismatch/);
+
+  reassembler.push(packet({ frameBytes: 2, keyframe: true, payload: Uint8Array.of(1, 2) }), 3);
+  assert.throws(
+    () => reassembler.push(packet({ sequence: 2n, qpc: 1_100_000n, frameBytes: 2, keyframe: false, payload: Uint8Array.of(3, 4) }), 4),
+    /windows_native_media_timestamp/,
+  );
+});
+
 test('WebCodecs consumer decodes only complete frames and enforces bounded backpressure', () => {
   const decoded = [];
   const decoder = {
@@ -211,6 +228,7 @@ test('WebCodecs consumer decodes only complete frames and enforces bounded backp
   );
   assert.equal(decoded.length, 1);
   assert.equal(decoded[0].type, 'key');
+  assert.equal(decoded[0].timestamp, 110_000);
   assert.deepEqual([...decoded[0].data], [1, 2, 3, 4, 5, 6]);
 
   decoder.decodeQueueSize = 2;
@@ -324,6 +342,7 @@ test('WebCodecs session configures from the proved IDR SPS and binds decoded out
   assert.equal(outputs.length, 1);
   assert.equal(outputs[0].metadata.streamEpoch, 5n);
   assert.equal(outputs[0].metadata.frameSequence, 1n);
+  assert.equal(outputs[0].metadata.qpcPosition100ns, 1_100_000n);
   assert.equal(outputs[0].metadata.codec, 'avc1.640028');
 
   const next = Uint8Array.from([0, 0, 1, 0x41, 9, 8, 7]);

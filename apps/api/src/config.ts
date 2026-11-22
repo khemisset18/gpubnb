@@ -41,6 +41,9 @@ const schema = z.object({
   // independent formal security approval. NEVER infer permission from a
   // successful CI run or the presence of a Windows display/encoder.
   WINDOWS_NATIVE_RENTALS_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Allows only an owner-authorized, no-payment Gaming qualification attempt.
+  // This is not a media qualification result and never enables public rentals.
+  WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED: z.enum(['true', 'false']).default('false'),
   DEV_DIAGNOSTIC_IMAGE: z.string().regex(/^ghcr\.io\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/).optional(),
   // Clock-skew check on the heartbeat submission's OWN embedded timestamp
   // (agent's Date.now() at signing time vs the server's Date.now() at receipt) -
@@ -157,3 +160,11 @@ if (
 if (config.NODE_ENV === 'production' && config.PUBLIC_APP_DOMAIN === 'localhost') throw new Error('PUBLIC_APP_DOMAIN must be configured in production');
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && config.SOLANA_COMMITMENT !== 'finalized') throw new Error('Mainnet deposits must use finalized commitment');
 if (config.SOLANA_CLUSTER === 'mainnet-beta' && /api\.mainnet-beta\.solana\.com/.test(config.SOLANA_RPC_URL)) throw new Error('Use a private authenticated RPC endpoint for mainnet');
+if (config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED === 'true'
+  && (
+    config.BETA_TEST_DEV_BYPASS !== 'true'
+    || config.ESCROW_PROGRAM_ID !== 'NOT_DEPLOYED_YET'
+    || config.WINDOWS_NATIVE_RENTALS_ENABLED !== 'false'
+  )) {
+  throw new Error('Private Gaming test attempts require no-payment beta mode and disabled Windows-native rentals');
+}

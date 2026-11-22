@@ -8,6 +8,8 @@ on:
       - native/windows-worker/**
       - apps/web/windows-native-media.js
       - apps/web/windows-native-media.test.js
+      - apps/web/windows-native-audio.js
+      - apps/web/windows-native-audio.test.js
       - apps/web/windows-native-input.js
       - apps/web/windows-native-input.test.js
       - apps/web/windows-native-desktop.js
@@ -15,6 +17,10 @@ on:
       - apps/web/windows-native-desktop-page.js
       - apps/web/windows-native-desktop-page.test.js
       - apps/web/windows-native-desktop.html
+      - apps/web/gaming-workspace.html
+      - apps/web/gaming-workspace.css
+      - apps/web/windows-native-browser-flow.test.js
+      - apps/web/stage3-windows-native.js
       - agent/gpubnb_agent/windows_native_*.py
       - agent/tests/test_windows_native_*.py
       - agent/tools/windows_native_qualify.py

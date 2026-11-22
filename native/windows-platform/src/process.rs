@@ -22,6 +22,16 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 258;
 const INFINITE_THREAD_RESUME_FAILURE: u32 = u32::MAX;
+const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+const PROCESS_SYNCHRONIZE: u32 = 0x0010_0000;
+const TOKEN_QUERY: u32 = 0x0008;
+const TOKEN_USER_CLASS: u32 = 1;
+const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+
+const QUALIFIED_STEAM_APPLICATIONS: [&str; 2] = [
+    r"C:\Program Files (x86)\Steam\steam.exe",
+    r"C:\Program Files\Steam\steam.exe",
+];
 
 #[repr(C)]
 struct StartupInfoW {
@@ -72,7 +82,7 @@ unsafe extern "system" {
 
 #[link(name = "kernel32")]
 unsafe extern "system" {
-    #[cfg(test)]
+    fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> Handle;
     fn CreateProcessW(
         application_name: *const u16,
         command_line: *mut u16,
@@ -95,7 +105,55 @@ unsafe extern "system" {
         size: *mut u32,
     ) -> i32;
     fn TerminateProcess(process: Handle, exit_code: u32) -> i32;
+    fn GetProcessTimes(
+        process: Handle,
+        creation_time: *mut FileTime,
+        exit_time: *mut FileTime,
+        kernel_time: *mut FileTime,
+        user_time: *mut FileTime,
+    ) -> i32;
+    fn ProcessIdToSessionId(process_id: u32, session_id: *mut u32) -> i32;
+    fn IsProcessInJob(process: Handle, job: Handle, result: *mut i32) -> i32;
     fn CloseHandle(object: Handle) -> i32;
+    fn GetLastError() -> u32;
+    fn LocalFree(memory: Handle) -> Handle;
+}
+
+#[link(name = "advapi32")]
+unsafe extern "system" {
+    fn OpenProcessToken(process: Handle, desired_access: u32, token: *mut Handle) -> i32;
+    fn GetTokenInformation(
+        token: Handle,
+        information_class: u32,
+        information: *mut c_void,
+        information_length: u32,
+        return_length: *mut u32,
+    ) -> i32;
+    fn ConvertSidToStringSidW(sid: *mut c_void, string_sid: *mut *mut u16) -> i32;
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct FileTime {
+    low: u32,
+    high: u32,
+}
+
+#[repr(C)]
+struct SidAndAttributes {
+    sid: *mut c_void,
+    attributes: u32,
+}
+
+#[repr(C)]
+struct TokenUser {
+    user: SidAndAttributes,
+}
+
+impl FileTime {
+    fn as_u64(&self) -> u64 {
+        (u64::from(self.high) << 32) | u64::from(self.low)
+    }
 }
 
 struct OwnedProcessHandle(Handle);
@@ -120,12 +178,24 @@ impl Drop for OwnedThreadHandle {
     }
 }
 
+struct OwnedTokenHandle(Handle);
+
+impl Drop for OwnedTokenHandle {
+    fn drop(&mut self) {
+        // SAFETY: this wrapper uniquely owns the process token handle.
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RenterWorkerLaunchSpec<'a> {
     pub session_id: &'a str,
     pub generation: u64,
     pub gpu_uuid: &'a str,
     pub workspace: &'a str,
+    pub application: Option<&'a str>,
 }
 
 fn safe_session_id(value: &str) -> bool {
@@ -147,7 +217,13 @@ fn canonical_gpu_uuid(value: &str) -> bool {
 }
 
 fn allowed_workspace(value: &str) -> bool {
-    matches!(value, "cloud-desktop" | "creator" | "cad" | "gaming")
+    matches!(value, "cloud-desktop" | "gaming")
+}
+
+fn qualified_steam_application_path_str(path: &str) -> bool {
+    QUALIFIED_STEAM_APPLICATIONS
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(path))
 }
 
 fn validate_worker_launch_spec(spec: RenterWorkerLaunchSpec<'_>) -> Result<(), PlatformError> {
@@ -157,6 +233,11 @@ fn validate_worker_launch_spec(spec: RenterWorkerLaunchSpec<'_>) -> Result<(), P
         || !allowed_workspace(spec.workspace)
     {
         return Err(PlatformError::InvalidPath);
+    }
+    match (spec.workspace, spec.application) {
+        ("cloud-desktop", None) => {}
+        ("gaming", Some(path)) if qualified_steam_application_path_str(path) => {}
+        _ => return Err(PlatformError::InvalidPath),
     }
     Ok(())
 }
@@ -180,6 +261,11 @@ fn worker_command_line(
     command.push(spec.gpu_uuid);
     command.push(" --workspace ");
     command.push(spec.workspace);
+    if let Some(application) = spec.application {
+        command.push(" --application \"");
+        command.push(application);
+        command.push("\"");
+    }
     Ok(command)
 }
 
@@ -188,6 +274,204 @@ pub struct RenterWorkerProcess {
     // process tree before its process/thread handles are released.
     _job: WorkerJob,
     worker: SuspendedWorkerProcess,
+}
+
+/// Exact Steam process generation started inside the already isolated renter
+/// session. Process-loopback audio can target this identity and include its
+/// descendant game process tree without observing the provider's audio.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RenterApplicationIdentity {
+    pub process_id: u32,
+    pub windows_session_id: u32,
+    pub creation_time_100ns: u64,
+}
+
+/// Owns the Steam root process. Its descendants are also members of the worker
+/// Job Object, so STOP closes the complete renter application tree.
+pub struct RenterApplicationProcess {
+    process: Option<OwnedProcessHandle>,
+    identity: RenterApplicationIdentity,
+}
+
+/// Independently verifies the exact Steam root process announced by the
+/// trusted worker before the service accepts any process-loopback game audio.
+pub fn verify_renter_application_identity(
+    identity: RenterApplicationIdentity,
+    expected_user_sid: &str,
+) -> Result<(), PlatformError> {
+    if identity.process_id == 0
+        || identity.windows_session_id == 0
+        || identity.creation_time_100ns == 0
+        || expected_user_sid.is_empty()
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+
+    let process = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            identity.process_id,
+        )
+    };
+    if process == 0 {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+    let process = OwnedProcessHandle(process);
+
+    if unsafe { WaitForSingleObject(process.0, 0) } != WAIT_TIMEOUT {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+    let mut session_id = 0u32;
+    if unsafe { ProcessIdToSessionId(identity.process_id, &mut session_id) } == 0
+        || session_id != identity.windows_session_id
+    {
+        return Err(PlatformError::RenterTokenSessionMismatch);
+    }
+    let mut creation_time = FileTime::default();
+    let mut exit_time = FileTime::default();
+    let mut kernel_time = FileTime::default();
+    let mut user_time = FileTime::default();
+    if unsafe {
+        GetProcessTimes(
+            process.0,
+            &mut creation_time,
+            &mut exit_time,
+            &mut kernel_time,
+            &mut user_time,
+        )
+    } == 0
+        || creation_time.as_u64() != identity.creation_time_100ns
+    {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+
+    let mut token_handle = 0;
+    if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut token_handle) } == 0
+        || token_handle == 0
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let token = OwnedTokenHandle(token_handle);
+    let actual_sid = process_token_user_sid(token.0)?;
+    if !actual_sid.eq_ignore_ascii_case(expected_user_sid) {
+        return Err(PlatformError::RenterTokenUserMismatch);
+    }
+
+    let mut verified_image = None;
+    let mut found_candidate = false;
+    for candidate in QUALIFIED_STEAM_APPLICATIONS {
+        let path = Path::new(candidate);
+        let opened = match open_application_for_verification(path) {
+            Ok(opened) => opened,
+            Err(_) if !path.exists() => continue,
+            Err(error) => return Err(error),
+        };
+        found_candidate = true;
+        opened.verify_authenticode()?;
+        if verify_process_image(process.0, &opened).is_ok() {
+            verified_image = Some(());
+            break;
+        }
+    }
+    if !found_candidate {
+        return Err(PlatformError::OpenFailed);
+    }
+    if verified_image.is_none() {
+        return Err(PlatformError::ProcessImageIdentityMismatch);
+    }
+    if unsafe { WaitForSingleObject(process.0, 0) } != WAIT_TIMEOUT {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+    Ok(())
+}
+
+fn process_token_user_sid(token: Handle) -> Result<String, PlatformError> {
+    let mut required = 0u32;
+    let first =
+        unsafe { GetTokenInformation(token, TOKEN_USER_CLASS, ptr::null_mut(), 0, &mut required) };
+    if first != 0
+        || required < size_of::<TokenUser>() as u32
+        || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let word = size_of::<usize>();
+    let words = (required as usize)
+        .checked_add(word - 1)
+        .ok_or(PlatformError::RenterTokenQueryFailed)?
+        / word;
+    let mut storage = vec![0usize; words];
+    let mut returned = required;
+    if unsafe {
+        GetTokenInformation(
+            token,
+            TOKEN_USER_CLASS,
+            storage.as_mut_ptr().cast::<c_void>(),
+            required,
+            &mut returned,
+        )
+    } == 0
+        || returned as usize > storage.len() * word
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let user = unsafe { &*storage.as_ptr().cast::<TokenUser>() };
+    if user.user.sid.is_null() {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let mut sid_text = ptr::null_mut();
+    if unsafe { ConvertSidToStringSidW(user.user.sid, &mut sid_text) } == 0 || sid_text.is_null() {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let mut units = 0usize;
+    while units < 184 && unsafe { *sid_text.add(units) } != 0 {
+        units += 1;
+    }
+    let result = if units == 0 || units >= 184 {
+        Err(PlatformError::RenterTokenQueryFailed)
+    } else {
+        String::from_utf16(unsafe { std::slice::from_raw_parts(sid_text, units) })
+            .map_err(|_| PlatformError::RenterTokenQueryFailed)
+    };
+    unsafe {
+        let _ = LocalFree(sid_text.cast::<c_void>() as Handle);
+    }
+    result
+}
+
+impl RenterApplicationProcess {
+    pub const fn identity(&self) -> RenterApplicationIdentity {
+        self.identity
+    }
+
+    pub fn ensure_running(&self) -> Result<(), PlatformError> {
+        let process = self
+            .process
+            .as_ref()
+            .ok_or(PlatformError::ProcessWaitFailed)?;
+        // SAFETY: the uniquely owned process handle remains live during the
+        // zero-time wait; WAIT_TIMEOUT means the exact Steam generation lives.
+        if unsafe { WaitForSingleObject(process.0, 0) } == WAIT_TIMEOUT {
+            Ok(())
+        } else {
+            Err(PlatformError::ProcessWaitFailed)
+        }
+    }
+}
+
+impl Drop for RenterApplicationProcess {
+    fn drop(&mut self) {
+        // The worker is a member of the service-owned kill-on-close Job Object.
+        // STOP terminates Steam here; the Job Object remains the backstop for
+        // Steam/game descendants and worker crashes.
+        if let Some(process) = self.process.as_ref() {
+            unsafe {
+                let _ = TerminateProcess(process.0, 0x4750_5542);
+                let _ = WaitForSingleObject(process.0, 5_000);
+            }
+        }
+    }
 }
 
 impl RenterWorkerProcess {
@@ -268,12 +552,18 @@ fn verify_suspended_process_image(
     worker: &SuspendedWorkerProcess,
     verified: &VerifiedApplicationFile,
 ) -> Result<(), PlatformError> {
+    verify_process_image(worker.process.0, verified)
+}
+
+fn verify_process_image(
+    process: Handle,
+    verified: &VerifiedApplicationFile,
+) -> Result<(), PlatformError> {
     let mut buffer = vec![0u16; 32_768];
     let mut len =
         u32::try_from(buffer.len()).map_err(|_| PlatformError::ProcessImageQueryFailed)?;
     // SAFETY: worker owns a live process handle; buffer is writable for len UTF-16 units.
-    let ok =
-        unsafe { QueryFullProcessImageNameW(worker.process.0, 0, buffer.as_mut_ptr(), &mut len) };
+    let ok = unsafe { QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut len) };
     if ok == 0
         || len == 0
         || usize::try_from(len)
@@ -289,6 +579,171 @@ fn verify_suspended_process_image(
         return Err(PlatformError::ProcessImageIdentityMismatch);
     }
     Ok(())
+}
+
+fn qualified_steam_application_path(path: &Path) -> bool {
+    let path = path.to_string_lossy();
+    QUALIFIED_STEAM_APPLICATIONS
+        .iter()
+        .any(|candidate| path.eq_ignore_ascii_case(candidate))
+}
+
+fn gaming_application_command_line(path: &Path) -> Result<OsString, PlatformError> {
+    if !path.is_absolute() || !qualified_steam_application_path(path) {
+        return Err(PlatformError::InvalidPath);
+    }
+    let mut command_line = OsString::from("\"");
+    command_line.push(path.as_os_str());
+    command_line.push("\"");
+    Ok(command_line)
+}
+
+/// Starts the only currently qualified Gaming entry point, Steam, on the
+/// worker's interactive renter desktop. Gaming stays ineligible for booking
+/// until process-audio isolation and the browser input path pass real PC1-to-PC2
+/// qualification.
+pub fn launch_qualified_gaming_application(
+    expected_session_id: u32,
+    application_path: &Path,
+) -> Result<RenterApplicationProcess, PlatformError> {
+    if expected_session_id == 0 {
+        return Err(PlatformError::InvalidWindowsSessionId);
+    }
+    let mut worker_session_id = 0u32;
+    // SAFETY: worker process id is valid and session_id is a writable out value.
+    if unsafe { ProcessIdToSessionId(std::process::id(), &mut worker_session_id) } == 0
+        || worker_session_id != expected_session_id
+    {
+        return Err(PlatformError::RenterTokenSessionMismatch);
+    }
+
+    if !application_path.is_absolute() || !qualified_steam_application_path(application_path) {
+        return Err(PlatformError::InvalidPath);
+    }
+    let verified = open_application_for_verification(application_path)?;
+    if !qualified_steam_application_path(verified.path()) {
+        return Err(PlatformError::InvalidPath);
+    }
+    verified.verify_authenticode()?;
+    let application = wide(verified.path().as_os_str())?;
+    let command_line_os = gaming_application_command_line(verified.path())?;
+    let mut command_line = wide(command_line_os.as_os_str())?;
+    let current_directory = wide(
+        verified
+            .path()
+            .parent()
+            .ok_or(PlatformError::InvalidPath)?
+            .as_os_str(),
+    )?;
+    let mut desktop = wide(OsStr::new(r"winsta0\default"))?;
+
+    let mut startup = MaybeUninit::<StartupInfoW>::zeroed();
+    // SAFETY: STARTUPINFOW is zero-initialized and desktop points to a live,
+    // NUL-terminated buffer for the renter's interactive desktop.
+    let startup = unsafe {
+        let ptr = startup.as_mut_ptr();
+        (*ptr).cb = size_of::<StartupInfoW>() as u32;
+        (*ptr).desktop = desktop.as_mut_ptr();
+        &mut *ptr
+    };
+    let mut info = MaybeUninit::<ProcessInformation>::zeroed();
+    // SAFETY: all pointers are live, handles are non-inheritable, and this
+    // process runs under the renter identity in the already isolated WTS
+    // session. No shell or user-supplied arguments are accepted.
+    let created = unsafe {
+        CreateProcessW(
+            application.as_ptr(),
+            command_line.as_mut_ptr(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            0,
+            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT,
+            ptr::null_mut(),
+            current_directory.as_ptr(),
+            startup,
+            info.as_mut_ptr(),
+        )
+    };
+    if created == 0 {
+        return Err(PlatformError::ProcessCreateFailed);
+    }
+    // SAFETY: successful CreateProcessW initialized PROCESS_INFORMATION.
+    let info = unsafe { info.assume_init() };
+    if info.process == 0 || info.thread == 0 || info.process_id == 0 {
+        if info.process != 0 {
+            unsafe {
+                let _ = TerminateProcess(info.process, 0x4750_5542);
+                let _ = CloseHandle(info.process);
+            }
+        }
+        if info.thread != 0 {
+            unsafe {
+                let _ = CloseHandle(info.thread);
+            }
+        }
+        return Err(PlatformError::ProcessCreateFailed);
+    }
+    let mut renter_application = RenterApplicationProcess {
+        process: Some(OwnedProcessHandle(info.process)),
+        identity: RenterApplicationIdentity {
+            process_id: info.process_id,
+            windows_session_id: expected_session_id,
+            creation_time_100ns: 0,
+        },
+    };
+    let thread = OwnedThreadHandle(info.thread);
+    let process_handle = renter_application
+        .process
+        .as_ref()
+        .ok_or(PlatformError::ProcessCreateFailed)?
+        .0;
+    verify_process_image(process_handle, &verified)?;
+
+    let mut in_job = 0i32;
+    // Children inherit the worker's non-breakaway kill-on-close Job Object.
+    // Refuse to resume Steam if Windows did not preserve that containment.
+    if unsafe { IsProcessInJob(process_handle, 0, &mut in_job) } == 0 || in_job == 0 {
+        return Err(PlatformError::ProcessNotAssigned);
+    }
+
+    let mut process_session_id = 0u32;
+    if unsafe { ProcessIdToSessionId(info.process_id, &mut process_session_id) } == 0
+        || process_session_id != expected_session_id
+    {
+        return Err(PlatformError::RenterTokenSessionMismatch);
+    }
+
+    let mut creation_time = FileTime::default();
+    let mut exit_time = FileTime::default();
+    let mut kernel_time = FileTime::default();
+    let mut user_time = FileTime::default();
+    if unsafe {
+        GetProcessTimes(
+            process_handle,
+            &mut creation_time,
+            &mut exit_time,
+            &mut kernel_time,
+            &mut user_time,
+        )
+    } == 0
+    {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+    if creation_time.as_u64() == 0 {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+
+    // SAFETY: initial thread handle belongs to the still-suspended process.
+    if unsafe { ResumeThread(thread.0) } == INFINITE_THREAD_RESUME_FAILURE {
+        return Err(PlatformError::ProcessResumeFailed);
+    }
+    if unsafe { WaitForSingleObject(process_handle, 0) } != WAIT_TIMEOUT {
+        return Err(PlatformError::ProcessCreateFailed);
+    }
+
+    renter_application.identity.windows_session_id = process_session_id;
+    renter_application.identity.creation_time_100ns = creation_time.as_u64();
+    Ok(renter_application)
 }
 
 fn wide(value: &OsStr) -> Result<Vec<u16>, PlatformError> {
@@ -498,6 +953,7 @@ mod tests {
             generation: 1,
             gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             workspace: "cloud-desktop",
+            application: None,
         };
         assert_eq!(validate_worker_launch_spec(good), Ok(()));
 
@@ -518,6 +974,14 @@ mod tests {
                 workspace: "developer",
                 ..good
             },
+            RenterWorkerLaunchSpec {
+                workspace: "gaming",
+                ..good
+            },
+            RenterWorkerLaunchSpec {
+                application: Some(r"C:\Program Files (x86)\Steam\steam.exe"),
+                ..good
+            },
         ] {
             assert_eq!(
                 validate_worker_launch_spec(bad),
@@ -533,6 +997,7 @@ mod tests {
             generation: 7,
             gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
             workspace: "gaming",
+            application: Some(r"C:\Program Files (x86)\Steam\steam.exe"),
         };
         let path = Path::new(r"C:\Program Files\GPUbnb\gpubnb-windows-worker.exe");
         let command = worker_command_line(path, spec).expect("worker command");
@@ -540,8 +1005,52 @@ mod tests {
         assert!(text.contains("--session-id sess-ABC_123"));
         assert!(text.contains("--generation 7"));
         assert!(text.contains("--workspace gaming"));
+        assert!(text.contains("--application \"C:\\Program Files (x86)\\Steam\\steam.exe\""));
         assert!(!text.contains("cmd.exe"));
         assert!(!text.contains("powershell"));
+    }
+
+    #[test]
+    fn gaming_application_path_is_fixed_to_the_two_qualified_steam_locations() {
+        assert!(qualified_steam_application_path(Path::new(
+            r"C:\Program Files (x86)\Steam\steam.exe"
+        )));
+        assert!(qualified_steam_application_path(Path::new(
+            r"c:\program files\steam\STEAM.EXE"
+        )));
+        for rejected in [
+            r"C:\Windows\System32\cmd.exe",
+            r"C:\Program Files\Steam\steam.exe:payload",
+            r"\\server\Steam\steam.exe",
+            r"C:\Program Files\Other\game.exe",
+        ] {
+            assert!(!qualified_steam_application_path(Path::new(rejected)));
+        }
+    }
+
+    #[test]
+    fn gaming_launch_command_is_only_the_quoted_allowlisted_executable() {
+        let path = Path::new(r"C:\Program Files (x86)\Steam\steam.exe");
+        assert_eq!(
+            gaming_application_command_line(path).expect("qualified Steam command"),
+            OsString::from(r#""C:\Program Files (x86)\Steam\steam.exe""#)
+        );
+        assert_eq!(
+            gaming_application_command_line(Path::new(r"C:\Windows\System32\cmd.exe")),
+            Err(PlatformError::InvalidPath)
+        );
+    }
+
+    #[test]
+    fn gaming_application_rejects_the_provider_session_before_launch() {
+        assert_eq!(
+            launch_qualified_gaming_application(
+                0,
+                Path::new(r"C:\Program Files (x86)\Steam\steam.exe")
+            )
+            .err(),
+            Some(PlatformError::InvalidWindowsSessionId)
+        );
     }
 
     #[test]

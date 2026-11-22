@@ -1,10 +1,10 @@
 //! GPUbnb Windows-native stream helper authority boundary.
 //!
-//! Cloud Desktop uses a persistent per-session authority backed by the real
-//! renter-session, IddCx virtual-display, capture, exact-GPU NVENC, media and
-//! input proof chain. Unsupported Windows Workspaces and missing physical renter
-//! prerequisites remain fail-closed; no success-shaped reply is emitted for a
-//! partial or simulated backend.
+//! Cloud Desktop and the private Gaming prototype use a persistent per-session
+//! authority backed by the real renter-session, IddCx virtual-display, capture,
+//! exact-GPU NVENC, media and input proof chain. Unsupported Windows Workspaces
+//! and missing physical renter prerequisites remain fail-closed; no
+//! success-shaped reply is emitted for a partial or simulated backend.
 
 use std::env;
 use std::process::ExitCode;
@@ -46,11 +46,13 @@ enum Command {
         session_id: String,
         workspace: String,
         gpu_uuid: String,
+        application: Option<String>,
     },
     AuthorityConsoleChild {
         session_id: String,
         workspace: String,
         gpu_uuid: String,
+        application: Option<String>,
     },
 }
 
@@ -276,26 +278,30 @@ fn parse_session_command(
 }
 
 fn parse_authority_child(args: &[String]) -> Result<Command, CliError> {
-    if args.len() != 7
+    if (args.len() != 7 && args.len() != 9)
         || args[1] != "--session-id"
         || args[3] != "--workspace"
         || args[5] != "--gpu-uuid"
+        || (args.len() == 9 && args[7] != "--application")
     {
         return Err(CliError::new("invalid_authority_arguments", 2));
     }
     let session_id = args[2].clone();
     let workspace = args[4].clone();
     let gpu_uuid = args[6].clone();
+    let application = (args.len() == 9).then(|| args[8].clone());
     validate_session_id(&session_id)?;
     validate_workspace(&workspace)?;
     validate_gpu_uuid(&gpu_uuid)?;
-    if workspace != "cloud-desktop" {
+    if !matches!(workspace.as_str(), "cloud-desktop" | "gaming") {
         return Err(CliError::new("workspace_not_implemented", 21));
     }
+    validate_workspace_application(&workspace, application.as_deref())?;
     Ok(Command::AuthorityChild {
         session_id,
         workspace,
         gpu_uuid,
+        application,
     })
 }
 
@@ -307,11 +313,14 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
                 session_id,
                 workspace,
                 gpu_uuid,
-            } => Ok(Command::AuthorityConsoleChild {
+                application,
+            } if workspace == "cloud-desktop" => Ok(Command::AuthorityConsoleChild {
                 session_id,
                 workspace,
                 gpu_uuid,
+                application,
             }),
+            Command::AuthorityChild { .. } => Err(CliError::new("workspace_not_implemented", 21)),
             _ => Err(CliError::new("invalid_authority_arguments", 2)),
         },
         Some("--self-test") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTest),
@@ -326,12 +335,13 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
                 workspace,
                 gpu_uuid,
                 application,
-            } => Ok(Command::StartConsole {
+            } if workspace == "cloud-desktop" => Ok(Command::StartConsole {
                 session_id,
                 workspace,
                 gpu_uuid,
                 application,
             }),
+            Command::Start { .. } => Err(CliError::new("workspace_not_implemented", 21)),
             _ => Err(CliError::new("invalid_start_arguments", 2)),
         },
         Some("--stop") => parse_session_command(args, |session_id| Command::Stop { session_id }),
@@ -391,24 +401,34 @@ fn execute(command: &Command) -> Result<String, CliError> {
             session_id,
             workspace,
             gpu_uuid,
-            application: _,
+            application,
         } => {
             #[cfg(not(target_os = "windows"))]
             {
-                let _ = (session_id, workspace, gpu_uuid);
+                let _ = (session_id, workspace, gpu_uuid, application);
                 Err(CliError::new("windows_required", 20))
             }
             #[cfg(target_os = "windows")]
             {
                 let report = gpubnb_windows_stream_helper::authority::start_session(
-                    session_id, workspace, gpu_uuid,
+                    session_id,
+                    workspace,
+                    gpu_uuid,
+                    application.as_deref(),
                 )
                 .map_err(authority_error)?;
                 Ok(format!(
-                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"http://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":false,"controllerReady":false}}"#,
+                    r#"{{"schemaVersion":1,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"virtualDisplay":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"http://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":{},"controllerReady":{},"controllerMode":"{}"}}"#,
                     env!("CARGO_PKG_VERSION"),
                     report.media_port,
-                    report.media_token
+                    report.media_token,
+                    report.audio_ready,
+                    report.controller_ready,
+                    if report.controller_ready {
+                        "browser-gamepad-keyboard-mouse"
+                    } else {
+                        "unavailable"
+                    }
                 ))
             }
         }
@@ -416,24 +436,34 @@ fn execute(command: &Command) -> Result<String, CliError> {
             session_id,
             workspace,
             gpu_uuid,
-            application: _,
+            application,
         } => {
             #[cfg(not(target_os = "windows"))]
             {
-                let _ = (session_id, workspace, gpu_uuid);
+                let _ = (session_id, workspace, gpu_uuid, application);
                 Err(CliError::new("windows_required", 20))
             }
             #[cfg(target_os = "windows")]
             {
                 let report = gpubnb_windows_stream_helper::authority::start_console_session(
-                    session_id, workspace, gpu_uuid,
+                    session_id,
+                    workspace,
+                    gpu_uuid,
+                    application.as_deref(),
                 )
                 .map_err(authority_error)?;
                 Ok(format!(
-                    r#"{{"schemaVersion":1,"captureBackend":"console-dedicated","consoleDisplay":true,"virtualDisplay":false,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"http://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":false,"controllerReady":false}}"#,
+                    r#"{{"schemaVersion":1,"captureBackend":"console-dedicated","consoleDisplay":true,"virtualDisplay":false,"sessionId":"{session_id}","workspaceSlug":"{workspace}","gpuUuid":"{gpu_uuid}","helperVersion":"{}","isolatedSession":true,"separateRenterIdentity":true,"renterSessionActive":true,"providerSessionInactive":true,"providerDesktopExcluded":true,"captureReady":true,"exactGpuBound":true,"nvencReady":true,"hardwareEncoder":"nvenc","mediaReady":true,"inputIsolation":true,"inputReady":true,"mediaUrl":"http://127.0.0.1:{}/session/{session_id}","mediaToken":"{}","audioReady":{},"controllerReady":{},"controllerMode":"{}"}}"#,
                     env!("CARGO_PKG_VERSION"),
                     report.media_port,
-                    report.media_token
+                    report.media_token,
+                    report.audio_ready,
+                    report.controller_ready,
+                    if report.controller_ready {
+                        "browser-gamepad-keyboard-mouse"
+                    } else {
+                        "unavailable"
+                    }
                 ))
             }
         }
@@ -532,15 +562,17 @@ fn execute(command: &Command) -> Result<String, CliError> {
             session_id,
             workspace,
             gpu_uuid,
+            application,
         }
         | Command::AuthorityConsoleChild {
             session_id,
             workspace,
             gpu_uuid,
+            application,
         } => {
             #[cfg(not(target_os = "windows"))]
             {
-                let _ = (session_id, workspace, gpu_uuid);
+                let _ = (session_id, workspace, gpu_uuid, application);
                 Err(CliError::new("windows_required", 20))
             }
             #[cfg(target_os = "windows")]
@@ -548,11 +580,17 @@ fn execute(command: &Command) -> Result<String, CliError> {
                 match command {
                     Command::AuthorityConsoleChild { .. } => {
                         gpubnb_windows_stream_helper::authority::run_console_authority_child(
-                            session_id, workspace, gpu_uuid,
+                            session_id,
+                            workspace,
+                            gpu_uuid,
+                            application.as_deref(),
                         )
                     }
                     _ => gpubnb_windows_stream_helper::authority::run_authority_child(
-                        session_id, workspace, gpu_uuid,
+                        session_id,
+                        workspace,
+                        gpu_uuid,
+                        application.as_deref(),
                     ),
                 }
                 .map_err(authority_error)?;
@@ -586,10 +624,13 @@ fn build_policy_json() -> Result<String, CliError> {
         "disabled"
     };
     Ok(format!(
-        r#"{{"schemaVersion":1,"sourceCommit":"{source}","workerSignerSha256":"{signer}","mutationAuthority":"{authority}","workerProtocol":{},"mediaTransportProtocol":{},"browserMediaProtocol":{},"browserInputProtocol":{}}}"#,
+        r#"{{"schemaVersion":1,"sourceCommit":"{source}","workerSignerSha256":"{signer}","mutationAuthority":"{authority}","workerProtocol":{},"mediaTransportProtocol":{},"consoleMediaTransportProtocol":{},"workerAudioBatchProtocol":{},"browserMediaProtocol":{},"browserAudioProtocol":{},"browserInputProtocol":{}}}"#,
         gpubnb_windows_stream_helper::worker_protocol::WORKER_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::media_protocol::MEDIA_TRANSPORT_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::media_protocol::MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::media_protocol::WORKER_AUDIO_BATCH_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::browser_media_protocol::BROWSER_MEDIA_PROTOCOL_VERSION,
+        gpubnb_windows_stream_helper::browser_audio_protocol::BROWSER_AUDIO_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::browser_input_protocol::BROWSER_INPUT_PROTOCOL_VERSION,
     ))
 }
@@ -635,7 +676,12 @@ mod tests {
             assert!(build_policy_json().is_err());
         } else if let Ok(value) = build_policy_json() {
             assert!(value.contains("\"workerProtocol\":1"));
-            assert!(value.contains("\"mediaTransportProtocol\":2"));
+            assert!(value.contains("\"mediaTransportProtocol\":3"));
+            assert!(value.contains("\"consoleMediaTransportProtocol\":4"));
+            assert!(value.contains("\"workerAudioBatchProtocol\":1"));
+            assert!(value.contains("\"browserMediaProtocol\":2"));
+            assert!(value.contains("\"browserAudioProtocol\":1"));
+            assert!(value.contains("\"browserInputProtocol\":1"));
         }
     }
 
@@ -788,6 +834,45 @@ mod tests {
                 Err(CliError::new("application_required", 2))
             );
         }
+    }
+
+    #[test]
+    fn gaming_start_carries_only_the_allowlisted_steam_path() {
+        let gaming = parse_args(&strings(&[
+            "--start",
+            "--json",
+            "--session-id",
+            "sess-game",
+            "--workspace",
+            "gaming",
+            "--gpu-uuid",
+            GPU_UUID,
+            "--application",
+            r"C:\Program Files (x86)\Steam\steam.exe",
+        ]));
+        assert_eq!(
+            gaming,
+            Ok(Command::Start {
+                session_id: "sess-game".to_owned(),
+                workspace: "gaming".to_owned(),
+                gpu_uuid: GPU_UUID.to_owned(),
+                application: Some(r"C:\Program Files (x86)\Steam\steam.exe".to_owned()),
+            })
+        );
+
+        let console = parse_args(&strings(&[
+            "--start-console",
+            "--json",
+            "--session-id",
+            "sess-game",
+            "--workspace",
+            "gaming",
+            "--gpu-uuid",
+            GPU_UUID,
+            "--application",
+            r"C:\Program Files (x86)\Steam\steam.exe",
+        ]));
+        assert_eq!(console, Err(CliError::new("workspace_not_implemented", 21)));
     }
 
     #[test]

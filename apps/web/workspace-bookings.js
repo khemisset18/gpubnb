@@ -325,12 +325,13 @@ import { DeveloperPhase, deriveDeveloperPhase, preparationLabel, resolveWorkspac
     if(!detail){
       button='<button type="button" class="button button-primary" data-native-action="create" '+attrs+'>Démarrer mon Workspace</button>';
     }else if(detail.canOpen){
-      button='<button type="button" class="button button-primary" data-native-action="open" '+attrs+'>Ouvrir le bureau Windows</button>';
+      const openLabel=slug==='gaming'?'Ouvrir l’espace Gaming':'Ouvrir le bureau Windows';
+      button='<button type="button" class="button button-primary" data-native-action="open" '+attrs+'>'+openLabel+'</button>';
     }else if(!ended){
       button='<span class="muted">'+escapeHTML(step)+'</span>';
     }
     const badge='<span class="badge '+(ended?'warn':'')+'">'+escapeHTML(phase)+'</span>';
-    const gaming=slug==='gaming'?'<div class="muted">Audio et manettes non implémentés ; l’accès commercial reste désactivé.</div>':'';
+    const gaming=slug==='gaming'?'<div class="muted">La capture audio et la manette du navigateur (compatibilité clavier/souris) doivent encore être qualifiées sur PC1 et PC2. Les jeux qui exigent XInput ne sont pas pris en charge. L’accès public reste désactivé.</div>':'';
     return '<article class="list-row"><div><strong>'+name+' · '+title+'</strong>'+gaming+err+'</div><div class="actions">'+button+badge+'</div></article>';
   }
 

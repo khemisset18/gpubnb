@@ -43,7 +43,7 @@ Workspace est soit entièrement validé, soit honnêtement bloqué.
 | Cloud Desktop | **BLOCKED** | Conteneur (`linuxserver/webtop`, Selkies-GStreamer) | Oui (rendu GPU desktop, pas seulement CUDA) | 2048 MiB | 8192 MiB | Docker, NVIDIA Container Toolkit, `/dev/dri` fonctionnel | Aucun hôte Linux GPU disponible pour valider le rendu |
 | Creator | **BLOCKED** | Conteneur (webtop + Blender réel) | Oui (rendu GPU desktop) | 6144 MiB | 16384 MiB | idem + Blender (paquet officiel Ubuntu) | idem |
 | CAD | **BLOCKED** | Conteneur (webtop + FreeCAD réel) | Oui (rendu GPU desktop) | 6144 MiB | 16384 MiB | idem + FreeCAD (PPA tiers `xtradeb`, documenté) | idem |
-| Gaming | **BLOCKED** | Conteneur (webtop + Steam réel) | Oui (rendu GPU desktop) | 8192 MiB | 16384 MiB | idem + Steam (paquet officiel Ubuntu multiverse) | idem + politique de contenu à définir |
+| Gaming | **BLOCKED** | Conteneur Linux ou session Windows isolée, interface navigateur | Oui (rendu GPU desktop) | 4096 MiB minimum, 8192 MiB recommandé | 8192 MiB minimum, 16384 MiB recommandé | Steam, NVENC, audio et commandes isolés | Rendu Linux non validé; flux, audio, contrôleur et lancement Windows à qualifier; mémoire variable selon le jeu |
 
 Aucun Workspace bloqué n'apparaît dans `executableWorkspaceSlugs` ni dans
 `GATEWAY_WORKSPACE_SLUGS` — vérifiable directement dans le code, pas

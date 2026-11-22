@@ -122,10 +122,10 @@ export const workspaceManifests:readonly WorkspaceManifest[]=Object.freeze([
  // Gateway already proves that exact relay pattern in production
  // (Developer Workspace's own code-server terminal already relays real
  // WebSocket frames through the identical loopback-proxy.js path).
- // `desktopGpuRendering` required, `virtualization` dropped (this is
- // planned as a container, not a VM). No Sunshine/Moonlight-tier latency
- // guarantee in this default mode - a documented, honest tradeoff.
- manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Jeu distant via navigateur (Steam, comptes et jeux apportés par le locataire) - architecture prête, rendu GPU non validé sur cet hôte',technologies:['Steam','Selkies-GStreamer','WebSocket'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:16384,diskMiB:102400,vramMiB:8192,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:32768,diskMiB:204800,vramMiB:12288}}),
+ // The Linux runtime remains container-based; Windows hosts use the
+ // isolated-session adapter and custom browser player. Neither route is
+ // bookable until its own real GPU/media/input qualification passes.
+ manifest({slug:'gaming',name:'Gaming Workspace',icon:'🎮',category:'GAMING',release:'EXPERIMENTAL',summary:'Espace de jeu privé avec les jeux et comptes du locataire; les exigences exactes dépendent du jeu sélectionné et le streaming GPU reste à qualifier',technologies:['Steam','Selkies-GStreamer','WebSocket'],license:'USER_ACCOUNT_REQUIRED',minimum:{ramMiB:8192,diskMiB:102400,vramMiB:4096,docker:true,nvidiaRuntime:true,desktopGpuRendering:true},recommended:{ramMiB:16384,diskMiB:204800,vramMiB:8192}}),
  // An interactive Ardour/Audacity GUI and VST plugin hosting are
  // intentionally absent from `technologies`: both need the same
  // containerized-remote-desktop runtime this platform doesn't have working

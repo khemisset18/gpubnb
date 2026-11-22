@@ -13,7 +13,8 @@ use crate::graphics_proof::{
 };
 use crate::lifecycle::WorkspaceKind;
 use crate::media_protocol::{
-    BoundMediaFrame, MEDIA_FRAME_HEADER_SIZE, bind_worker_media_payload,
+    AudioTargetProcessIdentity, BoundMediaFrame, MEDIA_FRAME_HEADER_SIZE,
+    WORKER_AUDIO_BATCH_MAX_BYTES, bind_worker_media_payload, decode_worker_audio_batch,
     decode_worker_media_frame_header, validate_worker_console_media_frame_header,
     validate_worker_media_frame_header,
 };
@@ -38,7 +39,8 @@ use gpubnb_windows_platform::pipe::{
     current_process_user_sid,
 };
 use gpubnb_windows_platform::process::{
-    RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
+    RenterApplicationIdentity, RenterWorkerLaunchSpec, RenterWorkerProcess,
+    launch_qualified_renter_worker, verify_renter_application_identity,
 };
 use gpubnb_windows_platform::secret::MediaCapabilityToken;
 use gpubnb_windows_platform::session::{
@@ -135,6 +137,7 @@ pub struct ServiceRuntimeConfig<'a> {
     pub generation: u64,
     pub workspace: WorkspaceKind,
     pub gpu_uuid: &'a str,
+    pub application_path: Option<&'a str>,
     pub windows_session_id: u32,
     pub renter_user_sid: &'a str,
     pub provider_user_sid: &'a str,
@@ -185,6 +188,7 @@ pub struct QualifiedGraphicsRuntime {
     display: Option<VirtualDisplayLease>,
     generation: u64,
     stream_epoch: u64,
+    workspace: WorkspaceKind,
     windows_session_id: u32,
     renter_user_sid: String,
     provider_user_sid: String,
@@ -194,6 +198,8 @@ pub struct QualifiedGraphicsRuntime {
     next_sequence: u64,
     last_frame_sequence: u64,
     pending_media_frame: Option<BoundMediaFrame>,
+    audio_expected: bool,
+    audio_target_identity: Option<AudioTargetProcessIdentity>,
     pressed_browser_input: PressedBrowserInput,
     media_state: RuntimeMediaState,
     last_failure: Option<ServiceRuntimeError>,
@@ -245,6 +251,20 @@ impl QualifiedGraphicsRuntime {
 
     pub const fn media_ready(&self) -> bool {
         matches!(self.media_state, RuntimeMediaState::Ready)
+    }
+
+    /// True only after the worker opened process-loopback capture for the
+    /// independently verified Steam process in this renter session.
+    pub const fn audio_ready(&self) -> bool {
+        matches!(self.workspace, WorkspaceKind::Gaming)
+            && self.audio_expected
+            && self.audio_target_identity.is_some()
+    }
+
+    /// Gaming's supported controller path is the browser Gamepad API mapped to
+    /// fenced keyboard/mouse events. This is explicitly not native XInput.
+    pub const fn controller_ready(&self) -> bool {
+        matches!(self.workspace, WorkspaceKind::Gaming)
     }
 
     pub const fn suspended(&self) -> bool {
@@ -361,6 +381,8 @@ impl QualifiedGraphicsRuntime {
                 backend: self.backend,
                 display_spec: self.display_spec,
                 gpu_uuid: &self.gpu_uuid,
+                audio_expected: self.audio_expected,
+                expected_audio_target_identity: self.audio_target_identity,
             },
         ) {
             Ok(Some(frame)) => frame,
@@ -528,6 +550,8 @@ impl QualifiedGraphicsRuntime {
                 backend: self.backend,
                 display_spec: self.display_spec,
                 gpu_uuid: &self.gpu_uuid,
+                audio_expected: self.audio_expected,
+                expected_audio_target_identity: self.audio_target_identity,
             },
         ) {
             Ok(frame) => frame,
@@ -619,6 +643,8 @@ struct MediaFrameFence<'a> {
     backend: RuntimeDisplayBackend,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: &'a str,
+    audio_expected: bool,
+    expected_audio_target_identity: Option<AudioTargetProcessIdentity>,
 }
 
 fn receive_bound_media_frame(
@@ -687,6 +713,8 @@ fn receive_bound_media_frame_after_proof(
         backend,
         display_spec,
         gpu_uuid,
+        audio_expected,
+        expected_audio_target_identity,
     } = fence;
     if proof_frame.len() == WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE {
         let diagnostic = decode_worker_media_diagnostic(proof_frame)
@@ -758,8 +786,38 @@ fn receive_bound_media_frame_after_proof(
     let payload = media_pipe
         .read_message_exact(header.payload_bytes as usize, PIPE_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
-    let frame = bind_worker_media_payload(header, payload)
+    let mut frame = bind_worker_media_payload(header, payload)
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+    if audio_expected {
+        let audio_wire = media_pipe
+            .read_message_bounded(WORKER_AUDIO_BATCH_MAX_BYTES, PIPE_TIMEOUT_MS)
+            .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+        let (audio_fence, packets) = decode_worker_audio_batch(&audio_wire, header)
+            .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+        let target_identity = AudioTargetProcessIdentity {
+            process_id: audio_fence.target_process_id,
+            creation_time_100ns: audio_fence.target_process_creation_time_100ns,
+        };
+        if let Some(expected) = expected_audio_target_identity {
+            if expected != target_identity {
+                return Err(ServiceRuntimeError::MediaTransport);
+            }
+        } else {
+            verify_renter_application_identity(
+                RenterApplicationIdentity {
+                    process_id: target_identity.process_id,
+                    windows_session_id,
+                    creation_time_100ns: target_identity.creation_time_100ns,
+                },
+                renter_user_sid,
+            )
+            .map_err(|_| ServiceRuntimeError::RenterSession)?;
+        }
+        frame.audio_packets = packets;
+        frame.audio_target_identity = Some(target_identity);
+    } else if expected_audio_target_identity.is_some() {
+        return Err(ServiceRuntimeError::MediaTransport);
+    }
 
     // The media DLL revalidates UUID -> LUID for every capture; repeat the check
     // in the privileged service before accepting the bytes into the data plane.
@@ -889,13 +947,28 @@ fn next_stream_epoch(current: u64) -> Result<u64, ServiceRuntimeError> {
 }
 
 fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntimeError> {
+    let workspace_config_valid = match (config.workspace, config.application_path) {
+        (WorkspaceKind::CloudDesktop, None) => config.width >= 1920 && config.height >= 1080,
+        (WorkspaceKind::Gaming, Some(path)) => {
+            let qualified_steam_path = [
+                r"C:\Program Files (x86)\Steam\steam.exe",
+                r"C:\Program Files\Steam\steam.exe",
+            ]
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(path));
+            qualified_steam_path
+                && config.width == 1280
+                && config.height == 720
+                && config.refresh_hz == 60
+        }
+        _ => false,
+    };
     if config.session_id.is_empty()
         || config.generation == 0
         || config.windows_session_id == 0
         || config.display_nonce == [0; 16]
-        || config.width < 1920
-        || config.height < 1080
         || !(60..=240).contains(&config.refresh_hz)
+        || !workspace_config_valid
     {
         return Err(ServiceRuntimeError::InvalidConfiguration);
     }
@@ -982,6 +1055,7 @@ fn start_graphics_runtime(
             generation: config.generation,
             gpu_uuid: config.gpu_uuid,
             workspace: workspace_slug(config.workspace),
+            application: config.application_path,
         },
     )
     .map_err(|_| ServiceRuntimeError::WorkerLaunch)?;
@@ -1081,6 +1155,8 @@ fn start_graphics_runtime(
                 backend,
                 display_spec,
                 gpu_uuid: config.gpu_uuid,
+                audio_expected: matches!(config.workspace, WorkspaceKind::Gaming),
+                expected_audio_target_identity: None,
             },
         )?;
         if !initial_media_frame.is_keyframe() {
@@ -1114,12 +1190,15 @@ fn start_graphics_runtime(
         backend,
         generation: config.generation,
         stream_epoch: config.generation,
+        workspace: config.workspace,
         windows_session_id: config.windows_session_id,
         renter_user_sid: config.renter_user_sid.to_owned(),
         provider_user_sid: config.provider_user_sid.to_owned(),
         renter_isolation,
         display_spec,
         gpu_uuid: config.gpu_uuid.to_owned(),
+        audio_expected: matches!(config.workspace, WorkspaceKind::Gaming),
+        audio_target_identity: initial_media_frame.audio_target_identity,
         next_sequence: 3,
         last_frame_sequence: initial_media_frame.header.frame_sequence,
         pending_media_frame: Some(initial_media_frame),
@@ -1132,6 +1211,23 @@ fn start_graphics_runtime(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_config() -> ServiceRuntimeConfig<'static> {
+        ServiceRuntimeConfig {
+            session_id: "sess-1",
+            generation: 7,
+            workspace: WorkspaceKind::CloudDesktop,
+            gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
+            application_path: None,
+            windows_session_id: 42,
+            renter_user_sid: "S-1-5-21-100-200-300-1001",
+            provider_user_sid: "S-1-5-21-100-200-300-1000",
+            display_nonce: [0xA5; 16],
+            width: 1920,
+            height: 1080,
+            refresh_hz: 60,
+        }
+    }
 
     #[test]
     fn reconnect_stream_epoch_rotates_and_never_wraps_to_zero() {
@@ -1259,19 +1355,7 @@ mod tests {
 
     #[test]
     fn runtime_config_rejects_zero_identity_fields() {
-        let base = ServiceRuntimeConfig {
-            session_id: "sess-1",
-            generation: 7,
-            workspace: WorkspaceKind::CloudDesktop,
-            gpu_uuid: "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a",
-            windows_session_id: 42,
-            renter_user_sid: "S-1-5-21-100-200-300-1001",
-            provider_user_sid: "S-1-5-21-100-200-300-1000",
-            display_nonce: [0xA5; 16],
-            width: 1920,
-            height: 1080,
-            refresh_hz: 60,
-        };
+        let base = test_config();
         assert_eq!(validate_config(base), Ok(()));
         assert_eq!(
             validate_config(ServiceRuntimeConfig {
@@ -1289,8 +1373,8 @@ mod tests {
         );
         assert_eq!(
             validate_config(ServiceRuntimeConfig {
-                width: 1280,
-                height: 720,
+                width: 1919,
+                height: 1080,
                 ..base
             }),
             Err(ServiceRuntimeError::InvalidConfiguration)
@@ -1299,6 +1383,40 @@ mod tests {
             validate_config(ServiceRuntimeConfig {
                 refresh_hz: 30,
                 ..base
+            }),
+            Err(ServiceRuntimeError::InvalidConfiguration)
+        );
+    }
+
+    #[test]
+    fn gaming_runtime_requires_qualified_steam_and_720p60() {
+        let gaming = ServiceRuntimeConfig {
+            workspace: WorkspaceKind::Gaming,
+            application_path: Some(r"C:\Program Files (x86)\Steam\steam.exe"),
+            width: 1280,
+            height: 720,
+            ..test_config()
+        };
+        assert_eq!(validate_config(gaming), Ok(()));
+        assert_eq!(
+            validate_config(ServiceRuntimeConfig {
+                application_path: None,
+                ..gaming
+            }),
+            Err(ServiceRuntimeError::InvalidConfiguration)
+        );
+        assert_eq!(
+            validate_config(ServiceRuntimeConfig {
+                application_path: Some(r"C:\Users\Owner\Downloads\steam.exe"),
+                ..gaming
+            }),
+            Err(ServiceRuntimeError::InvalidConfiguration)
+        );
+        assert_eq!(
+            validate_config(ServiceRuntimeConfig {
+                width: 1920,
+                height: 1080,
+                ..gaming
             }),
             Err(ServiceRuntimeError::InvalidConfiguration)
         );

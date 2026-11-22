@@ -194,6 +194,27 @@ impl WorkerMediaPipe {
         }
     }
 
+    /// Reads exactly one Windows message up to a hard caller-provided bound.
+    /// It rejects truncated messages and never concatenates adjacent records.
+    pub fn read_message_bounded(
+        &self,
+        maximum_size: usize,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        if maximum_size == 0 || maximum_size > WORKER_MEDIA_MESSAGE_MAX || timeout_ms == 0 {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::read_media_message_bounded(&self._handle, maximum_size, timeout_ms)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (maximum_size, timeout_ms);
+            Err(PlatformError::WindowsRequired)
+        }
+    }
+
     pub fn accept_verified_client(
         &self,
         expected_logon_sid: &str,
@@ -1333,6 +1354,64 @@ mod windows_impl {
         timeout_ms: u32,
     ) -> Result<Vec<u8>, PlatformError> {
         read_exact_message_handle(pipe.0, expected_size, timeout_ms)
+    }
+
+    pub(super) fn read_media_message_bounded(
+        pipe: &OwnedPipeHandle,
+        maximum_size: usize,
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>, PlatformError> {
+        if maximum_size == 0
+            || maximum_size > WORKER_MEDIA_MESSAGE_MAX
+            || maximum_size > u32::MAX as usize
+            || timeout_ms == 0
+        {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        let event = create_event().map_err(|_| PlatformError::PipeReadFailed)?;
+        let mut overlapped = Overlapped::new(event.0);
+        let mut message = vec![0u8; maximum_size];
+        // SAFETY: message is writable for maximum_size bytes and the OVERLAPPED
+        // storage remains live until the pending read has completed.
+        let immediate = unsafe {
+            ReadFile(
+                pipe.0,
+                message.as_mut_ptr().cast::<c_void>(),
+                maximum_size as u32,
+                ptr::null_mut(),
+                &mut overlapped,
+            )
+        };
+        let transferred = if immediate != 0 {
+            let mut transferred = 0u32;
+            // SAFETY: the overlapped read completed synchronously.
+            let ok = unsafe { GetOverlappedResult(pipe.0, &mut overlapped, &mut transferred, 0) };
+            if ok == 0 {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            transferred
+        } else {
+            // SAFETY: GetLastError immediately follows ReadFile.
+            let error = unsafe { GetLastError() };
+            if error == ERROR_MORE_DATA {
+                return Err(PlatformError::PipeProtocolFailed);
+            }
+            if error != ERROR_IO_PENDING {
+                return Err(PlatformError::PipeReadFailed);
+            }
+            wait_pending(
+                pipe.0,
+                &mut overlapped,
+                timeout_ms,
+                PlatformError::PipeConnectTimeout,
+                PlatformError::PipeReadFailed,
+            )?
+        };
+        if transferred == 0 || transferred as usize > maximum_size {
+            return Err(PlatformError::PipeProtocolFailed);
+        }
+        message.truncate(transferred as usize);
+        Ok(message)
     }
 
     fn accept_verified_client_with_prelude(

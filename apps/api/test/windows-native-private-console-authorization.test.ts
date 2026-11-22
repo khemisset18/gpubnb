@@ -66,7 +66,7 @@ test('production IddCx and public listings do not acquire a console grant', () =
   assert.doesNotMatch(api, /ListingStatus\.ACTIVE[^\n]*privateConsoleSessionMarker/);
 });
 
-test('private console qualification is owner-only at preflight, booking and session creation', () => {
+test('private qualification is owner-only and Gaming cannot use the owner console', () => {
   const api = readFileSync(new URL('../src/desktop-workspace-routes.ts', import.meta.url), 'utf8');
   const booking = api.slice(
     api.indexOf('async function createWindowsNativeQualificationBooking('),
@@ -80,10 +80,12 @@ test('private console qualification is owner-only at preflight, booking and sess
     api.indexOf("app.get('/qualification/windows-native/preflight'"),
     api.indexOf("app.post('/qualification/windows-native/booking'"),
   );
-  assert.match(booking, /source\.captureBackend !== 'console-dedicated' \|\| machine\.ownerId === renterId/);
-  assert.match(booking, /freshSource\.captureBackend === 'console-dedicated' && fresh\.machine\.ownerId !== renterId/);
-  assert.match(session, /qualifiedSource\.captureBackend !== 'console-dedicated' \|\| machine\.ownerId === renterId/);
-  assert.match(preflight, /source\.captureBackend !== 'console-dedicated' \|\| host\.ownerId === session\.userId/);
+  assert.match(api, /function privateQualificationSourceAllowed\([\s\S]*?ownerId !== userId/);
+  assert.match(api, /return slug !== 'gaming' \|\| source\.captureBackend === 'iddcx'/);
+  assert.match(booking, /privateQualificationSourceAllowed\(slug, source, machine\.ownerId, renterId\)/);
+  assert.match(booking, /privateQualificationSourceAllowed\(slug, freshSource, fresh\.machine\.ownerId, renterId\)/);
+  assert.match(session, /privateQualificationSourceAllowed\(slug, qualifiedSource, machine\.ownerId, renterId\)/);
+  assert.match(preflight, /privateQualificationSourceAllowed\(slug, source, host\.ownerId, session\.userId\)/);
 });
 
 test('console admission is signed, replay-fenced and independent from public listing availability', () => {
@@ -133,14 +135,15 @@ test('native WebSocket close fences Redis immediately and pending batches stop b
   assert.match(input, /browserClosed&&await enqueueAuthorizedNativeMachineRelay/);
 });
 
-test('unqualified private sessions are revoked at browser, gateway and Agent reconciliation boundaries', () => {
+test('unqualified screen sessions stay blocked and Gaming attempts require the explicit private gate', () => {
   const api = readFileSync(new URL('../src/desktop-workspace-routes.ts', import.meta.url), 'utf8');
   const gateway = readFileSync(new URL('../src/workspace-gateway.ts', import.meta.url), 'utf8');
-  assert.match(api, /windowsNativePrivateMediaReady\(\): boolean \{\s*return false/);
-  assert.match(api, /if \(!windowsNativePrivateMediaReady\(\)\)\s*\{\s*return reply\.code\(409\)\.send\(\{ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON \}\);/);
-  assert.match(api, /events: \{ where: \{ action: 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED' \}, select: \{ id: true \}, take: 1 \}/);
+  assert.match(api, /if \(!windowsNativePrivateAttemptEnabled\(slug\)\)\s*\{\s*return reply\.code\(409\)\.send\(\{ error: windowsNativePrivateMediaBlockReason\(slug\) \}\);/);
+  assert.match(api, /WINDOWS_NATIVE_GAMING_SESSION_REQUESTED/);
+  assert.match(api, /windowsNativePrivateAttemptEnabled\('gaming'\)/);
   assert.match(api, /privateQualification \? 'BLOCKED' : row\.status/);
-  assert.match(api, /if \(row\.runtimeBackend === WorkspaceRuntimeBackend\.WINDOWS_NATIVE && row\.events\.length > 0\)[\s\S]*?return reply\.code\(409\)\.send\(\{ error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON \}\)/);
+  assert.match(api, /privateGamingAttempt\s*&&\s*!windowsNativePrivateAttemptEnabled\('gaming'\)/);
+  assert.match(api, /privateScreenQualification\)[\s\S]*?return reply\.code\(409\)\.send\(\{ error: windowsNativePrivateMediaBlockReason\(slug\) \}\)/);
 
   assert.match(gateway, /events:\{none:\{action:PRIVATE_WINDOWS_QUALIFICATION_EVENT\}\}/);
   assert.match(gateway, /qualification_event\."action"=\$\{PRIVATE_WINDOWS_QUALIFICATION_EVENT\}/);

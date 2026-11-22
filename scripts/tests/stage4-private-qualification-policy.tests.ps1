@@ -74,9 +74,9 @@ if ($verifier -notmatch 'Assert-Stage4PrivateBuildIdentity' -or
 }
 $identityBase=[pscustomobject]@{
     agent=[pscustomobject]@{frozen=$true;agentVersion='0.6.6';buildCommit=$commit}
-    helper=[pscustomobject]@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate'}
+    helper=[pscustomobject]@{sourceCommit=$commit;workerSignerSha256=$pin;mutationAuthority='release-candidate';workerProtocol=1;mediaTransportProtocol=3;consoleMediaTransportProtocol=4;workerAudioBatchProtocol=1;browserMediaProtocol=2;browserAudioProtocol=1;browserInputProtocol=1}
     worker=[pscustomobject]@{sourceCommit=$commit;mediaSignerSha256=$pin}
-    media=[pscustomobject]@{sourceCommit=$commit;mediaAbi=2;nvencApi='13.0'}
+    media=[pscustomobject]@{sourceCommit=$commit;mediaAbi=2;consoleMediaAbi=3;audioCaptureAbi=1;nvencApi='13.0'}
     agentRuntime=[pscustomobject]@{tlsContext=$true}
 }
 if (-not (Assert-Stage4PrivateBuildIdentity -Identity $identityBase -ExpectedCommit $commit -ExpectedPublisherSha256 $pin)) {
@@ -99,6 +99,10 @@ Expect-IdentityRejection 'wrong SHA40 Media refused' {param($m)$m.media.sourceCo
 Expect-IdentityRejection 'mismatched Worker signer refused' {param($m)$m.worker.mediaSignerSha256=('e'*64)}
 Expect-IdentityRejection 'mismatched Helper signer refused' {param($m)$m.helper.workerSignerSha256=('e'*64)}
 Expect-IdentityRejection 'wrong Agent release refused' {param($m)$m.agent.agentVersion='0.6.5'}
+Expect-IdentityRejection 'old media transport refused' {param($m)$m.helper.mediaTransportProtocol=2}
+Expect-IdentityRejection 'old browser media protocol refused' {param($m)$m.helper.browserMediaProtocol=1}
+Expect-IdentityRejection 'wrong browser audio protocol refused' {param($m)$m.helper.browserAudioProtocol=2}
+Expect-IdentityRejection 'wrong audio capture ABI refused' {param($m)$m.media.audioCaptureAbi=2}
 Write-Host 'PASS real signed verifier calls the same exact SHA40 identity gate'
 
 $script:base=[ordered]@{
@@ -122,7 +126,7 @@ $script:base=[ordered]@{
     approvedUse='owner-present-local-private-qualification-only'
     sourceUnsignedManifestSha256=('a'*64)
     buildIdentitiesSha256=('b'*64)
-    protocols=@{worker=1;mediaTransport=2;browserMedia=1;browserInput=1;mediaAbi=2}
+    protocols=@{worker=1;mediaTransport=3;consoleMediaTransport=4;workerAudioBatch=1;browserMedia=2;browserAudio=1;browserInput=1;mediaAbi=2;consoleMediaAbi=3;audioCaptureAbi=1}
     expiresUtc=([DateTime]::UtcNow.AddDays(7).ToString('o'))
     files=@(
         @{name='gpubnb-agent.exe';sha256=('1'*64);unsignedSha256=('2'*64);architecture='AMD64'},
@@ -161,6 +165,8 @@ Expect-PolicyRejection 'existing install mutation rejected' {param($m)$m.install
 Expect-PolicyRejection 'no review bypass' {param($m)$m.installationReviewRequired=$false}
 Expect-PolicyRejection 'wrong source kind' {param($m)$m.sourceKind='LOCAL_TEST_ONLY_NOT_RELEASE'}
 Expect-PolicyRejection 'wrong protocol' {param($m)$m.protocols.browserInput=2}
+Expect-PolicyRejection 'wrong audio batch protocol' {param($m)$m.protocols.workerAudioBatch=2}
+Expect-PolicyRejection 'wrong console media ABI' {param($m)$m.protocols.consoleMediaAbi=2}
 Expect-PolicyRejection 'expired signature' {param($m)$m.expiresUtc=[DateTime]::UtcNow.AddHours(-1).ToString('o')}
 Expect-PolicyRejection 'duplicated binary' {param($m)$m.files[1].name='gpubnb-agent.exe'}
 Expect-PolicyRejection 'missing binary' {param($m)$m.files=@($m.files[0],$m.files[1],$m.files[2])}

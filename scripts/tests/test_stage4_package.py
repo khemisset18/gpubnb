@@ -39,9 +39,12 @@ class PackageTests(unittest.TestCase):
             'agent': {'frozen': True, 'agentVersion': '0.6.6', 'buildCommit': COMMIT},
             'agentRuntime': {'idnaCodec': True, 'dnsResolution': True, 'tlsContext': True},
             'helper': {'sourceCommit': COMMIT, 'workerSignerSha256': PIN, 'mutationAuthority': 'release-candidate',
-                       'workerProtocol': 1, 'mediaTransportProtocol': 2, 'browserMediaProtocol': 1, 'browserInputProtocol': 1},
+                       'workerProtocol': 1, 'mediaTransportProtocol': 3, 'consoleMediaTransportProtocol': 4,
+                       'workerAudioBatchProtocol': 1, 'browserMediaProtocol': 2, 'browserAudioProtocol': 1,
+                       'browserInputProtocol': 1},
             'worker': {'sourceCommit': COMMIT, 'mediaSignerSha256': PIN},
-            'media': {'sourceCommit': COMMIT, 'mediaAbi': 2, 'nvencApi': '13.0'}}
+            'media': {'sourceCommit': COMMIT, 'mediaAbi': 2, 'consoleMediaAbi': 3,
+                      'audioCaptureAbi': 1, 'nvencApi': '13.0'}}
         (self.root/'build-identities.json').write_text(json.dumps(self.identity))
         self.proof = s.create(self.root, COMMIT, PIN)
 
@@ -97,7 +100,13 @@ class PackageTests(unittest.TestCase):
         for component,field,value in [('agent','frozen',False),('agent','agentVersion','0.0.0'),
                                      ('helper','workerSignerSha256','ab'*32),('worker','sourceCommit','a'*40),
                                      ('helper','mutationAuthority','physical-qualification'),
-                                     ('helper','mediaTransportProtocol',1),('media','mediaAbi',1),
+                                     ('helper','mediaTransportProtocol',1),
+                                     ('helper','consoleMediaTransportProtocol',1),
+                                     ('helper','workerAudioBatchProtocol',2),
+                                     ('helper','browserMediaProtocol',1),
+                                     ('helper','browserAudioProtocol',2),
+                                     ('media','mediaAbi',1),('media','consoleMediaAbi',2),
+                                     ('media','audioCaptureAbi',2),
                                      ('agentRuntime','tlsContext',False)]:
             identity=copy.deepcopy(self.identity);identity[component][field]=value
             with self.subTest(component=component,field=field),self.assertRaises(ValueError):

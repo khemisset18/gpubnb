@@ -65,18 +65,17 @@ export async function nativeRentalEligibility(
   if (config.ESCROW_PROGRAM_ID === 'NOT_DEPLOYED_YET') {
     return { eligible: false, reason: 'windows_native_escrow_not_deployed', machineId: null };
   }
-  // The current browser gateway has no renter-scoped WASAPI/Opus audio path.
-  // A Cloud Desktop that advertises a silent screen is incomplete, so keep it
-  // non-bookable until the browser, gateway and helper all prove audio.
+  // Process-scoped PCM, authenticated transport and browser playback are
+  // wired, but real PC1/PC2 isolation, device behavior and STOP have not been
+  // qualified. Keep the workspace non-bookable until that physical proof.
   if (slug === 'cloud-desktop') {
-    return { eligible: false, reason: 'windows_native_audio_unimplemented', machineId: null };
+    return { eligible: false, reason: 'windows_native_audio_not_qualified', machineId: null };
   }
-  // The existing native browser/media protocol transports H.264 frames and
-  // keyboard/mouse only. It has no end-to-end audio or Gamepad API pipeline,
-  // even if the local Windows helper reports audioReady/controllerReady.
-  // Prevent paid Gaming rentals until these browser-to-worker paths exist.
+  // The browser/worker path is wired, but native XInput and real-hardware
+  // A/V, identity and STOP evidence are still absent. The helper deliberately
+  // reports both qualification gates false.
   if (slug === 'gaming') {
-    return { eligible: false, reason: 'windows_native_gaming_audio_controller_unimplemented', machineId: null };
+    return { eligible: false, reason: 'windows_native_audio_controller_not_qualified', machineId: null };
   }
   const listing = await db.gpuListing.findFirst({
     where: {

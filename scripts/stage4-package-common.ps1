@@ -183,7 +183,7 @@ function Read-Stage4Package {
     if($m.schemaVersion -ne 2 -or $m.kind -cne $kind -or $m.signatureStatus -cne $Status -or $m.installable -ne $false -or $m.publicBookabilityEnabled -ne $false -or $m.iddDriverIncluded -ne $false){throw 'stage4_private_package_policy_mismatch'}
     if($m.sourceCommit -cne $Commit){throw 'stage4_manifest_commit_mismatch'}
     if($m.publisherSha256 -cne $Publisher){throw 'stage4_manifest_publisher_mismatch'}
-    foreach($kv in @{worker=1;mediaTransport=2;browserMedia=1;browserInput=1;mediaAbi=2}.GetEnumerator()){
+    foreach($kv in @{worker=1;mediaTransport=3;consoleMediaTransport=4;workerAudioBatch=1;browserMedia=2;browserAudio=1;browserInput=1;mediaAbi=2;consoleMediaAbi=3;audioCaptureAbi=1}.GetEnumerator()){
         if($m.protocols.($kv.Key) -ne $kv.Value){throw 'stage4_protocol_mismatch'}
     }
     $names=@('gpubnb-agent.exe','gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')
@@ -213,10 +213,10 @@ function Read-Stage4Package {
     if($id.helper.sourceCommit -cne $Commit -or $id.worker.sourceCommit -cne $Commit -or $id.media.sourceCommit -cne $Commit){throw 'stage4_component_commit_mismatch'}
     if($id.helper.workerSignerSha256 -cne $Publisher -or $id.worker.mediaSignerSha256 -cne $Publisher){throw 'stage4_embedded_pin_mismatch'}
     if($id.helper.mutationAuthority -cne 'release-candidate'){throw 'stage4_wrong_helper_authority'}
-    foreach($kv in @{workerProtocol=1;mediaTransportProtocol=2;browserMediaProtocol=1;browserInputProtocol=1}.GetEnumerator()){
+    foreach($kv in @{workerProtocol=1;mediaTransportProtocol=3;consoleMediaTransportProtocol=4;workerAudioBatchProtocol=1;browserMediaProtocol=2;browserAudioProtocol=1;browserInputProtocol=1}.GetEnumerator()){
         if($id.helper.($kv.Key) -ne $kv.Value){throw 'stage4_protocol_mismatch'}
     }
-    if($id.media.mediaAbi -ne 2 -or $id.media.nvencApi -cne '13.0'){throw 'stage4_media_abi_mismatch'}
+    if($id.media.mediaAbi -ne 2 -or $id.media.consoleMediaAbi -ne 3 -or $id.media.audioCaptureAbi -ne 1 -or $id.media.nvencApi -cne '13.0'){throw 'stage4_media_abi_mismatch'}
     if($Status -ceq 'private-signed' -and $m.unsignedManifestSha256 -cnotmatch '^[0-9a-f]{64}$'){throw 'stage4_unsigned_provenance_missing'}
     if($Status -ceq 'private-signed'){
         $up=Join-Path $root 'unsigned-stage4.manifest.json'

@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { compatibleWorkspaceChoices, ensureCompatibleMachineWorkspace } from '../src/machine-workspace-catalog.js';
-import { windowsNativeWorkspaceOwnerAnalysis } from '../src/windows-native-workspace-policy.js';
+import {
+  windowsNativeWorkspaceCandidate,
+  windowsNativeWorkspaceOwnerAnalysis,
+} from '../src/windows-native-workspace-policy.js';
 import { workspaceManifest } from '../src/workspace-manifests.js';
 
 const highEndWindows = {
@@ -92,6 +95,27 @@ test('owner analysis uses exact native Windows proof and never enables missing a
     { ...measured, nativeDesktopStreamingGpuUuid: 'GPU-00000000-0000-0000-0000-000000000001' },
     workspaceManifest('creator')!, 'creator', expectedGpuUuid,
   ).candidate, false);
+});
+
+test('4GB GTX 1650 meets the Gaming capacity floor but owner opt-in stays blocked by audio and controller gates', () => {
+  // Policy fixture only. The declared native proof here is synthetic and does
+  // not qualify a physical host or make Gaming bookable.
+  const gpuUuid = 'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a';
+  const entryLevelWindows = {
+    ...highEndWindows,
+    ramTotalMiB: 12_288,
+    diskTotalMiB: 500_000,
+    vramMiB: 4_096,
+    nativeDesktopStreamingAvailable: true,
+    nativeDesktopStreamingGpuUuid: gpuUuid,
+  };
+  const manifest = workspaceManifest('gaming')!;
+  assert.equal(windowsNativeWorkspaceCandidate(entryLevelWindows, manifest, gpuUuid).candidate, true);
+  const ownerResult = windowsNativeWorkspaceOwnerAnalysis(
+    entryLevelWindows, manifest, 'gaming', gpuUuid,
+  );
+  assert.equal(ownerResult.candidate, false);
+  assert.ok(ownerResult.missing.some(reason => reason.includes('Audio non qualifié')));
 });
 
 test('non-Linux operating systems cannot inherit the Linux desktop backend', async () => {

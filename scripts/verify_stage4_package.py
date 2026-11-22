@@ -16,8 +16,10 @@ from pathlib import Path
 
 NAMES = ("gpubnb-agent.exe", "gpubnb-windows-stream.exe",
          "gpubnb-windows-worker.exe", "GPUbnbWindowsMedia.dll")
-PROTOCOLS = {"worker": 1, "mediaTransport": 2, "browserMedia": 1,
-             "browserInput": 1, "mediaAbi": 2}
+PROTOCOLS = {"worker": 1, "mediaTransport": 3, "consoleMediaTransport": 4,
+             "workerAudioBatch": 1, "browserMedia": 2, "browserAudio": 1,
+             "browserInput": 1, "mediaAbi": 2, "consoleMediaAbi": 3,
+             "audioCaptureAbi": 1}
 HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -103,9 +105,15 @@ def check_identity(identity, commit, publisher):
             "stage4_embedded_pin_mismatch")
     require(h.get("mutationAuthority") == "release-candidate", "stage4_wrong_helper_authority")
     for field, key in (("workerProtocol", "worker"), ("mediaTransportProtocol", "mediaTransport"),
-                       ("browserMediaProtocol", "browserMedia"), ("browserInputProtocol", "browserInput")):
+                       ("consoleMediaTransportProtocol", "consoleMediaTransport"),
+                       ("workerAudioBatchProtocol", "workerAudioBatch"),
+                       ("browserMediaProtocol", "browserMedia"), ("browserAudioProtocol", "browserAudio"),
+                       ("browserInputProtocol", "browserInput")):
         require(h.get(field) == PROTOCOLS[key], "stage4_protocol_mismatch")
-    require(m.get("mediaAbi") == 2 and m.get("nvencApi") == "13.0", "stage4_media_abi_mismatch")
+    require(m.get("mediaAbi") == PROTOCOLS["mediaAbi"] and
+            m.get("consoleMediaAbi") == PROTOCOLS["consoleMediaAbi"] and
+            m.get("audioCaptureAbi") == PROTOCOLS["audioCaptureAbi"] and
+            m.get("nvencApi") == "13.0", "stage4_media_abi_mismatch")
 
 
 def verify(directory, manifest_hash, commit, publisher, status="unsigned"):

@@ -34,6 +34,7 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
             "inputIsolation": True,
             "audioReady": True,
             "controllerReady": True,
+            "controllerMode": "browser-gamepad-keyboard-mouse",
             "mediaUrl": "http://127.0.0.1:43123/session/sess-1",
             "mediaToken": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }
@@ -355,15 +356,22 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 runtime.launch_windows_native_workspace("sess-1", "creator", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
         run_command.assert_not_called()
 
-    def test_gaming_requires_preflight_audio_before_start(self):
+    def test_gaming_checks_process_audio_after_launch_not_generic_preflight(self):
+        report = self._start_report(
+            workspaceSlug="gaming",
+            controllerMode="browser-gamepad-keyboard-mouse",
+        )
         with (
             patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
             patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight(audio=False)),
-            patch.object(runtime, "run_command") as run_command,
+            patch.object(runtime, "discover_native_application", return_value=r"C:\Program Files (x86)\Steam\steam.exe"),
+            patch.object(runtime, "run_command", return_value=report) as run_command,
         ):
-            with self.assertRaisesRegex(RuntimeError, "workspace_audio_required"):
-                runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
-        run_command.assert_not_called()
+            handle = runtime.launch_windows_native_workspace(
+                "sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"
+            )
+        self.assertTrue(handle.audio_ready)
+        self.assertEqual(run_command.call_count, 1)
 
     def test_gaming_requires_runtime_audio_and_controller(self):
         for field, error in (
@@ -375,11 +383,24 @@ class WindowsNativeRuntimeTests(unittest.TestCase):
                 with (
                     patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
                     patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight()),
-                    patch.object(runtime, "discover_native_application", return_value=r"C:\Steam\steam.exe"),
+                    patch.object(runtime, "discover_native_application", return_value=r"C:\Program Files (x86)\Steam\steam.exe"),
                     patch.object(runtime, "run_command", side_effect=[report, self._stop_report()]),
                 ):
                     with self.assertRaisesRegex(RuntimeError, error):
                         runtime.launch_windows_native_workspace("sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a")
+
+    def test_gaming_requires_the_bounded_browser_gamepad_mode(self):
+        report = self._start_report(workspaceSlug="gaming", controllerMode="native-xinput")
+        with (
+            patch.object(runtime, "find_stream_helper", return_value="helper.exe"),
+            patch.object(runtime, "windows_native_desktop_preflight", return_value=self._preflight(audio=False)),
+            patch.object(runtime, "discover_native_application", return_value=r"C:\Program Files (x86)\Steam\steam.exe"),
+            patch.object(runtime, "run_command", side_effect=[report, self._stop_report()]),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "native_workspace_start_controller_mode_unsupported"):
+                runtime.launch_windows_native_workspace(
+                    "sess-1", "gaming", "GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a"
+                )
 
     def test_status_is_live_proof_not_process_presence(self):
         valid = {

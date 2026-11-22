@@ -28,6 +28,16 @@ test('the same real low-VRAM machine is compatible with Compute Workspace (no VR
   assert.notEqual(result.state,'INCOMPATIBLE');
 });
 
+test('Gaming baseline accepts 4GB VRAM when a render path is declared and keeps the 8GB recommendation',()=>{
+  // Capability fixture only: this does not prove that the measured GTX 1650
+  // has a working desktop renderer or that any game streams end to end.
+  const gamingCapableHost={...lowTierRealMachine,desktopGpuRenderingAvailable:true};
+  const result=analyzeWorkspace(gamingCapableHost,workspaceManifest('gaming')!);
+  assert.equal(result.state,'LIMITED');
+  assert.ok(result.reasonCodes.includes('VRAM_BELOW_RECOMMENDED'));
+  assert.equal(result.missingCodes.length,0,'minimum hardware is present; game-specific performance still needs qualification');
+});
+
 test('a mid-tier machine meets AI Workspace minimum but not its recommended tier, scored as LIMITED not READY',()=>{
   const result=analyzeWorkspace(midTierMachine,workspaceManifest('ai')!);
   assert.equal(result.state,'LIMITED');

@@ -22,6 +22,7 @@
     <a id="nativeDesktopManage" class="gaming-manage" href="session.html">Session</a>
     <button id="nativeDesktopFullscreen" type="button" aria-pressed="false">Plein écran</button>
     <button id="nativeDesktopPointerLock" type="button" aria-pressed="false">Verrouiller la souris</button>
+    <button id="nativeDesktopAudioEnable" type="button" aria-pressed="false">Activer le son</button>
     <button id="nativeDesktopStopSession" class="gaming-stop" type="button">Arrêter</button>
   </header>
   <main class="gaming-layout">
@@ -29,6 +30,9 @@
       <div class="gaming-player-bar">
         <span>SESSION PRIVÉE</span>
         <span id="nativeDesktopContinuity" role="status">Flux observé : 0/300 s</span>
+        <label class="gaming-volume" for="nativeDesktopAudioVolume">Volume
+          <input id="nativeDesktopAudioVolume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume du jeu">
+        </label>
       </div>
       <canvas id="nativeDesktopCanvas" width="1280" height="720" aria-label="Flux du jeu GPUbnb. Cliquez pour activer les commandes."></canvas>
       <div class="gaming-player-footer">
@@ -41,8 +45,8 @@
       <h1>Espace de jeu</h1>
       <p>Le workspace affiche le jeu et ses commandes. Il ne donne pas accès au bureau Windows de l’hôte.</p>
       <div class="gaming-launch-state" role="status">
-        <strong>Lancement du jeu non disponible</strong>
-        <p>Le runtime isolé ne lance pas encore Steam ni un jeu depuis cette page. Le Gaming Workspace reste en qualification privée; aucune location publique n’est activée.</p>
+        <strong>Session Gaming en qualification privée</strong>
+        <p>Quand le worker de test démarre, Steam s’ouvre dans la session locataire isolée. La réservation et le choix d’un jeu restent bloqués jusqu’à la qualification réelle; aucune location publique n’est activée.</p>
       </div>
       <div class="gaming-card">
         <strong>Votre compte et vos jeux</strong>
@@ -60,6 +64,6 @@
     </aside>
   </main>
   <script src="config.js"></script>
-  <script type="module" src="windows-native-desktop-page.js?v=20261122-gaming-workspace-1"></script>
+  <script type="module" src="windows-native-desktop-page.js?v=20261122-gaming-workspace-3"></script>
 </body>
 </html>

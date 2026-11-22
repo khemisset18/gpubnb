@@ -1,5 +1,9 @@
 //! Loopback-only browser media transport for controlled physical qualification.
 
+use crate::browser_audio_protocol::{
+    BROWSER_AUDIO_HEADER_SIZE, BROWSER_AUDIO_PROTOCOL_VERSION, BrowserAudioPacketHeader,
+    encode_browser_audio_header,
+};
 use crate::browser_input_protocol::{BROWSER_INPUT_FRAME_SIZE, BrowserInputFence};
 use crate::browser_media_protocol::{
     BROWSER_MEDIA_CODEC_H264, BROWSER_MEDIA_FLAG_KEYFRAME, BROWSER_MEDIA_HEADER_SIZE,
@@ -559,6 +563,7 @@ fn write_browser_media_frame(
             },
             stream_epoch,
             frame_sequence: frame.header.frame_sequence,
+            qpc_position_100ns: frame.header.qpc_position_100ns,
             width: frame.header.width,
             height: frame.header.height,
             frame_bytes: frame.bytes.len() as u32,
@@ -573,6 +578,33 @@ fn write_browser_media_frame(
         let mut packet = Vec::with_capacity(packet_len);
         packet.extend_from_slice(&encoded);
         packet.extend_from_slice(&frame.bytes[chunk.offset..chunk.offset + chunk.len]);
+        write_websocket_binary(stream, &packet)?;
+    }
+    for audio in &frame.audio_packets {
+        let payload_bytes = u32::try_from(audio.bytes.len())
+            .map_err(|_| QualificationMediaServerError::Protocol)?;
+        let audio_header = BrowserAudioPacketHeader {
+            protocol_version: BROWSER_AUDIO_PROTOCOL_VERSION,
+            sample_format: audio.sample_format,
+            stream_epoch,
+            frame_sequence: frame.header.frame_sequence,
+            audio_qpc_position_100ns: audio.qpc_position_100ns,
+            video_qpc_position_100ns: frame.header.qpc_position_100ns,
+            sample_rate: audio.sample_rate,
+            channels: audio.channels,
+            frames: audio.frames,
+            silent: audio.silent,
+            discontinuity: audio.discontinuity,
+            payload_bytes,
+        };
+        let encoded = encode_browser_audio_header(audio_header)
+            .map_err(|_| QualificationMediaServerError::Protocol)?;
+        let packet_len = BROWSER_AUDIO_HEADER_SIZE
+            .checked_add(audio.bytes.len())
+            .ok_or(QualificationMediaServerError::Protocol)?;
+        let mut packet = Vec::with_capacity(packet_len);
+        packet.extend_from_slice(&encoded);
+        packet.extend_from_slice(&audio.bytes);
         write_websocket_binary(stream, &packet)?;
     }
     Ok(())
