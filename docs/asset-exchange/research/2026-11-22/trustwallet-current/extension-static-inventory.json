@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS_OFFICIAL_CRX_SIGNATURE_AND_STATIC_INVENTORY_ONLY",
+  "extensionId": "egjidjbpglichdcondbcbdnbeeppgdph",
+  "version": "26.45.1",
+  "manifestVersion": 3,
+  "crxBytes": 14882111,
+  "crxSha256": "798e41ee33fa382ebb23ae7b9e33943bc71267d873cd9230360456d95d786391",
+  "zipSha256": "e31544bab0295d2b59b25cbb299f7c8fdf210717c893a6823c606602de2c82f9",
+  "manifestSha256": "abf3b889b499c425e2c8fa5ae0965f6e78b9b06508a92a5d8d838a5193d9f94c",
+  "proofs": [
+    {
+      "algorithm": "RSA_SHA256",
+      "publicKeySha256": "b5e4096227b83f82101fc2aa49f2a251accde3d98471464dd17d1819b43786b0",
+      "signatureValid": true,
+      "keyMatchesExtensionId": false
+    },
+    {
+      "algorithm": "RSA_SHA256",
+      "publicKeySha256": "4698391f6b82732ed31213d144ff63f7b225169b1bf752eeb296149894b7b9c7",
+      "signatureValid": true,
+      "keyMatchesExtensionId": true
+    },
+    {
+      "algorithm": "ECDSA_SHA256",
+      "publicKeySha256": "61f7f2a6bfcf74cd0bc1fe2497cc9b04254c658f79f2145392867ea8366367cf",
+      "signatureValid": true,
+      "keyMatchesExtensionId": false
+    }
+  ],
+  "zipCrc": "PASS",
+  "entries": 434,
+  "uncompressedBytes": 55926262,
+  "contentScripts": [
+    {
+      "matches": [
+        "http://127.0.0.1/*",
+        "http://localhost/*",
+        "https://*/*"
+      ],
+      "all_frames": true,
+      "exclude_matches": [
+        "*://*.amazon-adsystem.com/*",
+        "*://*.arkoselabs.com/*",
+        "*://*.calendar.google.com/*",
+        "*://*.captcha-delivery.com/*",
+        "*://*.challenges.cloudflare.com/*",
+        "*://*.docs.google.com/*",
+        "*://*.doubleclick.net/*",
+        "*://*.drive.google.com/*",
+        "*://*.facebook.com/*",
+        "*://*.fb.com/*",
+        "*://*.funcaptcha.com/*",
+        "*://*.googlesyndication.com/*",
+        "*://*.hcaptcha.com/*",
+        "*://*.instagram.com/*",
+        "*://*.keep.google.com/*",
+        "*://*.linkedin.com/*",
+        "*://*.magic.link/*",
+        "*://*.mail.google.com/*",
+        "*://*.meet.google.com/*",
+        "*://*.messenger.com/*",
+        "*://*.meta.com/*",
+        "*://*.recaptcha.net/recaptcha/*",
+        "*://*.snapchat.com/*",
+        "*://*.threads.net/*",
+        "*://*.tiktok.com/*",
+        "*://*.twitter.com/*",
+        "*://*.whatsapp.com/*",
+        "*://*.workplace.com/*",
+        "*://*.x.com/*",
+        "*://www.google.com/recaptcha/*"
+      ],
+      "run_at": "document_start",
+      "js": [
+        "content-scripts/content.js"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "webAccessibleResources": null,
+  "staticCandidateFiles": [
+    "chunks/RetryErrorContent-Dc2HNB2r.js",
+    "chunks/PrivateDataProvider-Dlknr6pY.js",
+    "chunks/OnboardingBoxContent-D_a7DJvM.js",
+    "chunks/SelectProviderItem-DjyVcFGA.js",
+    "chunks/EmptySearchContent-BMyq8Kx-.js",
+    "content-scripts/content.js",
+    "inpage.js"
+  ],
+  "installation": false,
+  "extensionCodeExecuted": false,
+  "walletConnected": false,
+  "keysGenerated": 0,
+  "signaturesRequested": 0,
+  "broadcasts": 0,
+  "dogeSigningCompatibility": "NOT_ESTABLISHED_BY_ARCHIVE_VERIFICATION"
+}

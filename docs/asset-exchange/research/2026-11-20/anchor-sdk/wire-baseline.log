@@ -1,0 +1,656 @@
+info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu
+info: latest update on 2026-07-16 for version 1.97.1 (8bab26f4f 2026-07-14)
+info: component clippy is up to date
+info: component rustfmt is up to date
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+ Downloading crates ...
+  Downloaded cpufeatures v0.3.0
+  Downloaded num-derive v0.4.2
+  Downloaded proc-macro-crate v3.5.0
+  Downloaded proc-macro-crate v0.1.5
+  Downloaded block-buffer v0.10.4
+  Downloaded anchor-attribute-access-control v0.31.1
+  Downloaded anchor-derive-accounts v0.31.1
+  Downloaded quote v1.0.47
+  Downloaded ppv-lite86 v0.2.21
+  Downloaded ecdsa v0.17.0
+  Downloaded anchor-lang-idl-spec v0.1.0
+  Downloaded curve25519-dalek-derive v0.1.1
+  Downloaded hmac v0.13.0
+  Downloaded base64ct v1.8.3
+  Downloaded constant_time_eq v0.4.2
+  Downloaded primefield v0.14.0
+  Downloaded bytemuck_derive v1.11.0
+  Downloaded crypto-common v0.1.7
+  Downloaded ctutils v0.4.8
+  Downloaded equivalent v1.0.2
+  Downloaded anchor-attribute-constant v0.31.1
+  Downloaded cpufeatures v0.2.17
+  Downloaded hashbrown v0.13.2
+  Downloaded sec1 v0.8.1
+  Downloaded anchor-attribute-error v0.31.1
+  Downloaded bytemuck v1.25.2
+  Downloaded rand_core v0.6.4
+  Downloaded anchor-attribute-program v0.31.1
+  Downloaded borsh-derive-internal v0.10.4
+  Downloaded find-msvc-tools v0.1.9
+  Downloaded solana-clock v2.2.3
+  Downloaded bitflags v2.13.1
+  Downloaded five8 v0.2.1
+  Downloaded borsh-derive v0.10.4
+  Downloaded primeorder v0.14.0
+  Downloaded group v0.14.0
+  Downloaded anchor-attribute-account v0.31.1
+  Downloaded signature v3.0.0
+  Downloaded const-oid v0.10.3
+  Downloaded solana-program-error v2.2.2
+  Downloaded crypto-common v0.2.2
+  Downloaded heck v0.3.3
+  Downloaded solana-short-vec v2.2.1
+  Downloaded cfg_aliases v0.2.2
+  Downloaded generic-array v0.14.7
+  Downloaded borsh-derive v1.8.0
+  Downloaded bs58 v0.5.1
+  Downloaded log v0.4.33
+  Downloaded anchor-derive-serde v0.31.1
+  Downloaded ff v0.14.0
+  Downloaded itoa v1.0.18
+  Downloaded num-integer v0.1.46
+  Downloaded arrayvec v0.7.8
+  Downloaded once_cell v1.21.4
+  Downloaded elliptic-curve v0.14.3
+  Downloaded anchor-lang v0.31.1
+  Downloaded base16ct v1.0.0
+  Downloaded base64 v0.21.7
+  Downloaded bv v0.11.1
+  Downloaded bytes v1.12.1
+  Downloaded getrandom v0.2.17
+  Downloaded anchor-derive-space v0.31.1
+  Downloaded cc v1.4.0
+  Downloaded arrayref v0.3.9
+  Downloaded five8_const v0.1.4
+  Downloaded solana-address-lookup-table-interface v2.2.2
+  Downloaded bincode v1.3.3
+  Downloaded anchor-attribute-event v0.31.1
+  Downloaded digest v0.10.7
+  Downloaded hashbrown v0.17.1
+  Downloaded feature-probe v0.1.1
+  Downloaded solana-borsh v2.2.1
+  Downloaded anyhow v1.0.104
+  Downloaded indexmap v2.14.0
+  Downloaded solana-instruction v2.3.3
+  Downloaded autocfg v1.5.1
+  Downloaded proc-macro2 v1.0.107
+  Downloaded cfg-if v1.0.4
+  Downloaded der v0.8.3
+  Downloaded serde v1.0.229
+  Downloaded ahash v0.8.12
+  Downloaded anchor-syn v0.31.1
+  Downloaded k256 v0.14.0
+  Downloaded rand v0.8.7
+  Downloaded semver v1.0.28
+  Downloaded borsh-schema-derive-internal v0.10.4
+  Downloaded solana-cpi v2.2.1
+  Downloaded lazy_static v1.5.0
+  Downloaded version_check v0.9.5
+  Downloaded block-buffer v0.12.1
+  Downloaded crypto-bigint v0.7.11
+  Downloaded hybrid-array v0.4.13
+  Downloaded keccak v0.1.6
+  Downloaded solana-feature-gate-interface v2.2.2
+  Downloaded blake3 v1.8.5
+  Downloaded rustc_version v0.4.1
+  Downloaded solana-loader-v3-interface v5.0.0
+  Downloaded solana-nonce v2.2.1
+  Downloaded subtle v2.6.1
+  Downloaded rand_core v0.10.1
+  Downloaded getrandom v0.4.3
+  Downloaded toml v0.5.11
+  Downloaded solana-sysvar-id v2.2.1
+  Downloaded memchr v2.8.3
+  Downloaded curve25519-dalek v4.1.3
+  Downloaded memoffset v0.9.1
+  Downloaded solana-hash v2.3.0
+  Downloaded anchor-lang-idl v0.1.4
+  Downloaded five8_core v0.1.2
+  Downloaded solana-account v2.2.1
+  Downloaded solana-fee-calculator v2.2.1
+  Downloaded solana-epoch-schedule v2.2.1
+  Downloaded solana-sdk-macro v2.2.1
+  Downloaded solana-serialize-utils v2.2.1
+  Downloaded solana-system-interface v1.0.0
+  Downloaded solana-keccak-hasher v2.2.1
+  Downloaded solana-program-pack v2.2.1
+  Downloaded solana-slot-hashes v2.2.1
+  Downloaded solana-stable-layout v2.2.1
+  Downloaded solana-serde-varint v2.2.2
+  Downloaded digest v0.11.3
+  Downloaded spki v0.8.1
+  Downloaded thiserror-impl v2.0.19
+  Downloaded zeroize v1.9.0
+  Downloaded borsh v0.10.4
+  Downloaded cmov v0.5.4
+  Downloaded zmij v1.0.23
+  Downloaded sha2 v0.11.1
+  Downloaded solana-loader-v4-interface v2.2.1
+  Downloaded pkcs8 v0.11.0
+  Downloaded sha2 v0.10.9
+  Downloaded solana-instructions-sysvar v2.2.2
+  Downloaded serde_bytes v0.11.19
+  Downloaded solana-native-token v2.3.0
+  Downloaded solana-program-memory v2.3.1
+  Downloaded solana-pubkey v2.4.0
+  Downloaded solana-sysvar v2.3.0
+  Downloaded toml_parser v1.1.3+spec-1.1.0
+  Downloaded shlex v2.0.1
+  Downloaded solana-big-mod-exp v2.2.1
+  Downloaded wnaf v0.14.1
+  Downloaded solana-transaction-error v2.2.1
+  Downloaded solana-vote-interface v2.2.6
+  Downloaded thiserror v1.0.69
+  Downloaded solana-slot-history v2.2.1
+  Downloaded tinyvec v1.12.0
+  Downloaded base64 v0.22.1
+  Downloaded solana-message v2.4.0
+  Downloaded rand_chacha v0.3.1
+  Downloaded solana-example-mocks v2.2.1
+  Downloaded solana-account-info v2.3.0
+  Downloaded solana-decode-error v2.3.0
+  Downloaded serdect v0.4.3
+  Downloaded borsh v1.8.0
+  Downloaded num-bigint v0.4.8
+  Downloaded solana-program v2.3.0
+  Downloaded typenum v1.20.1
+  Downloaded unicode-segmentation v1.13.3
+  Downloaded winnow v1.0.4
+  Downloaded syn v1.0.109
+  Downloaded libc v0.2.189
+  Downloaded num-traits v0.2.19
+  Downloaded solana-atomic-u64 v2.2.1
+  Downloaded thiserror v2.0.19
+  Downloaded serde_derive v1.0.229
+  Downloaded solana-last-restart-slot v2.2.1
+  Downloaded solana-loader-v2-interface v2.2.1
+  Downloaded solana-program-option v2.2.1
+  Downloaded solana-blake3-hasher v2.2.1
+  Downloaded solana-rent v2.2.1
+  Downloaded solana-sha256-hasher v2.3.0
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded solana-sdk-ids v2.2.1
+  Downloaded sha3 v0.10.9
+  Downloaded solana-epoch-rewards v2.2.1
+  Downloaded zerocopy v0.8.55
+  Downloaded serde_core v1.0.229
+  Downloaded serde_json v1.0.151
+  Downloaded solana-stake-interface v1.2.1
+  Downloaded syn v2.0.119
+  Downloaded toml_datetime v1.1.1+spec-1.1.0
+  Downloaded cpubits v0.1.1
+  Downloaded solana-sanitize v2.2.1
+  Downloaded solana-bincode v2.2.1
+  Downloaded toml_edit v0.25.13+spec-1.1.0
+  Downloaded syn v3.0.3
+  Downloaded unicode-ident v1.0.24
+  Downloaded solana-msg v2.2.1
+  Downloaded thiserror-impl v1.0.69
+  Downloaded solana-program-entrypoint v2.3.0
+  Downloaded rfc6979 v0.6.0
+    Blocking waiting for file lock on package cache
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling cfg-if v1.0.4
+   Compiling version_check v0.9.5
+   Compiling serde_core v1.0.229
+   Compiling syn v3.0.3
+   Compiling typenum v1.20.1
+   Compiling serde v1.0.229
+   Compiling serde_derive v1.0.229
+   Compiling generic-array v0.14.7
+   Compiling libc v0.2.189
+   Compiling syn v2.0.119
+   Compiling zeroize v1.9.0
+   Compiling subtle v2.6.1
+   Compiling autocfg v1.5.1
+   Compiling syn v1.0.109
+   Compiling num-traits v0.2.19
+   Compiling cpufeatures v0.2.17
+   Compiling equivalent v1.0.2
+   Compiling winnow v1.0.4
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.0
+   Compiling toml_parser v1.1.3+spec-1.1.0
+   Compiling zerocopy v0.8.55
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling toml_edit v0.25.13+spec-1.1.0
+   Compiling cfg_aliases v0.2.2
+   Compiling borsh v1.8.0
+   Compiling proc-macro-crate v3.5.0
+   Compiling once_cell v1.21.4
+   Compiling borsh-derive v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling five8_core v0.1.2
+   Compiling digest v0.10.7
+   Compiling ahash v0.8.12
+   Compiling five8 v0.2.1
+   Compiling borsh-derive-internal v0.10.4
+   Compiling getrandom v0.2.17
+   Compiling bytemuck_derive v1.11.0
+   Compiling toml v0.5.11
+   Compiling semver v1.0.28
+   Compiling bytemuck v1.25.2
+   Compiling solana-sanitize v2.2.1
+   Compiling solana-atomic-u64 v2.2.1
+   Compiling solana-hash v2.3.0
+   Compiling rustc_version v0.4.1
+   Compiling proc-macro-crate v0.1.5
+   Compiling rand_core v0.6.4
+   Compiling borsh-schema-derive-internal v0.10.4
+   Compiling curve25519-dalek v4.1.3
+   Compiling hashbrown v0.13.2
+   Compiling borsh-derive v0.10.4
+   Compiling zmij v1.0.23
+   Compiling sha2 v0.10.9
+   Compiling borsh v0.10.4
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling serde_json v1.0.151
+   Compiling solana-sha256-hasher v2.3.0
+   Compiling five8_const v0.1.4
+   Compiling solana-decode-error v2.3.0
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling solana-pubkey v2.4.0
+   Compiling bincode v1.3.3
+   Compiling bs58 v0.5.1
+   Compiling rand_core v0.10.1
+   Compiling solana-sdk-ids v2.2.1
+   Compiling solana-instruction v2.3.3
+   Compiling hybrid-array v0.4.13
+   Compiling getrandom v0.4.3
+   Compiling cmov v0.5.4
+   Compiling ctutils v0.4.8
+   Compiling const-oid v0.10.3
+   Compiling crypto-common v0.2.2
+   Compiling solana-sysvar-id v2.2.1
+   Compiling block-buffer v0.12.1
+   Compiling digest v0.11.3
+   Compiling solana-sdk-macro v2.2.1
+   Compiling anyhow v1.0.104
+   Compiling unicode-segmentation v1.13.3
+   Compiling solana-msg v2.2.1
+   Compiling thiserror v1.0.69
+   Compiling solana-program-error v2.2.2
+   Compiling heck v0.3.3
+   Compiling thiserror-impl v1.0.69
+   Compiling cpubits v0.1.1
+   Compiling crypto-bigint v0.7.11
+   Compiling der v0.8.3
+   Compiling solana-system-interface v1.0.0
+   Compiling ff v0.14.0
+   Compiling solana-program-memory v2.3.1
+   Compiling solana-account-info v2.3.0
+   Compiling anchor-syn v0.31.1
+   Compiling solana-clock v2.2.3
+   Compiling find-msvc-tools v0.1.9
+   Compiling cpufeatures v0.3.0
+   Compiling shlex v2.0.1
+   Compiling cc v1.4.0
+   Compiling group v0.14.0
+   Compiling spki v0.8.1
+   Compiling base16ct v1.0.0
+   Compiling sec1 v0.8.1
+   Compiling pkcs8 v0.11.0
+   Compiling blake3 v1.8.5
+   Compiling feature-probe v0.1.1
+   Compiling bv v0.11.1
+   Compiling elliptic-curve v0.14.3
+   Compiling primefield v0.14.0
+   Compiling hmac v0.13.0
+   Compiling arrayvec v0.7.8
+   Compiling log v0.4.33
+   Compiling arrayref v0.3.9
+   Compiling constant_time_eq v0.4.2
+   Compiling thiserror v2.0.19
+   Compiling solana-fee-calculator v2.2.1
+   Compiling rfc6979 v0.6.0
+   Compiling wnaf v0.14.1
+   Compiling solana-rent v2.2.1
+   Compiling signature v3.0.0
+   Compiling solana-slot-hashes v2.2.1
+   Compiling solana-serialize-utils v2.2.1
+   Compiling solana-short-vec v2.2.1
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_bytes v0.11.19
+   Compiling lazy_static v1.5.0
+   Compiling keccak v0.1.6
+   Compiling sha3 v0.10.9
+   Compiling ecdsa v0.17.0
+   Compiling primeorder v0.14.0
+   Compiling sha2 v0.11.1
+   Compiling solana-cpi v2.2.1
+   Compiling solana-bincode v2.2.1
+   Compiling solana-transaction-error v2.2.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling num-integer v0.1.46
+   Compiling memoffset v0.9.1
+   Compiling bitflags v2.13.1
+   Compiling solana-instructions-sysvar v2.2.2
+   Compiling num-bigint v0.4.8
+   Compiling rand_chacha v0.3.1
+   Compiling k256 v0.14.0
+   Compiling solana-message v2.4.0
+   Compiling solana-stake-interface v1.2.1
+   Compiling solana-slot-history v2.2.1
+   Compiling solana-keccak-hasher v2.2.1
+   Compiling solana-address-lookup-table-interface v2.2.2
+   Compiling solana-nonce v2.2.1
+   Compiling solana-account v2.2.1
+   Compiling solana-program-entrypoint v2.3.0
+   Compiling anchor-lang-idl-spec v0.1.0
+   Compiling solana-last-restart-slot v2.2.1
+   Compiling solana-epoch-schedule v2.2.1
+   Compiling solana-epoch-rewards v2.2.1
+   Compiling num-derive v0.4.2
+   Compiling solana-serde-varint v2.2.2
+   Compiling base64 v0.22.1
+   Compiling solana-vote-interface v2.2.6
+   Compiling solana-sysvar v2.3.0
+   Compiling anchor-lang-idl v0.1.4
+   Compiling solana-feature-gate-interface v2.2.2
+   Compiling solana-example-mocks v2.2.1
+   Compiling solana-big-mod-exp v2.2.1
+   Compiling solana-secp256k1-recover v2.2.1 (/workspace/scratch/44921c6f8796/anchor-wire-baseline-20261120/vendor/security/solana-secp256k1-recover-2.2.1)
+   Compiling rand v0.8.7
+   Compiling solana-loader-v3-interface v5.0.0
+   Compiling solana-loader-v4-interface v2.2.1
+   Compiling solana-loader-v2-interface v2.2.1
+   Compiling solana-blake3-hasher v2.2.1
+   Compiling solana-program-pack v2.2.1
+   Compiling solana-stable-layout v2.2.1
+   Compiling solana-borsh v2.2.1
+   Compiling solana-native-token v2.3.0
+   Compiling solana-program-option v2.2.1
+   Compiling anchor-attribute-program v0.31.1
+   Compiling solana-program v2.3.0
+   Compiling anchor-attribute-access-control v0.31.1
+   Compiling anchor-derive-serde v0.31.1
+   Compiling anchor-derive-accounts v0.31.1
+   Compiling anchor-attribute-constant v0.31.1
+   Compiling anchor-attribute-account v0.31.1
+   Compiling anchor-attribute-error v0.31.1
+   Compiling anchor-attribute-event v0.31.1
+   Compiling anchor-derive-space v0.31.1
+   Compiling base64 v0.21.7
+   Compiling anchor-lang v0.31.1
+   Compiling gpu_escrow v0.2.0 (/workspace/scratch/44921c6f8796/anchor-wire-baseline-20261120/programs/gpu_escrow)
+warning: unexpected `cfg` condition value: `custom-heap`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `$crate::custom_heap_default` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+   = note: this warning originates in the macro `$crate::custom_heap_default` which comes from the expansion of the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `solana`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qurt`, `redox`, `rtems`, `solaris`, and `solid_asp3` and 14 more
+   = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `$crate::custom_heap_default` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the macro `$crate::custom_heap_default` which comes from the expansion of the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `custom-panic`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `$crate::custom_panic_default` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the macro `$crate::custom_panic_default` which comes from the expansion of the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `solana`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qurt`, `redox`, `rtems`, `solaris`, and `solid_asp3` and 14 more
+   = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `$crate::custom_panic_default` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the macro `$crate::custom_panic_default` which comes from the expansion of the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a attribute macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `program` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `no-idl`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a attribute macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `program` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `no-log-ix-name`
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a attribute macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `program` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:176:10
+    |
+176 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:183:10
+    |
+183 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:189:10
+    |
+189 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:195:10
+    |
+195 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:206:10
+    |
+206 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:213:10
+    |
+213 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:219:10
+    |
+219 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:231:10
+    |
+231 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> programs/gpu_escrow/src/lib.rs:244:10
+    |
+244 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated method `anchor_lang::prelude::AccountInfo::<'a>::realloc`: Use AccountInfo::resize() instead
+  --> programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+   = note: this warning originates in the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: `gpu_escrow` (lib) generated 23 warnings (5 duplicates)
+    Finished `test` profile [unoptimized] target(s) in 58.30s
+     Running tests/anchor_wire_compatibility.rs (/workspace/scratch/44921c6f8796/evidence/anchor-wire-review-20261120/target/debug/deps/anchor_wire_compatibility-0343784275cfd9eb)
+
+running 7 tests
+test account_owners_sizes_discriminators_and_integer_bounds_match ... ANCHOR_WIRE_COMPAT name=config_account hex=9b0caae01efacc82111111111111111111111111111111111111111111111111111111111111111122222222222222222222222222222222222222222222222222222222222222223333333333333333333333333333333333333333333333333333333333333333444444444444444444444444444444444444444444444444444444444444444401ff
+ANCHOR_WIRE_COMPAT name=escrow_account hex=1fd57bbbba16da9b555555555555555555555555555555555555555555555555555555555555555511111111111111111111111111111111111111111111111111111111111111112222222222222222222222222222222222222222222222222222222222222222ffffffffffffffffffffffff000000000000000000000080ffffffffffffff7f04ff
+ok
+test account_truncation_wrong_discriminators_and_noncanonical_bool_fail_closed ... ok
+test all_event_discriminators_and_fields_match_independent_bytes ... ANCHOR_WIRE_COMPAT name=config_initialized_event hex=b531c89c13a7b25b111111111111111111111111111111111111111111111111111111111111111133333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444444444444
+ANCHOR_WIRE_COMPAT name=config_updated_event hex=28f1e67a0b13c6c233333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444444444444
+ANCHOR_WIRE_COMPAT name=pause_changed_event hex=eebcd54e86d1b2da01
+ANCHOR_WIRE_COMPAT name=admin_transfer_proposed_event hex=cba8af33ef68145511111111111111111111111111111111111111111111111111111111111111112222222222222222222222222222222222222222222222222222222222222222
+ANCHOR_WIRE_COMPAT name=admin_transferred_event hex=ff93b605c7d926b311111111111111111111111111111111111111111111111111111111111111112222222222222222222222222222222222222222222222222222222222222222
+ANCHOR_WIRE_COMPAT name=escrow_opened_event hex=c92a60087b09d4a46666666666666666666666666666666666666666666666666666666666666666555555555555555555555555555555555555555555555555555555555555555511111111111111111111111111111111111111111111111111111111111111112222222222222222222222222222222222222222222222222222222222222222ffffffffffffffffffffffff0000000000000080
+ANCHOR_WIRE_COMPAT name=settlement_proposed_event hex=8b2040cd1b9a6493666666666666666666666666666666666666666666666666666666666666666600000000ffffffffffffff7f
+ANCHOR_WIRE_COMPAT name=escrow_disputed_event hex=844951c8b133801266666666666666666666666666666666666666666666666666666666666666661111111111111111111111111111111111111111111111111111111111111111
+ANCHOR_WIRE_COMPAT name=escrow_settled_event hex=611b9637cbb3ad176666666666666666666666666666666666666666666666666666666666666666ffffffffffffffff0100000000000000feffffffffffffff0000000000000000ffffffff
+ANCHOR_WIRE_COMPAT name=escrow_refunded_event hex=84d1316d878a1c5166666666666666666666666666666666666666666666666666666666666666661111111111111111111111111111111111111111111111111111111111111111ffffffffffffffff
+ok
+test all_generated_account_orders_and_privileges_match ... ANCHOR_WIRE_COMPAT name=initialize_config_metas metas=11:1:1,22:0:1,33:0:0
+ANCHOR_WIRE_COMPAT name=admin_config_metas metas=11:1:0,22:0:1
+ANCHOR_WIRE_COMPAT name=accept_admin_metas metas=11:1:0,22:0:1
+ANCHOR_WIRE_COMPAT name=open_metas metas=11:0:0,22:1:1,33:0:0,44:0:1,55:0:0
+ANCHOR_WIRE_COMPAT name=propose_settlement_metas metas=11:0:0,22:1:0,33:0:1
+ANCHOR_WIRE_COMPAT name=dispute_metas metas=11:1:0,22:0:1
+ANCHOR_WIRE_COMPAT name=finalize_metas metas=11:0:0,22:0:1,33:0:1,44:0:1,55:0:1
+ANCHOR_WIRE_COMPAT name=resolve_dispute_metas metas=11:0:0,22:1:0,33:0:1,44:0:1,55:0:1,66:0:1
+ANCHOR_WIRE_COMPAT name=refund_expired_metas metas=11:0:1,22:0:1
+ok
+test all_instruction_discriminators_and_payloads_match_independent_bytes ... ANCHOR_WIRE_COMPAT name=initialize_config hex=d07f1501c2bec44633333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444444444444
+ANCHOR_WIRE_COMPAT name=update_config hex=1d9efcbf0a53db6333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444444444444
+ANCHOR_WIRE_COMPAT name=set_paused_false hex=5b3c7dc0b0e1a6da00
+ANCHOR_WIRE_COMPAT name=set_paused_true hex=5b3c7dc0b0e1a6da01
+ANCHOR_WIRE_COMPAT name=propose_admin hex=79d6c7d4572775ea2222222222222222222222222222222222222222222222222222222222222222
+ANCHOR_WIRE_COMPAT name=accept_admin hex=702a2d5a74b50daa
+ANCHOR_WIRE_COMPAT name=open hex=e4dc9b47c7bd3c2d5555555555555555555555555555555555555555555555555555555555555555080706050403020140302010f8f8f9fafbfcfdfe
+ANCHOR_WIRE_COMPAT name=propose_settlement hex=e495383d892b6a19ffffffff
+ANCHOR_WIRE_COMPAT name=dispute hex=d85c8092ca558749
+ANCHOR_WIRE_COMPAT name=finalize hex=ab3dda387f730cd9
+ANCHOR_WIRE_COMPAT name=resolve_dispute hex=e706ca0660670ce600000000
+ANCHOR_WIRE_COMPAT name=refund_expired hex=7699a4f42880f2fa
+ok
+test program_identity_pda_derivation_and_error_codes_remain_stable ... ANCHOR_WIRE_COMPAT name=config_pda address=7e16ace31b37c38de657fb4fd91f2fcd1d928d3155ac467b2dd1382ca184fddb bump=255
+ANCHOR_WIRE_COMPAT name=escrow_pda address=b66475e97f52837d0dc01d69db5f454d6e33360c655eabdfb7a2c1cefe74a7cc bump=255
+ANCHOR_WIRE_COMPAT name=error_codes values=[6000, 6001, 6002, 6003, 6004, 6005, 6006, 6007, 6008, 6009]
+ok
+test system_transfer_instruction_program_data_and_privileges_remain_stable ... ANCHOR_WIRE_COMPAT name=system_transfer_metas metas=11:1:1,22:0:1
+ANCHOR_WIRE_COMPAT name=system_transfer_data hex=020000000807060504030201 program=11111111111111111111111111111111
+ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "runId": 43760009110,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/43760009110",
+  "executionCommit": "e3fbbe6339d2eaecc6bd999daf2d9fe7fb6a1816",
+  "harnessCommit": "d551db512b070dfa85bc72b068df07ca99127d3f",
+  "jobId": 132952480004,
+  "platform": "ubuntu-24.04 / two private loopback Regtest nodes",
+  "artifactId": 14179763049,
+  "artifactZipSha256": "1771c3b4f504949bbe615891703ed03289d9449c1702430720d080325cd5ef3d",
+  "pass": 2,
+  "fail": 0,
+  "skip": 0,
+  "generatedBlocks": 2,
+  "rpcCalls": 173,
+  "standaloneInvocations": 6,
+  "fundingReorg": {
+    "cases": [
+      {
+        "expectationScope": "exchange-protocol",
+        "fundingBlock": "ee16bec0540c82afb5196b141674e4ab93f09d573c9c10ae32ec1a598ffc9ad9",
+        "id": "pending-refund-after-funding-reorg",
+        "nativeActiveBlocks": 1355,
+        "nativeHeaders": 1356,
+        "nativeParentAndRefundPending": true,
+        "preexistingHeaderGuardRefusedFirst": true,
+        "refusalBroadcasts": 0,
+        "rollbackDepth": 1,
+        "standaloneRefusal": "node has an unresolved header lead; no broadcast",
+        "status": "PASS"
+      },
+      {
+        "bothNodesConfirmed": true,
+        "expectationScope": "exchange-protocol/native-chain",
+        "feeKoinu": "1000000",
+        "id": "same-refund-after-funding-restoration",
+        "identicalPendingBytesRebroadcast": true,
+        "refundTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+        "retainedKoinu": "98000000",
+        "status": "PASS"
+      }
+    ],
+    "feeKoinu": "1000000",
+    "fundingBlockExitedInitialDownload": true,
+    "keysCreated": 0,
+    "newFundingGuardIsolatedNatively": false,
+    "previousNativeSuitesRepeated": false,
+    "qualificationStatus": "BLOCKED",
+    "refundSha256": "22cab13f529699966d13c1d03d8c3d105aae34cacbbf56e7a33c80e5edd20677",
+    "refundTxid": "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd",
+    "retainedBundleSha256": "cb4ec1fcb1dd59b477f4448fa272cea30ed3c6044468ab5ab735a9c124930d15",
+    "retainedKoinu": "98000000",
+    "seedInitialBlockDownload": {
+      "a": true,
+      "b": true
+    },
+    "transactionsSigned": 0
+  },
+  "watcherStages": {
+    "pending-confirmed-funding": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "MEMPOOL",
+        "doge-b": "MEMPOOL"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    },
+    "funding-rolled-back": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "UNCERTAIN",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "UNCERTAIN",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "MEMPOOL",
+        "doge-b": "MEMPOOL"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    },
+    "funding-restored": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "MEMPOOL",
+        "doge-b": "MEMPOOL"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    },
+    "refund-confirmed": {
+      "chainId": "dogecoin",
+      "networkId": "regtest",
+      "tipConsistency": "CONSISTENT",
+      "transactionConsistency": "CONSISTENT",
+      "consistency": "CONSISTENT",
+      "everyFresh": true,
+      "states": {
+        "doge-a": "CONFIRMED",
+        "doge-b": "CONFIRMED"
+      },
+      "canAdvance": false,
+      "settlementAllowed": false,
+      "qualificationStatus": "BLOCKED"
+    }
+  },
+  "softwareTests": {
+    "d6": 45,
+    "signer": 12,
+    "recovery": 30,
+    "watchers": 24,
+    "fail": 0,
+    "skip": 0
+  },
+  "checkedEvidenceSha256": {
+    "multinode-report.json": "a1725b3209577f8ce0246da65b5978ca912663b44e45cafd60adc2fb01de88ad",
+    "rpc-requests.json": "ef490b96471290a55e07a2097e75f55585671a3a23073090735e1278f436cf36",
+    "watcher-review.json": "156f404071edec32d52c5ce3462cca03a96cd8b68ec8349fe985a326bc8026d3",
+    "cleanroom-refusal-18332-funding-reorg-rebroadcast.json": "f27d1862dea7b5e45a36ffecabf1cf1dfee738e8b9e087c7169cb85ae7e5aa7e",
+    "SHA256SUMS": "8d72a7072fcf7ada641aaa828e3a73cde5c010d518d2afcc7fe575127e340af2"
+  },
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false,
+  "limits": [
+    "new funding guard isolated in software only; native header guard refuses first",
+    "one Ubuntu VM does not prove physical host independence",
+    "other native suites deliberately not replayed"
+  ]
+}

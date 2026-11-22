@@ -1,0 +1,47 @@
+[
+  {
+    "name": "foundation",
+    "jobId": 137279412464,
+    "runId": 45045602845,
+    "sourceUrl": "https://github.com/khemisset18/gpubnb/actions/runs/45045602845/job/137279412464",
+    "fullFetchedLogUtf8Bytes": 187078,
+    "fullFetchedLogSha256": "59601f9bfeeec1fba2d33603696daedcebf39cdb89cbc57c8e713ebfc7a7c7b6",
+    "excerpts": [
+      "2026-11-22T16:45:59.3723093Z # tests 277",
+      "2026-11-22T16:45:59.3724502Z # pass 277",
+      "2026-11-22T16:45:59.3724817Z # fail 0",
+      "2026-11-22T16:45:59.3725410Z # skipped 0",
+      "2026-11-22T16:45:59.8197907Z Ran 31 tests in 0.335s",
+      "2026-11-22T16:45:59.8944417Z Ran 11 tests in 0.004s",
+      "2026-11-22T16:46:00.4987866Z Ran 95 tests in 0.467s",
+      "2026-11-22T16:46:02.1377342Z Ran 51 tests in 1.480s",
+      "2026-11-22T16:46:02.7619083Z Ran 14 tests in 0.528s",
+      "2026-11-22T16:46:10.1060232Z Ran 60 tests in 7.233s",
+      "2026-11-22T16:46:14.1185032Z Ran 40 tests in 3.908s"
+    ],
+    "excerptScope": "selected original lines only; not a replacement for the linked complete Actions log"
+  },
+  {
+    "name": "s3",
+    "jobId": 137279411940,
+    "runId": 45045602869,
+    "sourceUrl": "https://github.com/khemisset18/gpubnb/actions/runs/45045602869/job/137279411940",
+    "fullFetchedLogUtf8Bytes": 60879,
+    "fullFetchedLogSha256": "7d105cfdb702c7744373a43a4c98ee840a10fb17ccdfdddd19c9104336a153e6",
+    "excerpts": [
+      "2026-11-22T16:46:14.4421148Z # Subtest: S3-compatible backend performs a real put/get round trip",
+      "2026-11-22T16:46:14.4422033Z ok 1 - S3-compatible backend performs a real put/get round trip",
+      "2026-11-22T16:46:14.4553166Z # tests 1",
+      "2026-11-22T16:46:14.4553712Z # pass 1",
+      "2026-11-22T16:46:14.4554093Z # fail 0",
+      "2026-11-22T16:46:14.4555043Z # skipped 0",
+      "2026-11-22T16:46:15.0092564Z # Subtest: historical filesystem artifact migrates through a real S3-compatible server",
+      "2026-11-22T16:46:15.0111188Z ok 1 - historical filesystem artifact migrates through a real S3-compatible server",
+      "2026-11-22T16:46:15.0215179Z # tests 1",
+      "2026-11-22T16:46:15.0216316Z # pass 1",
+      "2026-11-22T16:46:15.0216770Z # fail 0",
+      "2026-11-22T16:46:15.0218253Z # skipped 0"
+    ],
+    "excerptScope": "selected original lines only; not a replacement for the linked complete Actions log"
+  }
+]

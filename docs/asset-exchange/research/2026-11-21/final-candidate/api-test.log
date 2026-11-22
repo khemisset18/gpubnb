@@ -1,0 +1,4286 @@
+
+> gpubnb-enterprise-api@1.0.0-devnet.1 test
+> tsx --test --test-concurrency=1 test/*.test.ts
+
+TAP version 13
+# Subtest: accelerator heartbeat retries P2034 without dropping Serializable isolation
+ok 1 - accelerator heartbeat retries P2034 without dropping Serializable isolation
+  ---
+  duration_ms: 35.452272
+  type: 'test'
+  ...
+# Subtest: accelerator heartbeat retries P2028 without dropping Serializable isolation
+ok 2 - accelerator heartbeat retries P2028 without dropping Serializable isolation
+  ---
+  duration_ms: 28.323411
+  type: 'test'
+  ...
+# Subtest: accelerator heartbeat preserves a non-transient rejection without retrying
+ok 3 - accelerator heartbeat preserves a non-transient rejection without retrying
+  ---
+  duration_ms: 0.796582
+  type: 'test'
+  ...
+# Subtest: keeps a stable machine publishable
+ok 4 - keeps a stable machine publishable
+  ---
+  duration_ms: 1.036293
+  type: 'test'
+  ...
+# Subtest: requires verification when inventory changes outside a session
+ok 5 - requires verification when inventory changes outside a session
+  ---
+  duration_ms: 0.115234
+  type: 'test'
+  ...
+# Subtest: quarantines and freezes on removal during an active bound session
+ok 6 - quarantines and freezes on removal during an active bound session
+  ---
+  duration_ms: 0.088824
+  type: 'test'
+  ...
+# Subtest: quarantines an identity mutation during an active session
+ok 7 - quarantines an identity mutation during an active session
+  ---
+  duration_ms: 0.07295
+  type: 'test'
+  ...
+# Subtest: does not quarantine a missing accelerator outside a session
+ok 8 - does not quarantine a missing accelerator outside a session
+  ---
+  duration_ms: 0.156566
+  type: 'test'
+  ...
+# Subtest: treats a legacy GPU mismatch as verification outside a session
+ok 9 - treats a legacy GPU mismatch as verification outside a session
+  ---
+  duration_ms: 0.085008
+  type: 'test'
+  ...
+# Subtest: accepts unknown future accelerator kinds
+ok 10 - accepts unknown future accelerator kinds
+  ---
+  duration_ms: 3.817677
+  type: 'test'
+  ...
+# Subtest: rejects duplicate identities
+ok 11 - rejects duplicate identities
+  ---
+  duration_ms: 1.076523
+  type: 'test'
+  ...
+# Subtest: rejects unsafe and unbounded metadata
+ok 12 - rejects unsafe and unbounded metadata
+  ---
+  duration_ms: 1.811932
+  type: 'test'
+  ...
+# Subtest: rejects impossible memory and metric values
+ok 13 - rejects impossible memory and metric values
+  ---
+  duration_ms: 1.249855
+  type: 'test'
+  ...
+# Subtest: selects a compatible primary GPU without excluding other devices
+ok 14 - selects a compatible primary GPU without excluding other devices
+  ---
+  duration_ms: 0.396298
+  type: 'test'
+  ...
+# Subtest: rejects unknown top-level fields and excessive devices
+ok 15 - rejects unknown top-level fields and excessive devices
+  ---
+  duration_ms: 0.42435
+  type: 'test'
+  ...
+# Subtest: Netlify same-origin API routing is generated from provider-neutral build origins
+ok 16 - Netlify same-origin API routing is generated from provider-neutral build origins
+  ---
+  duration_ms: 0.86191
+  type: 'test'
+  ...
+# Subtest: private-beta bookings stay on the registered Compute API path, with Developer unlocked only after GPU_PROOF completes
+ok 17 - private-beta bookings stay on the registered Compute API path, with Developer unlocked only after GPU_PROOF completes
+  ---
+  duration_ms: 0.322396
+  type: 'test'
+  ...
+# Subtest: professional account pages and protected API routes exist
+ok 18 - professional account pages and protected API routes exist
+  ---
+  duration_ms: 0.566584
+  type: 'test'
+  ...
+# Subtest: Compute session has protected lifecycle, metrics and emergency stop
+ok 19 - Compute session has protected lifecycle, metrics and emergency stop
+  ---
+  duration_ms: 0.442968
+  type: 'test'
+  ...
+# Subtest: Compute is prepared before renter arrival and access waits for READY
+ok 20 - Compute is prepared before renter arrival and access waits for READY
+  ---
+  duration_ms: 0.433153
+  type: 'test'
+  ...
+# Subtest: account schema separates private identity and user capabilities
+ok 21 - account schema separates private identity and user capabilities
+  ---
+  duration_ms: 0.200823
+  type: 'test'
+  ...
+# Subtest: workspace catalogue uses one responsive four-column grid
+ok 22 - workspace catalogue uses one responsive four-column grid
+  ---
+  duration_ms: 0.341525
+  type: 'test'
+  ...
+# Subtest: machine rollout bucket is deterministic and bounded
+ok 23 - machine rollout bucket is deterministic and bounded
+  ---
+  duration_ms: 0.679425
+  type: 'test'
+  ...
+# Subtest: zero rollout fails closed without publishing an endpoint
+ok 24 - zero rollout fails closed without publishing an endpoint
+  ---
+  duration_ms: 0.524411
+  type: 'test'
+  ...
+# Subtest: enabled assignment contains transport coordinates only
+ok 25 - enabled assignment contains transport coordinates only
+  ---
+  duration_ms: 0.148874
+  type: 'test'
+  ...
+# Subtest: rollout threshold is stable and monotonic for each machine
+ok 26 - rollout threshold is stable and monotonic for each machine
+  ---
+  duration_ms: 0.122866
+  type: 'test'
+  ...
+# Subtest: a stale Developer preparation is reclaimed before any queued job with a new fenced attempt
+ok 27 - a stale Developer preparation is reclaimed before any queued job with a new fenced attempt
+  ---
+  duration_ms: 1.954767
+  type: 'test'
+  ...
+# Subtest: legacy active jobs remain reclaimable during nullable-column rollout
+ok 28 - legacy active jobs remain reclaimable during nullable-column rollout
+  ---
+  duration_ms: 0.186962
+  type: 'test'
+  ...
+# Subtest: a lost recovery race never claims a second queued job or issues a new lease
+ok 29 - a lost recovery race never claims a second queued job or issues a new lease
+  ---
+  duration_ms: 0.15912
+  type: 'test'
+  ...
+# Subtest: normal queued work receives one auditable attempt and one explicit lease
+ok 30 - normal queued work receives one auditable attempt and one explicit lease
+  ---
+  duration_ms: 0.216246
+  type: 'test'
+  ...
+# Subtest: every new queued rental job is gated to five minutes before startsAt
+ok 31 - every new queued rental job is gated to five minutes before startsAt
+  ---
+  duration_ms: 0.204308
+  type: 'test'
+  ...
+# Subtest: artifact integrity verifier accepts exact SHA-256 and byte count
+ok 32 - artifact integrity verifier accepts exact SHA-256 and byte count
+  ---
+  duration_ms: 0.715108
+  type: 'test'
+  ...
+# Subtest: artifact integrity verifier rejects size and checksum corruption
+ok 33 - artifact integrity verifier rejects size and checksum corruption
+  ---
+  duration_ms: 0.394495
+  type: 'test'
+  ...
+# Subtest: historical filesystem artifact migrates through a real S3-compatible server
+ok 34 - historical filesystem artifact migrates through a real S3-compatible server # SKIP
+  ---
+  duration_ms: 0.499773
+  type: 'test'
+  ...
+# Subtest: dry-run verifies source but never writes destination or DB
+ok 35 - dry-run verifies source but never writes destination or DB
+  ---
+  duration_ms: 15.051438
+  type: 'test'
+  ...
+# Subtest: apply copies, verifies destination, then conditionally updates DB
+ok 36 - apply copies, verifies destination, then conditionally updates DB
+  ---
+  duration_ms: 2.835336
+  type: 'test'
+  ...
+# Subtest: source checksum mismatch blocks copy and metadata update
+ok 37 - source checksum mismatch blocks copy and metadata update
+  ---
+  duration_ms: 2.053256
+  type: 'test'
+  ...
+# Subtest: destination corruption blocks DB update after copy
+ok 38 - destination corruption blocks DB update after copy
+  ---
+  duration_ms: 5.155148
+  type: 'test'
+  ...
+# Subtest: concurrent metadata change is never overwritten
+ok 39 - concurrent metadata change is never overwritten
+  ---
+  duration_ms: 2.395147
+  type: 'test'
+  ...
+# Subtest: already migrated keys skip and unknown prefixes fail closed
+ok 40 - already migrated keys skip and unknown prefixes fail closed
+  ---
+  duration_ms: 0.276256
+  type: 'test'
+  ...
+# Subtest: a partial run is resumable because migrated rows are skipped on the next run
+ok 41 - a partial run is resumable because migrated rows are skipped on the next run
+  ---
+  duration_ms: 3.072393
+  type: 'test'
+  ...
+# Subtest: S3-compatible backend performs a real put/get round trip
+ok 42 - S3-compatible backend performs a real put/get round trip # SKIP
+  ---
+  duration_ms: 0.52384
+  type: 'test'
+  ...
+# Subtest: artifact kind only allows a single safe path segment
+ok 43 - artifact kind only allows a single safe path segment
+  ---
+  duration_ms: 0.961109
+  type: 'test'
+  ...
+# Subtest: artifact object key is deterministic and path-safe
+ok 44 - artifact object key is deterministic and path-safe
+  ---
+  duration_ms: 0.191339
+  type: 'test'
+  ...
+# Subtest: filesystem backend writes backend-aware keys and reads legacy keys
+ok 45 - filesystem backend writes backend-aware keys and reads legacy keys
+  ---
+  duration_ms: 18.092303
+  type: 'test'
+  ...
+# Subtest: filesystem backend rejects path escape and unknown backend
+ok 46 - filesystem backend rejects path escape and unknown backend
+  ---
+  duration_ms: 1.040398
+  type: 'test'
+  ...
+# Subtest: S3 backend writes deterministic backend-aware keys and reads object bodies
+ok 47 - S3 backend writes deterministic backend-aware keys and reads object bodies
+  ---
+  duration_ms: 0.951585
+  type: 'test'
+  ...
+# Subtest: S3 backend refuses cross-bucket and malformed object keys
+ok 48 - S3 backend refuses cross-bucket and malformed object keys
+  ---
+  duration_ms: 0.403598
+  type: 'test'
+  ...
+# Subtest: S3 backend maps object-store 404 to the API storage-not-found contract
+ok 49 - S3 backend maps object-store 404 to the API storage-not-found contract
+  ---
+  duration_ms: 0.310478
+  type: 'test'
+  ...
+# Subtest: routed storage keeps legacy filesystem reads after S3 write cutover
+ok 50 - routed storage keeps legacy filesystem reads after S3 write cutover
+  ---
+  duration_ms: 3.575352
+  type: 'test'
+  ...
+# Subtest: application/octet-stream is parsed as a Buffer for artifact uploads
+ok 51 - application/octet-stream is parsed as a Buffer for artifact uploads
+  ---
+  duration_ms: 85.502347
+  type: 'test'
+  ...
+# Subtest: artifact kind must be a single safe path segment
+ok 52 - artifact kind must be a single safe path segment
+  ---
+  duration_ms: 5.370919
+  type: 'test'
+  ...
+# Subtest: declared artifact size must match the authenticated binary body
+ok 53 - declared artifact size must match the authenticated binary body
+  ---
+  duration_ms: 3.910407
+  type: 'test'
+  ...
+# Subtest: artifact route rejects non-binary parsed bodies
+ok 54 - artifact route rejects non-binary parsed bodies
+  ---
+  duration_ms: 4.63572
+  type: 'test'
+  ...
+# Subtest: private-beta marketplace exposes only the registered Compute workspace
+ok 55 - private-beta marketplace exposes only the registered Compute workspace
+  ---
+  duration_ms: 1.437407
+  type: 'test'
+  ...
+# Subtest: incompatible Compute workspace is explained instead of being offered as compatible
+ok 56 - incompatible Compute workspace is explained instead of being offered as compatible
+  ---
+  duration_ms: 0.17254
+  type: 'test'
+  ...
+# Subtest: marketplace routes the renter through GPU then the registered Compute preparation route
+ok 57 - marketplace routes the renter through GPU then the registered Compute preparation route
+  ---
+  duration_ms: 13.891138
+  type: 'test'
+  ...
+# Subtest: Compute server route creates GPU_PROOF through ensureComputePreparation
+ok 58 - Compute server route creates GPU_PROOF through ensureComputePreparation
+  ---
+  duration_ms: 3.783345
+  type: 'test'
+  ...
+# Subtest: bookings page follows GPU_PROOF, then exposes the automatically prepared Developer workspace once it completes
+ok 59 - bookings page follows GPU_PROOF, then exposes the automatically prepared Developer workspace once it completes
+  ---
+  duration_ms: 1.003043
+  type: 'test'
+  ...
+# Subtest: private-beta workspace browser scripts parse as valid JavaScript
+ok 60 - private-beta workspace browser scripts parse as valid JavaScript
+  ---
+  duration_ms: 49.409393
+  type: 'test'
+  ...
+# Subtest: Developer renter routes are registered (via device-authorization-routes) and reachable, but the marketplace still only lists Compute
+ok 61 - Developer renter routes are registered (via device-authorization-routes) and reachable, but the marketplace still only lists Compute
+  ---
+  duration_ms: 3.479277
+  type: 'test'
+  ...
+# Subtest: the full workspace catalogue always covers all thirteen manifests, once each
+ok 62 - the full workspace catalogue always covers all thirteen manifests, once each
+  ---
+  duration_ms: 0.456378
+  type: 'test'
+  ...
+# Subtest: the catalogue only marks a workspace bookable when it is both compatible and executable, never from compatibility alone
+ok 63 - the catalogue only marks a workspace bookable when it is both compatible and executable, never from compatibility alone
+  ---
+  duration_ms: 0.405913
+  type: 'test'
+  ...
+# Subtest: an incompatible workspace in the full catalogue is explained, not silently hidden
+ok 64 - an incompatible workspace in the full catalogue is explained, not silently hidden
+  ---
+  duration_ms: 0.359352
+  type: 'test'
+  ...
+# Subtest: the workspace-catalogue route is wired to the full thirteen-workspace engine, separately from the booking route
+ok 65 - the workspace-catalogue route is wired to the full thirteen-workspace engine, separately from the booking route
+  ---
+  duration_ms: 1.920315
+  type: 'test'
+  ...
+# Subtest: Data Workspace has its own real booking, status and access routes, parallel to Developer's
+ok 66 - Data Workspace has its own real booking, status and access routes, parallel to Developer's
+  ---
+  duration_ms: 2.302738
+  type: 'test'
+  ...
+# Subtest: retry is not scoped to a single workspace slug, and re-enqueues using the session's own slug
+ok 67 - retry is not scoped to a single workspace slug, and re-enqueues using the session's own slug
+  ---
+  duration_ms: 1.030184
+  type: 'test'
+  ...
+# Subtest: the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway
+ok 68 - the workspace-gateway route filters and the executable-slug gate all agree on which slugs run through the persistent gateway
+  ---
+  duration_ms: 1.407142
+  type: 'test'
+  ...
+# Subtest: AI Workspace has its own real booking, status and access routes, parallel to Data's
+ok 69 - AI Workspace has its own real booking, status and access routes, parallel to Data's
+  ---
+  duration_ms: 0.890593
+  type: 'test'
+  ...
+# Subtest: Video Workspace has its own real booking, status and access routes, parallel to AI's
+ok 70 - Video Workspace has its own real booking, status and access routes, parallel to AI's
+  ---
+  duration_ms: 0.686074
+  type: 'test'
+  ...
+# Subtest: Audio Workspace has its own real booking, status and access routes, parallel to Video's
+ok 71 - Audio Workspace has its own real booking, status and access routes, parallel to Video's
+  ---
+  duration_ms: 0.678454
+  type: 'test'
+  ...
+# Subtest: API Workspace has its own real booking, status and access routes, parallel to Audio's
+ok 72 - API Workspace has its own real booking, status and access routes, parallel to Audio's
+  ---
+  duration_ms: 0.680205
+  type: 'test'
+  ...
+# Subtest: API Workspace is compatible even with a modest CPU-only-capable machine - no vram/cuda minimum by design
+ok 73 - API Workspace is compatible even with a modest CPU-only-capable machine - no vram/cuda minimum by design
+  ---
+  duration_ms: 0.237579
+  type: 'test'
+  ...
+# Subtest: Mobile Workspace has its own real booking, status and access routes, parallel to API's
+ok 74 - Mobile Workspace has its own real booking, status and access routes, parallel to API's
+  ---
+  duration_ms: 0.985006
+  type: 'test'
+  ...
+# Subtest: Mobile Workspace no longer requires virtualization - it is a plain container, not a VM
+ok 75 - Mobile Workspace no longer requires virtualization - it is a plain container, not a VM
+  ---
+  duration_ms: 0.255565
+  type: 'test'
+  ...
+# Subtest: Mobile Workspace is bookable now that its real runtime has been built, tested and live-validated
+ok 76 - Mobile Workspace is bookable now that its real runtime has been built, tested and live-validated
+  ---
+  duration_ms: 0.175314
+  type: 'test'
+  ...
+# Subtest: Security Lab Workspace has its own real booking, status and access routes, parallel to Mobile's
+ok 77 - Security Lab Workspace has its own real booking, status and access routes, parallel to Mobile's
+  ---
+  duration_ms: 2.362378
+  type: 'test'
+  ...
+# Subtest: Security Lab Workspace no longer requires virtualization - it is a plain container, not a VM
+ok 78 - Security Lab Workspace no longer requires virtualization - it is a plain container, not a VM
+  ---
+  duration_ms: 0.23847
+  type: 'test'
+  ...
+# Subtest: Security Lab Workspace is bookable now that its real runtime has been built, tested and live-validated
+ok 79 - Security Lab Workspace is bookable now that its real runtime has been built, tested and live-validated
+  ---
+  duration_ms: 0.25828
+  type: 'test'
+  ...
+# Subtest: database trigger covers every resource-locking booking state
+ok 80 - database trigger covers every resource-locking booking state
+  ---
+  duration_ms: 5.658323
+  type: 'test'
+  ...
+# Subtest: database trigger releases or cancels allocations for every terminal booking state
+ok 81 - database trigger releases or cancels allocations for every terminal booking state
+  ---
+  duration_ms: 1.254041
+  type: 'test'
+  ...
+# Subtest: synchronization is transaction-scoped, serialized per machine, and idempotent
+ok 82 - synchronization is transaction-scoped, serialized per machine, and idempotent
+  ---
+  duration_ms: 1.058025
+  type: 'test'
+  ...
+# Subtest: moving a booking backwards cannot resurrect a terminal allocation
+ok 83 - moving a booking backwards cannot resurrect a terminal allocation
+  ---
+  duration_ms: 0.938725
+  type: 'test'
+  ...
+# Subtest: payment and execution states preserve the resource lock
+ok 84 - payment and execution states preserve the resource lock
+  ---
+  duration_ms: 1.052607
+  type: 'test'
+  ...
+# Subtest: terminal booking states release or cancel physical resources
+ok 85 - terminal booking states release or cancel physical resources
+  ---
+  duration_ms: 0.24556
+  type: 'test'
+  ...
+# Subtest: created and disputed bookings do not silently mutate allocations
+ok 86 - created and disputed bookings do not silently mutate allocations
+  ---
+  duration_ms: 0.1193
+  type: 'test'
+  ...
+# Subtest: POST /bookings/:id/cancel only ever transitions AWAITING_DEPOSIT bookings, owned by the caller
+ok 87 - POST /bookings/:id/cancel only ever transitions AWAITING_DEPOSIT bookings, owned by the caller
+  ---
+  duration_ms: 6.181442
+  type: 'test'
+  ...
+# Subtest: the booking overlap check excludes CANCELLED, so a cancelled hold frees its time slot
+ok 88 - the booking overlap check excludes CANCELLED, so a cancelled hold frees its time slot
+  ---
+  duration_ms: 1.50542
+  type: 'test'
+  ...
+# Subtest: the dashboard exposes listing.id on each booking, not just its title
+ok 89 - the dashboard exposes listing.id on each booking, not just its title
+  ---
+  duration_ms: 1.502306
+  type: 'test'
+  ...
+# Subtest: terminal bookings cannot be resurrected into reserving or executing states
+ok 90 - terminal bookings cannot be resurrected into reserving or executing states
+  ---
+  duration_ms: 5.125228
+  type: 'test'
+  ...
+# Subtest: every paid or executing booking state requires a live resource allocation
+ok 91 - every paid or executing booking state requires a live resource allocation
+  ---
+  duration_ms: 1.132869
+  type: 'test'
+  ...
+# Subtest: normal settlement transitions remain possible after completion
+ok 92 - normal settlement transitions remain possible after completion
+  ---
+  duration_ms: 1.056913
+  type: 'test'
+  ...
+# Subtest: 1) a serialization conflict on the first attempt succeeds on retry
+ok 93 - 1) a serialization conflict on the first attempt succeeds on retry
+  ---
+  duration_ms: 4.917786
+  type: 'test'
+  ...
+# Subtest: 2) a conflict repeated on every attempt is exhausted after maxAttempts and rethrown, not swallowed
+ok 94 - 2) a conflict repeated on every attempt is exhausted after maxAttempts and rethrown, not swallowed
+  ---
+  duration_ms: 4.527617
+  type: 'test'
+  ...
+# Subtest: 3) a real business rejection (time_slot_unavailable) is never retried
+ok 95 - 3) a real business rejection (time_slot_unavailable) is never retried
+  ---
+  duration_ms: 0.539073
+  type: 'test'
+  ...
+# Subtest: 4) an unrecognized error is never retried and is not classified as retryable
+ok 96 - 4) an unrecognized error is never retried and is not classified as retryable
+  ---
+  duration_ms: 0.257758
+  type: 'test'
+  ...
+# Subtest: 5) the isolation level is passed through to every attempt, including retries - Serializable is not silently dropped
+ok 97 - 5) the isolation level is passed through to every attempt, including retries - Serializable is not silently dropped
+  ---
+  duration_ms: 1.274191
+  type: 'test'
+  ...
+# Subtest: 6) omitting isolationLevel keeps the previous default behaviour - no options object forced on callers that never asked for one
+ok 98 - 6) omitting isolationLevel keeps the previous default behaviour - no options object forced on callers that never asked for one
+  ---
+  duration_ms: 0.311289
+  type: 'test'
+  ...
+# Subtest: 7) maxWait and timeout are threaded through alongside isolationLevel, without forcing unrelated defaults
+ok 99 - 7) maxWait and timeout are threaded through alongside isolationLevel, without forcing unrelated defaults
+  ---
+  duration_ms: 0.295526
+  type: 'test'
+  ...
+# Subtest: 8) maxWait/timeout alone (no isolationLevel) are still passed through
+ok 100 - 8) maxWait/timeout alone (no isolationLevel) are still passed through
+  ---
+  duration_ms: 0.199631
+  type: 'test'
+  ...
+# Subtest: isRetryableBookingTransactionError recognizes both known transient Prisma codes
+ok 101 - isRetryableBookingTransactionError recognizes both known transient Prisma codes
+  ---
+  duration_ms: 0.333643
+  type: 'test'
+  ...
+# Subtest: a raw query (tx.$queryRaw, e.g. SELECT ... FOR UPDATE) that fails on a genuine Postgres serialization conflict is retried, even though it surfaces as P2010
+ok 102 - a raw query (tx.$queryRaw, e.g. SELECT ... FOR UPDATE) that fails on a genuine Postgres serialization conflict is retried, even though it surfaces as P2010
+  ---
+  duration_ms: 0.635629
+  type: 'test'
+  ...
+# Subtest: a raw query failure for an unrelated reason (P2010 without a transient SQLSTATE) is never retried - P2010 alone is too broad to blindly retry
+ok 103 - a raw query failure for an unrelated reason (P2010 without a transient SQLSTATE) is never retried - P2010 alone is too broad to blindly retry
+  ---
+  duration_ms: 0.149435
+  type: 'test'
+  ...
+# Subtest: two concurrent SELECT ... FOR UPDATE-style raw-query conflicts retry through runBookingTransaction end to end
+ok 104 - two concurrent SELECT ... FOR UPDATE-style raw-query conflicts retry through runBookingTransaction end to end
+  ---
+  duration_ms: 5.68298
+  type: 'test'
+  ...
+# Subtest: POST /bookings only forwards known business errors to the client, and rethrows anything else (C-concurrent-booking)
+ok 105 - POST /bookings only forwards known business errors to the client, and rethrows anything else (C-concurrent-booking)
+  ---
+  duration_ms: 4.934601
+  type: 'test'
+  ...
+# Subtest: diagnostic_cleanup_unverified and gpu_proof_cleanup_unverified are both classified as cleanup-unverified
+ok 106 - diagnostic_cleanup_unverified and gpu_proof_cleanup_unverified are both classified as cleanup-unverified
+  ---
+  duration_ms: 6.251652
+  type: 'test'
+  ...
+# Subtest: a cleanup-unverified terminal report quarantines the machine (via the shared enterQuarantine helper) and marks it UNAVAILABLE
+ok 107 - a cleanup-unverified terminal report quarantines the machine (via the shared enterQuarantine helper) and marks it UNAVAILABLE
+  ---
+  duration_ms: 1.154005
+  type: 'test'
+  ...
+# Subtest: the booking is degraded, never completed, on a cleanup-unverified report
+ok 108 - the booking is degraded, never completed, on a cleanup-unverified report
+  ---
+  duration_ms: 1.292954
+  type: 'test'
+  ...
+# Subtest: the payment is only ever pushed to settlement review, never marked as a paid success
+ok 109 - the payment is only ever pushed to settlement review, never marked as a paid success
+  ---
+  duration_ms: 1.37938
+  type: 'test'
+  ...
+# Subtest: quarantine is applied idempotently: guarded on moderationStatus already CLEAR
+ok 110 - quarantine is applied idempotently: guarded on moderationStatus already CLEAR
+  ---
+  duration_ms: 1.025096
+  type: 'test'
+  ...
+# Subtest: an unrelated errorCode never triggers automatic quarantine
+ok 111 - an unrelated errorCode never triggers automatic quarantine
+  ---
+  duration_ms: 2.230284
+  type: 'test'
+  ...
+# Subtest: terminal re-reports are fenced: only the same attempt may retry the same terminal status without replaying side effects
+ok 112 - terminal re-reports are fenced: only the same attempt may retry the same terminal status without replaying side effects
+  ---
+  duration_ms: 1.017364
+  type: 'test'
+  ...
+# Subtest: nothing in server.ts silently clears a quarantine back to CLEAR: lifting it requires a controlled diagnostic decision
+ok 113 - nothing in server.ts silently clears a quarantine back to CLEAR: lifting it requires a controlled diagnostic decision
+  ---
+  duration_ms: 1.373612
+  type: 'test'
+  ...
+# Subtest: overlapping bookings on the same listing cannot even be created concurrently - booking_no_overlap wins the race first, before allocation
+ok 114 - overlapping bookings on the same listing cannot even be created concurrently - booking_no_overlap wins the race first, before allocation
+  ---
+  duration_ms: 161.110546
+  type: 'test'
+  ...
+# Subtest: the same booking allocated twice concurrently (client retry racing itself) never creates two allocations
+ok 115 - the same booking allocated twice concurrently (client retry racing itself) never creates two allocations
+  ---
+  duration_ms: 166.128522
+  type: 'test'
+  ...
+# Subtest: non-overlapping windows on the same accelerator all succeed concurrently - contention alone must not cause spurious rejections
+ok 116 - non-overlapping windows on the same accelerator all succeed concurrently - contention alone must not cause spurious rejections
+  ---
+  duration_ms: 277.218899
+  type: 'test'
+  ...
+# Subtest: more concurrent claim callers than queued jobs: every job is claimed exactly once, no duplicate claim, no lost job
+ok 117 - more concurrent claim callers than queued jobs: every job is claimed exactly once, no duplicate claim, no lost job
+  ---
+  duration_ms: 338.027962
+  type: 'test'
+  ...
+# Subtest: claiming from an empty queue concurrently returns null for everyone, no crash
+ok 118 - claiming from an empty queue concurrently returns null for everyone, no crash
+  ---
+  duration_ms: 104.539132
+  type: 'test'
+  ...
+# Subtest: two concurrent finalizations of the same Developer stop: only one does the real work, the other is a clean idempotent no-op
+ok 119 - two concurrent finalizations of the same Developer stop: only one does the real work, the other is a clean idempotent no-op
+  ---
+  duration_ms: 203.507825
+  type: 'test'
+  ...
+# Subtest: concurrent settlement request calls on the same booking never double-charge the settlement calculation
+ok 120 - concurrent settlement request calls on the same booking never double-charge the settlement calculation
+  ---
+  duration_ms: 169.13127
+  type: 'test'
+  ...
+# Subtest: concurrent confirmSettlement calls with the SAME signature settle exactly once - no double settlement, no double refund
+ok 121 - concurrent confirmSettlement calls with the SAME signature settle exactly once - no double settlement, no double refund
+  ---
+  duration_ms: 115.556171
+  type: 'test'
+  ...
+# Subtest: confirmSettlement with a DIFFERENT signature than the one already recorded is cleanly rejected, never silently overwritten
+ok 122 - confirmSettlement with a DIFFERENT signature than the one already recorded is cleanly rejected, never silently overwritten
+  ---
+  duration_ms: 58.349269
+  type: 'test'
+  ...
+# Subtest: gateway command rollout is fail closed by default
+ok 123 - gateway command rollout is fail closed by default
+  ---
+  duration_ms: 0.844845
+  type: 'test'
+  ...
+# Subtest: command rollout must be nested inside Agent QUIC rollout
+ok 124 - command rollout must be nested inside Agent QUIC rollout
+  ---
+  duration_ms: 0.31845
+  type: 'test'
+  ...
+# Subtest: non-zero rollout requires private gateway coordinates and a strong token
+ok 125 - non-zero rollout requires private gateway coordinates and a strong token
+  ---
+  duration_ms: 0.167863
+  type: 'test'
+  ...
+# Subtest: protocol understands mining kinds while production dispatch keeps them dark
+ok 126 - protocol understands mining kinds while production dispatch keeps them dark
+  ---
+  duration_ms: 0.454526
+  type: 'test'
+  ...
+# Subtest: durable identity is preserved while rental-private fields are stripped before Gateway dispatch
+ok 127 - durable identity is preserved while rental-private fields are stripped before Gateway dispatch
+  ---
+  duration_ms: 0.694527
+  type: 'test'
+  ...
+# Subtest: rental stop envelope fails closed without a proven Developer runtime
+ok 128 - rental stop envelope fails closed without a proven Developer runtime
+  ---
+  duration_ms: 0.15213
+  type: 'test'
+  ...
+# Subtest: terminal Redis ACK must match durable command identity before completion
+ok 129 - terminal Redis ACK must match durable command identity before completion
+  ---
+  duration_ms: 0.392522
+  type: 'test'
+  ...
+# Subtest: machine auth cache is Redis Cluster-safe and contains only gateway auth material
+ok 130 - machine auth cache is Redis Cluster-safe and contains only gateway auth material
+  ---
+  duration_ms: 1.141421
+  type: 'test'
+  ...
+# Subtest: revocation fails closed without deleting the audit-visible cache record
+ok 131 - revocation fails closed without deleting the audit-visible cache record
+  ---
+  duration_ms: 0.164758
+  type: 'test'
+  ...
+# Subtest: unsafe identifiers and non-base58 public keys are rejected before Redis
+ok 132 - unsafe identifiers and non-base58 public keys are rejected before Redis
+  ---
+  duration_ms: 0.328034
+  type: 'test'
+  ...
+# Subtest: control-plane events are versioned, bounded and deterministically partitioned
+ok 133 - control-plane events are versioned, bounded and deterministically partitioned
+  ---
+  duration_ms: 1.644009
+  type: 'test'
+  ...
+# Subtest: control-plane event validation fails closed on routing or schema tampering
+ok 134 - control-plane event validation fails closed on routing or schema tampering
+  ---
+  duration_ms: 0.452072
+  type: 'test'
+  ...
+# Subtest: control-plane payloads cannot become an unbounded event-bus transport
+ok 135 - control-plane payloads cannot become an unbounded event-bus transport
+  ---
+  duration_ms: 1.497028
+  type: 'test'
+  ...
+# Subtest: shadow mode dual-writes but never becomes read authority
+ok 136 - shadow mode dual-writes but never becomes read authority
+  ---
+  duration_ms: 1.044865
+  type: 'test'
+  ...
+# Subtest: hot mode is an explicit authority cutover
+ok 137 - hot mode is an explicit authority cutover
+  ---
+  duration_ms: 0.107523
+  type: 'test'
+  ...
+# Subtest: unsafe shadow plans fail closed
+ok 138 - unsafe shadow plans fail closed
+  ---
+  duration_ms: 0.296948
+  type: 'test'
+  ...
+# Subtest: control plane issues a short-lived Ed25519 authority scoped to one edge, role and renter session
+ok 139 - control plane issues a short-lived Ed25519 authority scoped to one edge, role and renter session
+  ---
+  duration_ms: 2.274951
+  type: 'test'
+  ...
+# Subtest: changing edge, role, machine, booking or renter after signing invalidates authority
+ok 140 - changing edge, role, machine, booking or renter after signing invalidates authority
+  ---
+  duration_ms: 1.001601
+  type: 'test'
+  ...
+# Subtest: authority TTL and identifiers are hard bounded
+ok 141 - authority TTL and identifiers are hard bounded
+  ---
+  duration_ms: 0.482578
+  type: 'test'
+  ...
+# Subtest: canonical binding and authority claim property order are protocol-stable across runtimes
+ok 142 - canonical binding and authority claim property order are protocol-stable across runtimes
+  ---
+  duration_ms: 0.212641
+  type: 'test'
+  ...
+# Subtest: HTML/service/tunnel readiness can never claim an interactive Developer session
+ok 143 - HTML/service/tunnel readiness can never claim an interactive Developer session
+  ---
+  duration_ms: 0.720617
+  type: 'test'
+  ...
+# Subtest: Management alone is not interactive; ExtensionHost completes the proof
+ok 144 - Management alone is not interactive; ExtensionHost completes the proof
+  ---
+  duration_ms: 0.171959
+  type: 'test'
+  ...
+# Subtest: ExtensionHost arriving before Management is valid but still not interactive
+ok 145 - ExtensionHost arriving before Management is valid but still not interactive
+  ---
+  duration_ms: 0.118779
+  type: 'test'
+  ...
+# Subtest: losing a critical VS Code stream after INTERACTIVE becomes DEGRADED
+ok 146 - losing a critical VS Code stream after INTERACTIVE becomes DEGRADED
+  ---
+  duration_ms: 0.151018
+  type: 'test'
+  ...
+# Subtest: fallback and reconnect are explicit, bounded events
+ok 147 - fallback and reconnect are explicit, bounded events
+  ---
+  duration_ms: 0.365231
+  type: 'test'
+  ...
+# Subtest: event order is fail-closed and closed sessions cannot be resurrected
+ok 148 - event order is fail-closed and closed sessions cannot be resurrected
+  ---
+  duration_ms: 0.184037
+  type: 'test'
+  ...
+# Subtest: new transports default off while migration fallback stays on
+ok 149 - new transports default off while migration fallback stays on
+  ---
+  duration_ms: 1.076414
+  type: 'test'
+  ...
+# Subtest: malformed rollout configuration fails closed
+ok 150 - malformed rollout configuration fails closed
+  ---
+  duration_ms: 0.39084
+  type: 'test'
+  ...
+# Subtest: browser WebTransport cannot be enabled without the direct transport capability
+ok 151 - browser WebTransport cannot be enabled without the direct transport capability
+  ---
+  duration_ms: 0.121723
+  type: 'test'
+  ...
+# Subtest: EDGE_QUIC and DIRECT_QUIC cannot be enabled without exact-release qualification
+ok 152 - EDGE_QUIC and DIRECT_QUIC cannot be enabled without exact-release qualification
+  ---
+  duration_ms: 0.241314
+  type: 'test'
+  ...
+# Subtest: Render qualification is cryptographically scoped to the actual deployed commit id
+ok 153 - Render qualification is cryptographically scoped to the actual deployed commit id
+  ---
+  duration_ms: 0.248284
+  type: 'test'
+  ...
+# Subtest: qualified release may enable a bounded canary and records the evidence SHA
+ok 154 - qualified release may enable a bounded canary and records the evidence SHA
+  ---
+  duration_ms: 0.115674
+  type: 'test'
+  ...
+# Subtest: canary assignment is stable, bounded and session-scoped
+ok 155 - canary assignment is stable, bounded and session-scoped
+  ---
+  duration_ms: 0.348606
+  type: 'test'
+  ...
+# Subtest: Host bootstrap is disabled by default and requires an explicit true flag
+ok 156 - Host bootstrap is disabled by default and requires an explicit true flag
+  ---
+  duration_ms: 0.864964
+  type: 'test'
+  ...
+# Subtest: enabled Host bootstrap requires exact-release production qualification
+ok 157 - enabled Host bootstrap requires exact-release production qualification
+  ---
+  duration_ms: 0.294634
+  type: 'test'
+  ...
+# Subtest: enabled Host bootstrap fails closed on partial or unsafe configuration
+ok 158 - enabled Host bootstrap fails closed on partial or unsafe configuration
+  ---
+  duration_ms: 31.149963
+  type: 'test'
+  ...
+# Subtest: bootstrap returns a fresh HOST authority without exposing the private signing key
+ok 159 - bootstrap returns a fresh HOST authority without exposing the private signing key
+  ---
+  duration_ms: 1.669317
+  type: 'test'
+  ...
+# Subtest: native client prefers a freshly verified direct QUIC path
+ok 160 - native client prefers a freshly verified direct QUIC path
+  ---
+  duration_ms: 1.321273
+  type: 'test'
+  ...
+# Subtest: stale direct verification falls back to the best healthy edge
+ok 161 - stale direct verification falls back to the best healthy edge
+  ---
+  duration_ms: 0.206061
+  type: 'test'
+  ...
+# Subtest: browser does not use direct QUIC until WebTransport rollout is explicitly enabled
+ok 162 - browser does not use direct QUIC until WebTransport rollout is explicitly enabled
+  ---
+  duration_ms: 0.185189
+  type: 'test'
+  ...
+# Subtest: browser may use direct path only behind the WebTransport capability flag
+ok 163 - browser may use direct path only behind the WebTransport capability flag
+  ---
+  duration_ms: 0.173812
+  type: 'test'
+  ...
+# Subtest: unhealthy edges are skipped and legacy remains a bounded migration fallback
+ok 164 - unhealthy edges are skipped and legacy remains a bounded migration fallback
+  ---
+  duration_ms: 0.130176
+  type: 'test'
+  ...
+# Subtest: no transport silently succeeds when every path is unavailable
+ok 165 - no transport silently succeeds when every path is unavailable
+  ---
+  duration_ms: 0.318461
+  type: 'test'
+  ...
+# Subtest: interactive Developer rejects materially unstable host networks before allocation
+ok 166 - interactive Developer rejects materially unstable host networks before allocation
+  ---
+  duration_ms: 0.250377
+  type: 'test'
+  ...
+# Subtest: invalid telemetry is fail-closed instead of poisoning ranking
+ok 167 - invalid telemetry is fail-closed instead of poisoning ranking
+  ---
+  duration_ms: 0.176747
+  type: 'test'
+  ...
+# Subtest: session binding is scoped, versioned and bounded in time
+ok 168 - session binding is scoped, versioned and bounded in time
+  ---
+  duration_ms: 1.075222
+  type: 'test'
+  ...
+# Subtest: stream metadata is fail-closed and arbitrary ports require APP_PORT kind
+ok 169 - stream metadata is fail-closed and arbitrary ports require APP_PORT kind
+  ---
+  duration_ms: 0.186821
+  type: 'test'
+  ...
+# Subtest: Developer is interactive only when Management and ExtensionHost are both live
+ok 170 - Developer is interactive only when Management and ExtensionHost are both live
+  ---
+  duration_ms: 0.136226
+  type: 'test'
+  ...
+# Subtest: patched static dependencies preserve file discovery and reject traversal through the public error handler
+ok 171 - patched static dependencies preserve file discovery and reject traversal through the public error handler
+  ---
+  duration_ms: 95.964191
+  type: 'test'
+  ...
+# Subtest: Zod rejects oversized constrained collections without accumulating per-element issues
+ok 172 - Zod rejects oversized constrained collections without accumulating per-element issues
+  ---
+  duration_ms: 1.742137
+  type: 'test'
+  ...
+# Subtest: actual telemetry schema preserves defaults, absent optionals, nulls and error paths
+ok 173 - actual telemetry schema preserves defaults, absent optionals, nulls and error paths
+  ---
+  duration_ms: 3.950958
+  type: 'test'
+  ...
+# Subtest: actual config defaults preserve production and financial guards after Zod migration
+ok 174 - actual config defaults preserve production and financial guards after Zod migration
+  ---
+  duration_ms: 2122.85471
+  type: 'test'
+  ...
+# Subtest: Fastify asynchronous validation cannot replace the validated request body
+ok 175 - Fastify asynchronous validation cannot replace the validated request body
+  ---
+  duration_ms: 35.728658
+  type: 'test'
+  ...
+# Subtest: Solana/Jayson preserves concurrent asynchronous JSON-RPC results and errors without network access
+ok 176 - Solana/Jayson preserves concurrent asynchronous JSON-RPC results and errors without network access
+  ---
+  duration_ms: 13.901073
+  type: 'test'
+  ...
+# Subtest: provider-neutral topology requires migration, API and delivery worker roles
+ok 177 - provider-neutral topology requires migration, API and delivery worker roles
+  ---
+  duration_ms: 5.299291
+  type: 'test'
+  ...
+# Subtest: Docker image contains both API and worker build outputs and runs non-root
+ok 178 - Docker image contains both API and worker build outputs and runs non-root
+  ---
+  duration_ms: 1.649618
+  type: 'test'
+  ...
+# Subtest: runtime topology contains no hosting-provider hostname or provider-only process kind
+ok 179 - runtime topology contains no hosting-provider hostname or provider-only process kind
+  ---
+  duration_ms: 1.023584
+  type: 'test'
+  ...
+# Subtest: findDevBypassSettlementCandidates matches COMPLETED regardless of endsAt, and DEGRADED only once endsAt has elapsed
+ok 180 - findDevBypassSettlementCandidates matches COMPLETED regardless of endsAt, and DEGRADED only once endsAt has elapsed
+  ---
+  duration_ms: 6.753123
+  type: 'test'
+  ...
+# Subtest: the dev-bypass open-payment filter excludes only already-terminal or FROZEN payments
+ok 181 - the dev-bypass open-payment filter excludes only already-terminal or FROZEN payments
+  ---
+  duration_ms: 1.412971
+  type: 'test'
+  ...
+# Subtest: reconcileDevBypassSettlements only ever runs while the dev-bypass gate is active, and surfaces per-booking failures
+ok 182 - reconcileDevBypassSettlements only ever runs while the dev-bypass gate is active, and surfaces per-booking failures
+  ---
+  duration_ms: 0.957924
+  type: 'test'
+  ...
+# Subtest: the synthetic dev-bypass settlement signature is always a valid base58 string, even from a cuid containing 0 or l
+ok 183 - the synthetic dev-bypass settlement signature is always a valid base58 string, even from a cuid containing 0 or l
+  ---
+  duration_ms: 0.275235
+  type: 'test'
+  ...
+# Subtest: the synthetic dev-bypass settlement signature is deterministic and unique per booking
+ok 184 - the synthetic dev-bypass settlement signature is deterministic and unique per booking
+  ---
+  duration_ms: 0.142074
+  type: 'test'
+  ...
+# Subtest: the reconciliation interval runs the dev-bypass settlement reconciler on every tick, independently of the others failing
+ok 185 - the reconciliation interval runs the dev-bypass settlement reconciler on every tick, independently of the others failing
+  ---
+  duration_ms: 1.726594
+  type: 'test'
+  ...
+# Subtest: a completed booking with a live Developer runtime fails closed instead of resurrecting without allocation
+ok 186 - a completed booking with a live Developer runtime fails closed instead of resurrecting without allocation
+  ---
+  duration_ms: 2.148089
+  type: 'test'
+  ...
+# Subtest: a stale diagnostic result cannot close a booking after a Developer session wins the race
+ok 187 - a stale diagnostic result cannot close a booking after a Developer session wins the race
+  ---
+  duration_ms: 0.301996
+  type: 'test'
+  ...
+# Subtest: beta payment bypass skips the legacy GPU diagnostic queue
+ok 188 - beta payment bypass skips the legacy GPU diagnostic queue
+  ---
+  duration_ms: 0.264559
+  type: 'test'
+  ...
+# Subtest: creating Developer cancels only a still-queued beta diagnostic before enqueuing WORKSPACE_PREPARE
+ok 189 - creating Developer cancels only a still-queued beta diagnostic before enqueuing WORKSPACE_PREPARE
+  ---
+  duration_ms: 6.280471
+  type: 'test'
+  ...
+# Subtest: inventory accepts GPU strings at the exact Accelerator column widths
+ok 190 - inventory accepts GPU strings at the exact Accelerator column widths
+  ---
+  duration_ms: 2.484966
+  type: 'test'
+  ...
+# Subtest: inventory rejects a gpuModel one character past Accelerator.model VarChar(160)
+ok 191 - inventory rejects a gpuModel one character past Accelerator.model VarChar(160)
+  ---
+  duration_ms: 0.766256
+  type: 'test'
+  ...
+# Subtest: inventory rejects a driverVersion one character past Accelerator.driverVersion VarChar(80)
+ok 192 - inventory rejects a driverVersion one character past Accelerator.driverVersion VarChar(80)
+  ---
+  duration_ms: 0.243968
+  type: 'test'
+  ...
+# Subtest: inventory rejects a cudaVersion one character past Accelerator.cudaVersion VarChar(40)
+ok 193 - inventory rejects a cudaVersion one character past Accelerator.cudaVersion VarChar(40)
+  ---
+  duration_ms: 0.184889
+  type: 'test'
+  ...
+# Subtest: creates opaque secrets and stores only digests
+ok 194 - creates opaque secrets and stores only digests
+  ---
+  duration_ms: 1.070955
+  type: 'test'
+  ...
+# Subtest: rejects malformed public keys and fingerprints
+ok 195 - rejects malformed public keys and fingerprints
+  ---
+  duration_ms: 0.402908
+  type: 'test'
+  ...
+# Subtest: requires browser authorization before consumption
+ok 196 - requires browser authorization before consumption
+  ---
+  duration_ms: 0.270428
+  type: 'test'
+  ...
+# Subtest: authorizes and consumes exactly once
+ok 197 - authorizes and consumes exactly once
+  ---
+  duration_ms: 0.403408
+  type: 'test'
+  ...
+# Subtest: rejects repeated browser authorization
+ok 198 - rejects repeated browser authorization
+  ---
+  duration_ms: 0.266212
+  type: 'test'
+  ...
+# Subtest: rejects authorization and consumption after expiration
+ok 199 - rejects authorization and consumption after expiration
+  ---
+  duration_ms: 0.340243
+  type: 'test'
+  ...
+# Subtest: a fully passing diagnostic clears the mandatory-check gate
+ok 200 - a fully passing diagnostic clears the mandatory-check gate
+  ---
+  duration_ms: 1.292158
+  type: 'test'
+  ...
+# Subtest: a FAIL on a mandatory check (GPU) blocks the gate and never gets silently treated as PASS
+ok 201 - a FAIL on a mandatory check (GPU) blocks the gate and never gets silently treated as PASS
+  ---
+  duration_ms: 0.181133
+  type: 'test'
+  ...
+# Subtest: an UNKNOWN mandatory check is exactly as blocking as FAIL - never promoted to PASS
+ok 202 - an UNKNOWN mandatory check is exactly as blocking as FAIL - never promoted to PASS
+  ---
+  duration_ms: 0.130237
+  type: 'test'
+  ...
+# Subtest: a mandatory check entirely missing from the report is treated as NOT_CHECKED, not as an implicit PASS
+ok 203 - a mandatory check entirely missing from the report is treated as NOT_CHECKED, not as an implicit PASS
+  ---
+  duration_ms: 0.15884
+  type: 'test'
+  ...
+# Subtest: RAM and CUDA are informational only - a WARNING/FAIL on either never blocks the mandatory gate
+ok 204 - RAM and CUDA are informational only - a WARNING/FAIL on either never blocks the mandatory gate
+  ---
+  duration_ms: 0.169045
+  type: 'test'
+  ...
+# Subtest: the first failing mandatory check (in fixed order) determines the reasonCode
+ok 205 - the first failing mandatory check (in fixed order) determines the reasonCode
+  ---
+  duration_ms: 0.135524
+  type: 'test'
+  ...
+# Subtest: an orphaned GPU allocation blocks the gate with ORPHANED_ALLOCATION, even when every hardware check passes
+ok 206 - an orphaned GPU allocation blocks the gate with ORPHANED_ALLOCATION, even when every hardware check passes
+  ---
+  duration_ms: 0.165239
+  type: 'test'
+  ...
+# Subtest: a RUNNING diagnostic the agent never reported back on is surfaced as TIMED_OUT once its timeout window elapses, never left silently RUNNING forever
+ok 207 - a RUNNING diagnostic the agent never reported back on is surfaced as TIMED_OUT once its timeout window elapses, never left silently RUNNING forever
+  ---
+  duration_ms: 0.184979
+  type: 'test'
+  ...
+# Subtest: only the lease owner executes and the lease is released afterward
+ok 208 - only the lease owner executes and the lease is released afterward
+  ---
+  duration_ms: 1.563377
+  type: 'test'
+  ...
+# Subtest: a competing owner makes the task skip without side effects
+ok 209 - a competing owner makes the task skip without side effects
+  ---
+  duration_ms: 0.181293
+  type: 'test'
+  ...
+# Subtest: release never deletes a successor lease after ownership changes
+ok 210 - release never deletes a successor lease after ownership changes
+  ---
+  duration_ms: 0.178018
+  type: 'test'
+  ...
+# Subtest: renewal detects ownership loss without deleting the successor
+ok 211 - renewal detects ownership loss without deleting the successor
+  ---
+  duration_ms: 1101.198307
+  type: 'test'
+  ...
+# Subtest: a task finishing after its last confirmed TTL is marked lease-lost
+ok 212 - a task finishing after its last confirmed TTL is marked lease-lost
+  ---
+  duration_ms: 0.369847
+  type: 'test'
+  ...
+# Subtest: invalid task names fail closed before touching Redis
+ok 213 - invalid task names fail closed before touching Redis
+  ---
+  duration_ms: 0.494275
+  type: 'test'
+  ...
+# Subtest: agent-restart recovery uses the automatic GPU_PROOF-to-Developer handoff
+ok 214 - agent-restart recovery uses the automatic GPU_PROOF-to-Developer handoff
+  ---
+  duration_ms: 7.690084
+  type: 'test'
+  ...
+# Subtest: agent is killed only after genuine code-server traffic activated the booking
+ok 215 - agent is killed only after genuine code-server traffic activated the booking
+  ---
+  duration_ms: 2.144493
+  type: 'test'
+  ...
+# Subtest: recovery requires exact runtime adoption, clean COMPLETED termination, and four-resource cleanup
+ok 216 - recovery requires exact runtime adoption, clean COMPLETED termination, and four-resource cleanup
+  ---
+  duration_ms: 1.102112
+  type: 'test'
+  ...
+# Subtest: recovery proves a fresh heartbeat from the restarted Agent after normal completion
+ok 217 - recovery proves a fresh heartbeat from the restarted Agent after normal completion
+  ---
+  duration_ms: 1.555776
+  type: 'test'
+  ...
+# Subtest: real E2E requires upstream code-server frames on both VS Code channels
+ok 218 - real E2E requires upstream code-server frames on both VS Code channels
+  ---
+  duration_ms: 4.836787
+  type: 'test'
+  ...
+# Subtest: real E2E requires clean COMPLETED termination after activation
+ok 219 - real E2E requires clean COMPLETED termination after activation
+  ---
+  duration_ms: 1.773388
+  type: 'test'
+  ...
+# Subtest: Developer Workspace full lifecycle: booking -> GPU proof -> Workspace ready (clock NOT started) -> real activation (clock starts, workspaceActivatedAt set once, purchased duration honored) -> Stop -> settlement -> machine/listing available again
+ok 220 - Developer Workspace full lifecycle: booking -> GPU proof -> Workspace ready (clock NOT started) -> real activation (clock starts, workspaceActivatedAt set once, purchased duration honored) -> Stop -> settlement -> machine/listing available again
+  ---
+  duration_ms: 279.260184
+  type: 'test'
+  ...
+# Subtest: main real-GPU harness proves the Developer container sees exactly the leased hardware UUID
+ok 221 - main real-GPU harness proves the Developer container sees exactly the leased hardware UUID
+  ---
+  duration_ms: 4.785145
+  type: 'test'
+  ...
+# Subtest: full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking -> allocation -> signed authority -> release -> available again
+ok 222 - full GPU rental lifecycle: heartbeat -> inventory -> publish -> booking -> allocation -> signed authority -> release -> available again
+  ---
+  duration_ms: 163.835706
+  type: 'test'
+  ...
+# Subtest: run.sh preserves pre-existing GPUbnb Docker resources during harness cleanup
+ok 223 - run.sh preserves pre-existing GPUbnb Docker resources during harness cleanup
+  ---
+  duration_ms: 4.739635
+  type: 'test'
+  ...
+# Subtest: recovery-agent-restart.sh preserves pre-existing GPUbnb Docker resources during harness cleanup
+ok 224 - recovery-agent-restart.sh preserves pre-existing GPUbnb Docker resources during harness cleanup
+  ---
+  duration_ms: 1.249234
+  type: 'test'
+  ...
+# Subtest: real E2E rental observes the Developer workspace created automatically by GPU_PROOF finalization
+ok 225 - real E2E rental observes the Developer workspace created automatically by GPU_PROOF finalization
+  ---
+  duration_ms: 4.965827
+  type: 'test'
+  ...
+# Subtest: GPU_PROOF completion must leave the rental reserved for subsequent Developer activation
+ok 226 - GPU_PROOF completion must leave the rental reserved for subsequent Developer activation
+  ---
+  duration_ms: 1.564619
+  type: 'test'
+  ...
+# Subtest: onboarding bootstrap is explicitly excluded from rental qualification
+ok 227 - onboarding bootstrap is explicitly excluded from rental qualification
+  ---
+  duration_ms: 0.819405
+  type: 'test'
+  ...
+# Subtest: main real-GPU harness proves exact per-session Docker cleanup before EXIT teardown
+ok 228 - main real-GPU harness proves exact per-session Docker cleanup before EXIT teardown
+  ---
+  duration_ms: 4.920678
+  type: 'test'
+  ...
+# Subtest: Effect rejects the advisory template-literal input inside a bounded child
+ok 229 - Effect rejects the advisory template-literal input inside a bounded child
+  ---
+  duration_ms: 196.142933
+  type: 'test'
+  ...
+# Subtest: Effect string-span matching preserves literal separators, newlines and exact suffixes
+ok 230 - Effect string-span matching preserves literal separators, newlines and exact suffixes
+  ---
+  duration_ms: 1.027819
+  type: 'test'
+  ...
+# Subtest: Prisma config retains valid path loading and rejects malformed or excess terms with patched Effect
+ok 231 - Prisma config retains valid path loading and rejects malformed or excess terms with patched Effect
+  ---
+  duration_ms: 83.276451
+  type: 'test'
+  ...
+# Subtest: writes and reads an artifact file
+ok 232 - writes and reads an artifact file
+  ---
+  duration_ms: 5.807315
+  type: 'test'
+  ...
+# Subtest: sha256 hash is 64 hex chars
+ok 233 - sha256 hash is 64 hex chars
+  ---
+  duration_ms: 0.277779
+  type: 'test'
+  ...
+# Subtest: creates nested directory structure for storage key
+ok 234 - creates nested directory structure for storage key
+  ---
+  duration_ms: 1.762898
+  type: 'test'
+  ...
+# Subtest: returns a queued gateway item without sleeping
+ok 235 - returns a queued gateway item without sleeping
+  ---
+  duration_ms: 0.714167
+  type: 'test'
+  ...
+# Subtest: waits efficiently until a gateway item appears
+ok 236 - waits efficiently until a gateway item appears
+  ---
+  duration_ms: 0.206912
+  type: 'test'
+  ...
+# Subtest: returns null at the long-poll deadline without a hot loop
+ok 237 - returns null at the long-poll deadline without a hot loop
+  ---
+  duration_ms: 0.156646
+  type: 'test'
+  ...
+# Subtest: verified GPU proof automatically analyzes and queues the persistent Developer workspace
+ok 238 - verified GPU proof automatically analyzes and queues the persistent Developer workspace
+  ---
+  duration_ms: 5.195322
+  type: 'test'
+  ...
+# Subtest: legacy manual Developer request remains race-safe and returns the concurrent session
+ok 239 - legacy manual Developer request remains race-safe and returns the concurrent session
+  ---
+  duration_ms: 1.284106
+  type: 'test'
+  ...
+# Subtest: the proof container is ephemeral but the renter Developer runtime is detached and not --rm
+ok 240 - the proof container is ephemeral but the renter Developer runtime is detached and not --rm
+  ---
+  duration_ms: 1.622256
+  type: 'test'
+  ...
+# Subtest: PC B labels GPU proof RUNNING as verification, not as an opened workspace
+ok 241 - PC B labels GPU proof RUNNING as verification, not as an opened workspace
+  ---
+  duration_ms: 1.911622
+  type: 'test'
+  ...
+# Subtest: a fresh Compute rental needs no second renter click after verified GPU_PROOF
+ok 242 - a fresh Compute rental needs no second renter click after verified GPU_PROOF
+  ---
+  duration_ms: 121.65351
+  type: 'test'
+  ...
+# Subtest: GPU_PROOF-only booking on a Developer-incompatible machine completes and releases the machine
+ok 243 - GPU_PROOF-only booking on a Developer-incompatible machine completes and releases the machine
+  ---
+  duration_ms: 113.564995
+  type: 'test'
+  ...
+# Subtest: a fresh Developer-capable booking automatically queues Developer and keeps the GPU locked
+ok 244 - a fresh Developer-capable booking automatically queues Developer and keeps the GPU locked
+  ---
+  duration_ms: 92.878623
+  type: 'test'
+  ...
+# Subtest: automatic Developer handoff cancels only a queued GPU diagnostic
+ok 245 - automatic Developer handoff cancels only a queued GPU diagnostic
+  ---
+  duration_ms: 91.657552
+  type: 'test'
+  ...
+# Subtest: startsAt/endsAt are refreshed to now regardless of how long the booking had already been open
+ok 246 - startsAt/endsAt are refreshed to now regardless of how long the booking had already been open
+  ---
+  duration_ms: 91.553179
+  type: 'test'
+  ...
+# Subtest: a second booking cannot claim the same accelerator while the first is waiting to open its Developer workspace
+ok 247 - a second booking cannot claim the same accelerator while the first is waiting to open its Developer workspace
+  ---
+  duration_ms: 109.849574
+  type: 'test'
+  ...
+# Subtest: completeGpuProofJob runs through the retry helper, not a raw unretried transaction
+ok 248 - completeGpuProofJob runs through the retry helper, not a raw unretried transaction
+  ---
+  duration_ms: 1.135326
+  type: 'test'
+  ...
+# Subtest: completeGpuProofJob never resets startsAt/endsAt once the real rental clock has already started
+ok 249 - completeGpuProofJob never resets startsAt/endsAt once the real rental clock has already started
+  ---
+  duration_ms: 83.139645
+  type: 'test'
+  ...
+# Subtest: completeGpuProofJob never mutates a booking that already reached a different terminal status
+ok 250 - completeGpuProofJob never mutates a booking that already reached a different terminal status
+  ---
+  duration_ms: 84.221115
+  type: 'test'
+  ...
+# Subtest: Test C (critical): a successful GPU_PROOF job unlocks STARTING to ACTIVE, never to COMPLETED
+ok 251 - Test C (critical): a successful GPU_PROOF job unlocks STARTING to ACTIVE, never to COMPLETED
+  ---
+  duration_ms: 1.263375
+  type: 'test'
+  ...
+# Subtest: Test G-equivalent (idempotence): re-running the reconciler against an already-ACTIVE booking is a safe no-op
+ok 252 - Test G-equivalent (idempotence): re-running the reconciler against an already-ACTIVE booking is a safe no-op
+  ---
+  duration_ms: 0.22552
+  type: 'test'
+  ...
+# Subtest: a failed GPU_PROOF job still degrades the booking immediately, matching the pre-fix behaviour exactly
+ok 253 - a failed GPU_PROOF job still degrades the booking immediately, matching the pre-fix behaviour exactly
+  ---
+  duration_ms: 0.648238
+  type: 'test'
+  ...
+# Subtest: Test F: a genuinely expired ACTIVE booking with no live Developer session settles to COMPLETED
+ok 254 - Test F: a genuinely expired ACTIVE booking with no live Developer session settles to COMPLETED
+  ---
+  duration_ms: 0.401876
+  type: 'test'
+  ...
+# Subtest: the expiry sweep excludes a booking whose GPU_PROOF job is still active, both in its query and its re-check inside the transaction
+ok 255 - the expiry sweep excludes a booking whose GPU_PROOF job is still active, both in its query and its re-check inside the transaction
+  ---
+  duration_ms: 0.2123
+  type: 'test'
+  ...
+# Subtest: Test E: this expiry sweep never even queries a booking that already has a live Developer session (query-level exclusion)
+ok 256 - Test E: this expiry sweep never even queries a booking that already has a live Developer session (query-level exclusion)
+  ---
+  duration_ms: 0.161774
+  type: 'test'
+  ...
+# Subtest: the expiry sweep is a no-op outside the dev-bypass gate, exactly like every other mechanism in this file
+ok 257 - the expiry sweep is a no-op outside the dev-bypass gate, exactly like every other mechanism in this file
+  ---
+  duration_ms: 0.11273
+  type: 'test'
+  ...
+# Subtest: findExpiredActiveDeveloperBookings only ever matches ACTIVE bookings whose real endsAt has passed
+ok 258 - findExpiredActiveDeveloperBookings only ever matches ACTIVE bookings whose real endsAt has passed
+  ---
+  duration_ms: 0.157998
+  type: 'test'
+  ...
+# Subtest: GPU Proof uses an immutable fixed CUDA workload
+ok 259 - GPU Proof uses an immutable fixed CUDA workload
+  ---
+  duration_ms: 5.755358
+  type: 'test'
+  ...
+# Subtest: rental execution has cancellation, signed metrics and verified cleanup gates
+ok 260 - rental execution has cancellation, signed metrics and verified cleanup gates
+  ---
+  duration_ms: 2.276963
+  type: 'test'
+  ...
+# Subtest: thermal quarantine boundary is exactly 98 C, never below
+ok 261 - thermal quarantine boundary is exactly 98 C, never below
+  ---
+  duration_ms: 0.989672
+  type: 'test'
+  ...
+# Subtest: 98 C enters quarantine with an explicit measured thermal cause
+ok 262 - 98 C enters quarantine with an explicit measured thermal cause
+  ---
+  duration_ms: 0.471751
+  type: 'test'
+  ...
+# Subtest: hottest physical GPU is the one that owns the thermal decision
+ok 263 - hottest physical GPU is the one that owns the thermal decision
+  ---
+  duration_ms: 0.533043
+  type: 'test'
+  ...
+# Subtest: an existing unrelated quarantine is never overwritten by temperature
+ok 264 - an existing unrelated quarantine is never overwritten by temperature
+  ---
+  duration_ms: 0.168124
+  type: 'test'
+  ...
+# Subtest: thermal quarantine auto-queues a real diagnostic after cooldown
+ok 265 - thermal quarantine auto-queues a real diagnostic after cooldown
+  ---
+  duration_ms: 0.460895
+  type: 'test'
+  ...
+# Subtest: cooldown above recovery threshold does not auto-start a diagnostic
+ok 266 - cooldown above recovery threshold does not auto-start a diagnostic
+  ---
+  duration_ms: 0.174413
+  type: 'test'
+  ...
+# Subtest: workspace access freshness never exceeds the API offline threshold
+ok 267 - workspace access freshness never exceeds the API offline threshold
+  ---
+  duration_ms: 4.950314
+  type: 'test'
+  ...
+# Subtest: Render preserves the same 300 second heartbeat offline budget for web and worker
+ok 268 - Render preserves the same 300 second heartbeat offline budget for web and worker
+  ---
+  duration_ms: 1.840495
+  type: 'test'
+  ...
+# Subtest: website Host download uses the exact published Windows installer asset
+ok 269 - website Host download uses the exact published Windows installer asset
+  ---
+  duration_ms: 5.671922
+  type: 'test'
+  ...
+# Subtest: Host download visibly exposes immutable release identity and checksum
+ok 270 - Host download visibly exposes immutable release identity and checksum
+  ---
+  duration_ms: 1.660764
+  type: 'test'
+  ...
+# Subtest: Host release metadata bypasses transient cache failures while remaining fail closed
+ok 271 - Host release metadata bypasses transient cache failures while remaining fail closed
+  ---
+  duration_ms: 1.224055
+  type: 'test'
+  ...
+# Subtest: Windows release smoke test rejects an installer with the wrong embedded Agent version
+ok 272 - Windows release smoke test rejects an installer with the wrong embedded Agent version
+  ---
+  duration_ms: 1.832413
+  type: 'test'
+  ...
+# Subtest: preserves Fastify rate-limit errors as HTTP 429
+ok 273 - preserves Fastify rate-limit errors as HTTP 429
+  ---
+  duration_ms: 1.027759
+  type: 'test'
+  ...
+# Subtest: preserves other client errors without leaking their message
+ok 274 - preserves other client errors without leaking their message
+  ---
+  duration_ms: 0.107182
+  type: 'test'
+  ...
+# Subtest: keeps server and malformed errors on the internal-error path
+ok 275 - keeps server and malformed errors on the internal-error path
+  ---
+  duration_ms: 0.156336
+  type: 'test'
+  ...
+# Subtest: lease tokens are opaque fixed-size capabilities and only hashes are compared
+ok 276 - lease tokens are opaque fixed-size capabilities and only hashes are compared
+  ---
+  duration_ms: 1.003193
+  type: 'test'
+  ...
+# Subtest: lease deadline has a 30 second safety floor
+ok 277 - lease deadline has a 30 second safety floor
+  ---
+  duration_ms: 0.294334
+  type: 'test'
+  ...
+# Subtest: active lease predicate binds job, machine, attempt, token and expiry
+ok 278 - active lease predicate binds job, machine, attempt, token and expiry
+  ---
+  duration_ms: 0.234764
+  type: 'test'
+  ...
+# Subtest: terminal idempotence only accepts the same fenced attempt
+ok 279 - terminal idempotence only accepts the same fenced attempt
+  ---
+  duration_ms: 0.240983
+  type: 'test'
+  ...
+# Subtest: qualified job protocol is fail-closed for pre-0.6.2 or malformed agents
+ok 280 - qualified job protocol is fail-closed for pre-0.6.2 or malformed agents
+  ---
+  duration_ms: 0.255285
+  type: 'test'
+  ...
+# Subtest: new jobs are never assigned to an agent without the fencing protocol
+ok 281 - new jobs are never assigned to an agent without the fencing protocol
+  ---
+  duration_ms: 5.880627
+  type: 'test'
+  ...
+# Subtest: leased jobs have an independent signed renewal endpoint
+ok 282 - leased jobs have an independent signed renewal endpoint
+  ---
+  duration_ms: 0.240042
+  type: 'test'
+  ...
+# Subtest: state and completion mutations are fenced by attempt plus token
+ok 283 - state and completion mutations are fenced by attempt plus token
+  ---
+  duration_ms: 0.224319
+  type: 'test'
+  ...
+# Subtest: /complete retries a Postgres serialization conflict instead of surfacing a raw 500, and keeps its Serializable isolation
+ok 284 - /complete retries a Postgres serialization conflict instead of surfacing a raw 500, and keeps its Serializable isolation
+  ---
+  duration_ms: 0.249276
+  type: 'test'
+  ...
+# Subtest: proof finalization cannot be replayed by an obsolete attempt
+ok 285 - proof finalization cannot be replayed by an obsolete attempt
+  ---
+  duration_ms: 1.983811
+  type: 'test'
+  ...
+# Subtest: proof finalization's job lookup is retried on a transient failure, not left as a raw unretried read
+ok 286 - proof finalization's job lookup is retried on a transient failure, not left as a raw unretried read
+  ---
+  duration_ms: 0.304279
+  type: 'test'
+  ...
+# Subtest: heartbeat derives availability from server-owned runtime state
+ok 287 - heartbeat derives availability from server-owned runtime state
+  ---
+  duration_ms: 0.249476
+  type: 'test'
+  ...
+# Subtest: heartbeat publishability requires Docker and NVIDIA runtime, and hides the listing on ANY loss of publishability, not only an outdated agent
+ok 288 - heartbeat publishability requires Docker and NVIDIA runtime, and hides the listing on ANY loss of publishability, not only an outdated agent
+  ---
+  duration_ms: 0.174904
+  type: 'test'
+  ...
+# Subtest: a 30 second API-agent outage cannot stale or quarantine a job with a 90 second lease
+ok 289 - a 30 second API-agent outage cannot stale or quarantine a job with a 90 second lease
+  ---
+  duration_ms: 1.254582
+  type: 'test'
+  ...
+# Subtest: a 90 second job lease leaves explicit margin for a 30 second network outage
+ok 290 - a 90 second job lease leaves explicit margin for a 30 second network outage
+  ---
+  duration_ms: 0.653355
+  type: 'test'
+  ...
+# Subtest: API defaults, example environment and agent refresh loop preserve the same lease safety budget
+ok 291 - API defaults, example environment and agent refresh loop preserve the same lease safety budget
+  ---
+  duration_ms: 5.899596
+  type: 'test'
+  ...
+# Subtest: active explicit lease wins over an old updatedAt timestamp
+ok 292 - active explicit lease wins over an old updatedAt timestamp
+  ---
+  duration_ms: 1.422214
+  type: 'test'
+  ...
+# Subtest: expired explicit lease times out a claimed job and quarantines its machine
+ok 293 - expired explicit lease times out a claimed job and quarantines its machine
+  ---
+  duration_ms: 1.186109
+  type: 'test'
+  ...
+# Subtest: legacy claimed row without a lease still uses updatedAt during rollout
+ok 294 - legacy claimed row without a lease still uses updatedAt during rollout
+  ---
+  duration_ms: 0.244388
+  type: 'test'
+  ...
+# Subtest: queued never-claimed job expires by updatedAt and may safely release RESERVED machine
+ok 295 - queued never-claimed job expires by updatedAt and may safely release RESERVED machine
+  ---
+  duration_ms: 0.309546
+  type: 'test'
+  ...
+# Subtest: lost sweep CAS race causes zero booking/session/machine/payment side effects
+ok 296 - lost sweep CAS race causes zero booking/session/machine/payment side effects
+  ---
+  duration_ms: 0.276407
+  type: 'test'
+  ...
+# Subtest: stale job never settles payment as success
+ok 297 - stale job never settles payment as success
+  ---
+  duration_ms: 0.262867
+  type: 'test'
+  ...
+# Subtest: allows the diagnostic happy path
+ok 298 - allows the diagnostic happy path
+  ---
+  duration_ms: 0.622168
+  type: 'test'
+  ...
+# Subtest: terminal statuses cannot transition
+ok 299 - terminal statuses cannot transition
+  ---
+  duration_ms: 0.160542
+  type: 'test'
+  ...
+# Subtest: cannot skip directly from queued to running
+ok 300 - cannot skip directly from queued to running
+  ---
+  duration_ms: 0.090426
+  type: 'test'
+  ...
+# Subtest: exact GPU listing creation uses bounded retry while preserving the machine advisory lock
+ok 301 - exact GPU listing creation uses bounded retry while preserving the machine advisory lock
+  ---
+  duration_ms: 5.871633
+  type: 'test'
+  ...
+# Subtest: owner listing lifecycle retries both serialized machine-scoped transitions
+ok 302 - owner listing lifecycle retries both serialized machine-scoped transitions
+  ---
+  duration_ms: 1.493733
+  type: 'test'
+  ...
+# Subtest: agent diagnostic routes: cross-machine auth is rejected, owner isolation holds, and a quarantined agent can still run a real diagnostic end-to-end
+ok 303 - agent diagnostic routes: cross-machine auth is rejected, owner isolation holds, and a quarantined agent can still run a real diagnostic end-to-end
+  ---
+  duration_ms: 340.581987
+  type: 'test'
+  ...
+# Subtest: a stale (timed-out) RUNNING run never shadows a fresh one, and self-heals to TIMED_OUT - regression for a real bug found live against production
+ok 304 - a stale (timed-out) RUNNING run never shadows a fresh one, and self-heals to TIMED_OUT - regression for a real bug found live against production
+  ---
+  duration_ms: 52.52014
+  type: 'test'
+  ...
+# Subtest: force-clear: never accessible to the owner, requires the internal token, and a CRITICAL-severity reason requires an explicit risk confirmation naming that exact code
+ok 305 - force-clear: never accessible to the owner, requires the internal token, and a CRITICAL-severity reason requires an explicit risk confirmation naming that exact code
+  ---
+  duration_ms: 51.13288
+  type: 'test'
+  ...
+# Subtest: presence key uses a Redis Cluster hash tag per machine
+ok 306 - presence key uses a Redis Cluster hash tag per machine
+  ---
+  duration_ms: 0.632924
+  type: 'test'
+  ...
+# Subtest: new connection fences an older gateway connection
+ok 307 - new connection fences an older gateway connection
+  ---
+  duration_ms: 1.390236
+  type: 'test'
+  ...
+# Subtest: presence rejects replayed or out-of-order sequence numbers
+ok 308 - presence rejects replayed or out-of-order sequence numbers
+  ---
+  duration_ms: 0.227613
+  type: 'test'
+  ...
+# Subtest: heartbeat cannot make a funded machine available while work is pending
+ok 309 - heartbeat cannot make a funded machine available while work is pending
+  ---
+  duration_ms: 0.70931
+  type: 'test'
+  ...
+# Subtest: active workspace remains RUNNING even when the heartbeat carries no session id
+ok 310 - active workspace remains RUNNING even when the heartbeat carries no session id
+  ---
+  duration_ms: 0.104548
+  type: 'test'
+  ...
+# Subtest: degraded booking fails closed
+ok 311 - degraded booking fails closed
+  ---
+  duration_ms: 0.140762
+  type: 'test'
+  ...
+# Subtest: unsupported agent stays unavailable when no runtime is active
+ok 312 - unsupported agent stays unavailable when no runtime is active
+  ---
+  duration_ms: 0.07931
+  type: 'test'
+  ...
+# Subtest: supported idle agent may become available
+ok 313 - supported idle agent may become available
+  ---
+  duration_ms: 0.134693
+  type: 'test'
+  ...
+# Subtest: host readiness blocks publication before link and heartbeat
+ok 314 - host readiness blocks publication before link and heartbeat
+  ---
+  duration_ms: 0.955421
+  type: 'test'
+  ...
+# Subtest: host readiness requires Docker, NVIDIA runtime and verified GPU evidence
+ok 315 - host readiness requires Docker, NVIDIA runtime and verified GPU evidence
+  ---
+  duration_ms: 0.155284
+  type: 'test'
+  ...
+# Subtest: an agent whose reported protocol version is too old is AGENT_OUTDATED, not silently treated as ready
+ok 316 - an agent whose reported protocol version is too old is AGENT_OUTDATED, not silently treated as ready
+  ---
+  duration_ms: 0.128544
+  type: 'test'
+  ...
+# Subtest: an active listing does not block another verified GPU on a multi-GPU host
+ok 317 - an active listing does not block another verified GPU on a multi-GPU host
+  ---
+  duration_ms: 0.191139
+  type: 'test'
+  ...
+# Subtest: full-machine allocation drives reserved and active session states
+ok 318 - full-machine allocation drives reserved and active session states
+  ---
+  duration_ms: 0.183887
+  type: 'test'
+  ...
+# Subtest: quarantine always fails closed
+ok 319 - quarantine always fails closed
+  ---
+  duration_ms: 0.129376
+  type: 'test'
+  ...
+# Subtest: quarantine surfaces the real stable reasonCode instead of a generic label
+ok 320 - quarantine surfaces the real stable reasonCode instead of a generic label
+  ---
+  duration_ms: 0.111028
+  type: 'test'
+  ...
+# Subtest: an offline (stale-heartbeat) machine is never READY, independent of quarantine
+ok 321 - an offline (stale-heartbeat) machine is never READY, independent of quarantine
+  ---
+  duration_ms: 0.11925
+  type: 'test'
+  ...
+# Subtest: accepts multi-month reservations without a product duration limit
+ok 322 - accepts multi-month reservations without a product duration limit
+  ---
+  duration_ms: 0.688428
+  type: 'test'
+  ...
+# Subtest: treats adjacent reservations as non-overlapping
+ok 323 - treats adjacent reservations as non-overlapping
+  ---
+  duration_ms: 0.124989
+  type: 'test'
+  ...
+# Subtest: instant rental ends no later than the next future reservation
+ok 324 - instant rental ends no later than the next future reservation
+  ---
+  duration_ms: 0.617221
+  type: 'test'
+  ...
+# Subtest: requires bilateral acceptance of a negotiated price
+ok 325 - requires bilateral acceptance of a negotiated price
+  ---
+  duration_ms: 0.183607
+  type: 'test'
+  ...
+# Subtest: scheduled reservation time starts at the agreed hour even if provider is late
+ok 326 - scheduled reservation time starts at the agreed hour even if provider is late
+  ---
+  duration_ms: 0.190757
+  type: 'test'
+  ...
+# Subtest: accepts unknown and future accelerator identities
+ok 327 - accepts unknown and future accelerator identities
+  ---
+  duration_ms: 0.553634
+  type: 'test'
+  ...
+# Subtest: marketplace exposes a busy state and the actual dynamic release time
+ok 328 - marketplace exposes a busy state and the actual dynamic release time
+  ---
+  duration_ms: 5.663519
+  type: 'test'
+  ...
+# Subtest: marketplace disables rental while the GPU is rented or working
+ok 329 - marketplace disables rental while the GPU is rented or working
+  ---
+  duration_ms: 1.367317
+  type: 'test'
+  ...
+# Subtest: mining configuration policy
+    # Subtest: charges one percent only for the managed pool
+    ok 1 - charges one percent only for the managed pool
+      ---
+      duration_ms: 0.788289
+      type: 'test'
+      ...
+    # Subtest: accepts independently configured GPU and CPU resources
+    ok 2 - accepts independently configured GPU and CPU resources
+      ---
+      duration_ms: 2.680963
+      type: 'test'
+      ...
+    # Subtest: accepts supported secret-manager references for owner pools
+    ok 3 - accepts supported secret-manager references for owner pools
+      ---
+      duration_ms: 0.401185
+      type: 'test'
+      ...
+    # Subtest: rejects raw owner-pool passwords and unsupported secret references
+    ok 4 - rejects raw owner-pool passwords and unsupported secret references
+      ---
+      duration_ms: 1.040429
+      type: 'test'
+      ...
+    # Subtest: stops only the resource selected by a partial rental
+    ok 5 - stops only the resource selected by a partial rental
+      ---
+      duration_ms: 0.903642
+      type: 'test'
+      ...
+    # Subtest: stops every miner for an exclusive-machine rental
+    ok 6 - stops every miner for an exclusive-machine rental
+      ---
+      duration_ms: 0.122174
+      type: 'test'
+      ...
+    # Subtest: locks configuration changes for the rented resource
+    ok 7 - locks configuration changes for the rented resource
+      ---
+      duration_ms: 0.402757
+      type: 'test'
+      ...
+    # Subtest: allows CPU configuration while only a GPU is rented
+    ok 8 - allows CPU configuration while only a GPU is rented
+      ---
+      duration_ms: 0.277178
+      type: 'test'
+      ...
+    # Subtest: requires the machine owner
+    ok 9 - requires the machine owner
+      ---
+      duration_ms: 0.253452
+      type: 'test'
+      ...
+    # Subtest: uses optimistic concurrency
+    ok 10 - uses optimistic concurrency
+      ---
+      duration_ms: 0.2918
+      type: 'test'
+      ...
+    # Subtest: rejects enabling mining on a quarantined resource
+    ok 11 - rejects enabling mining on a quarantined resource
+      ---
+      duration_ms: 0.138769
+      type: 'test'
+      ...
+    # Subtest: rejects an NVIDIA-only profile on AMD
+    ok 12 - rejects an NVIDIA-only profile on AMD
+      ---
+      duration_ms: 0.156386
+      type: 'test'
+      ...
+    # Subtest: rejects GPU mining when the hardware vendor is unknown
+    ok 13 - rejects GPU mining when the hardware vendor is unknown
+      ---
+      duration_ms: 0.124818
+      type: 'test'
+      ...
+    # Subtest: accepts a pinned dual-vendor profile on AMD
+    ok 14 - accepts a pinned dual-vendor profile on AMD
+      ---
+      duration_ms: 0.127392
+      type: 'test'
+      ...
+    # Subtest: requires CPU-specific limits
+    ok 15 - requires CPU-specific limits
+      ---
+      duration_ms: 0.209426
+      type: 'test'
+      ...
+    # Subtest: requires GPU intensity and rejects CPU controls on a GPU
+    ok 16 - requires GPU intensity and rejects CPU controls on a GPU
+      ---
+      duration_ms: 0.176827
+      type: 'test'
+      ...
+    1..16
+ok 330 - mining configuration policy
+  ---
+  duration_ms: 9.162035
+  type: 'suite'
+  ...
+# Subtest: mining profile catalog
+    # Subtest: approves only enabled profiles for the expected resource kind and GPU vendor
+    ok 1 - approves only enabled profiles for the expected resource kind and GPU vendor
+      ---
+      duration_ms: 0.563049
+      type: 'test'
+      ...
+    # Subtest: rejects profiles without pinned runtime provenance plus unknown profiles
+    ok 2 - rejects profiles without pinned runtime provenance plus unknown profiles
+      ---
+      duration_ms: 0.099981
+      type: 'test'
+      ...
+    1..2
+ok 331 - mining profile catalog
+  ---
+  duration_ms: 1.296875
+  type: 'suite'
+  ...
+# Subtest: every enabled mining profile has pinned Host runtime provenance
+ok 332 - every enabled mining profile has pinned Host runtime provenance
+  ---
+  duration_ms: 0.831814
+  type: 'test'
+  ...
+# Subtest: unqualified GPU miners remain disabled
+ok 333 - unqualified GPU miners remain disabled
+  ---
+  duration_ms: 0.144187
+  type: 'test'
+  ...
+# Subtest: a fresh heartbeat repairs a missing Accelerator -> MiningResource mapping
+ok 334 - a fresh heartbeat repairs a missing Accelerator -> MiningResource mapping
+  ---
+  duration_ms: 1.519732
+  type: 'test'
+  ...
+# Subtest: a slot/BIOS reorder keeps the same MiningResource identity per hardware UUID
+ok 335 - a slot/BIOS reorder keeps the same MiningResource identity per hardware UUID
+  ---
+  duration_ms: 0.420464
+  type: 'test'
+  ...
+# Subtest: a GPU that stops reporting is disabled as a resource and marked missing, not left dangling
+ok 336 - a GPU that stops reporting is disabled as a resource and marked missing, not left dangling
+  ---
+  duration_ms: 0.388576
+  type: 'test'
+  ...
+# Subtest: a quarantined accelerator that stops reporting is never overwritten back to MISSING
+ok 337 - a quarantined accelerator that stops reporting is never overwritten back to MISSING
+  ---
+  duration_ms: 0.412251
+  type: 'test'
+  ...
+# Subtest: a machine-level quarantine overrides GPU availability when syncing accelerator status
+ok 338 - a machine-level quarantine overrides GPU availability when syncing accelerator status
+  ---
+  duration_ms: 0.189475
+  type: 'test'
+  ...
+# Subtest: a repeated heartbeat for the same GPU refreshes the existing resource instead of duplicating it
+ok 339 - a repeated heartbeat for the same GPU refreshes the existing resource instead of duplicating it
+  ---
+  duration_ms: 0.240012
+  type: 'test'
+  ...
+# Subtest: start payload binds hardware and preserves i64 fence as exact string
+ok 340 - start payload binds hardware and preserves i64 fence as exact string
+  ---
+  duration_ms: 0.707897
+  type: 'test'
+  ...
+# Subtest: stop payload carries only resource identity and exact generation
+ok 341 - stop payload carries only resource identity and exact generation
+  ---
+  duration_ms: 0.547946
+  type: 'test'
+  ...
+# Subtest: lease for another GPU can never be reused
+ok 342 - lease for another GPU can never be reused
+  ---
+  duration_ms: 0.338871
+  type: 'test'
+  ...
+# Subtest: GPU resource key is based on stable hardware UUID, never slot index
+ok 343 - GPU resource key is based on stable hardware UUID, never slot index
+  ---
+  duration_ms: 0.608537
+  type: 'test'
+  ...
+# Subtest: inventory reorder updates the same MiningResource ids
+ok 344 - inventory reorder updates the same MiningResource ids
+  ---
+  duration_ms: 0.879005
+  type: 'test'
+  ...
+# Subtest: mining runtime verifies the agent before entering the retried transaction
+ok 345 - mining runtime verifies the agent before entering the retried transaction
+  ---
+  duration_ms: 4.832827
+  type: 'test'
+  ...
+# Subtest: mining runtime retry is bounded and protected by the event idempotency key
+ok 346 - mining runtime retry is bounded and protected by the event idempotency key
+  ---
+  duration_ms: 1.408494
+  type: 'test'
+  ...
+# Subtest: owner mining page exposes rental-first controls
+ok 347 - owner mining page exposes rental-first controls
+  ---
+  duration_ms: 5.497489
+  type: 'test'
+  ...
+# Subtest: mining UI uses owner-only API routes and optimistic concurrency
+ok 348 - mining UI uses owner-only API routes and optimistic concurrency
+  ---
+  duration_ms: 1.273951
+  type: 'test'
+  ...
+# Subtest: mining UI never asks owners for a raw pool password
+ok 349 - mining UI never asks owners for a raw pool password
+  ---
+  duration_ms: 1.455645
+  type: 'test'
+  ...
+# Subtest: dashboard links to mining without claiming the runtime is production-ready
+ok 350 - dashboard links to mining without claiming the runtime is production-ready
+  ---
+  duration_ms: 1.214947
+  type: 'test'
+  ...
+# Subtest: builds a deterministic idempotent offline transition plan
+ok 351 - builds a deterministic idempotent offline transition plan
+  ---
+  duration_ms: 1.058947
+  type: 'test'
+  ...
+# Subtest: computes the heartbeat cutoff from a trusted server clock
+ok 352 - computes the heartbeat cutoff from a trusted server clock
+  ---
+  duration_ms: 0.316157
+  type: 'test'
+  ...
+# Subtest: rejects invalid offline thresholds
+ok 353 - rejects invalid offline thresholds
+  ---
+  duration_ms: 0.321354
+  type: 'test'
+  ...
+# Subtest: offline cancellation closes the explicit lease and unfinished attempt atomically
+ok 354 - offline cancellation closes the explicit lease and unfinished attempt atomically
+  ---
+  duration_ms: 8.016502
+  type: 'test'
+  ...
+# Subtest: offline sweep never turns an offline machine back to available or claims financial success
+ok 355 - offline sweep never turns an offline machine back to available or claims financial success
+  ---
+  duration_ms: 1.052542
+  type: 'test'
+  ...
+# Subtest: reconcileOrphanedDepositBookings
+    # Subtest: cancels a truly orphaned AWAITING_DEPOSIT booking past the grace period
+    ok 1 - cancels a truly orphaned AWAITING_DEPOSIT booking past the grace period
+      ---
+      duration_ms: 21.870753
+      type: 'test'
+      ...
+    # Subtest: never touches a booking protected by a live accelerator allocation
+    ok 2 - never touches a booking protected by a live accelerator allocation
+      ---
+      duration_ms: 12.549118
+      type: 'test'
+      ...
+    # Subtest: never touches an unallocated booking still inside the grace period
+    ok 3 - never touches an unallocated booking still inside the grace period
+      ---
+      duration_ms: 9.417349
+      type: 'test'
+      ...
+    # Subtest: is idempotent: a second run finds nothing left to cancel
+    ok 4 - is idempotent: a second run finds nothing left to cancel
+      ---
+      duration_ms: 9.793396
+      type: 'test'
+      ...
+    # Subtest: is safe under concurrent execution: only one of two racing runs counts the cancellation
+    ok 5 - is safe under concurrent execution: only one of two racing runs counts the cancellation
+      ---
+      duration_ms: 9.932832
+      type: 'test'
+      ...
+    # Subtest: never touches a FUNDED or otherwise non-AWAITING_DEPOSIT booking, however old
+    ok 6 - never touches a FUNDED or otherwise non-AWAITING_DEPOSIT booking, however old
+      ---
+      duration_ms: 6.571564
+      type: 'test'
+      ...
+    1..6
+ok 356 - reconcileOrphanedDepositBookings
+  ---
+  duration_ms: 110.162295
+  type: 'test'
+  ...
+# Subtest: the reconciliation interval runs reconcileOrphanedDepositBookings on every tick, independently of the other reconcilers failing
+ok 357 - the reconciliation interval runs reconcileOrphanedDepositBookings on every tick, independently of the other reconcilers failing
+  ---
+  duration_ms: 1.443837
+  type: 'test'
+  ...
+# Subtest: a new pairing code immediately invalidates the previous code for the same host
+ok 358 - a new pairing code immediately invalidates the previous code for the same host
+  ---
+  duration_ms: 0.916482
+  type: 'test'
+  ...
+# Subtest: concurrent requests leave exactly one active code for a host
+ok 359 - concurrent requests leave exactly one active code for a host
+  ---
+  duration_ms: 0.25161
+  type: 'test'
+  ...
+# Subtest: a pairing code can only be consumed once and clears the host reference
+ok 360 - a pairing code can only be consumed once and clears the host reference
+  ---
+  duration_ms: 0.17272
+  type: 'test'
+  ...
+# Subtest: pairing codes remain isolated between different hosts
+ok 361 - pairing codes remain isolated between different hosts
+  ---
+  duration_ms: 0.261635
+  type: 'test'
+  ...
+# Subtest: unrelated Redis keys keep their original behavior
+ok 362 - unrelated Redis keys keep their original behavior
+  ---
+  duration_ms: 0.156927
+  type: 'test'
+  ...
+# Subtest: installing the guard twice is idempotent
+ok 363 - installing the guard twice is idempotent
+  ---
+  duration_ms: 0.214253
+  type: 'test'
+  ...
+# Subtest: historical two-machine result cannot be mistaken for current release qualification
+ok 364 - historical two-machine result cannot be mistaken for current release qualification
+  ---
+  duration_ms: 5.648186
+  type: 'test'
+  ...
+# Subtest: current physical qualification remains fail-closed until the real two-PC flow is proven
+ok 365 - current physical qualification remains fail-closed until the real two-PC flow is proven
+  ---
+  duration_ms: 1.67796
+  type: 'test'
+  ...
+# Subtest: two-PC operator procedure describes the current real qualification path
+ok 366 - two-PC operator procedure describes the current real qualification path
+  ---
+  duration_ms: 6.511829
+  type: 'test'
+  ...
+# Subtest: PC A preflight locks release/Agent/GPU identity and is read-only toward Docker resources
+ok 367 - PC A preflight locks release/Agent/GPU identity and is read-only toward Docker resources
+  ---
+  duration_ms: 1.063023
+  type: 'test'
+  ...
+# Subtest: PC B preflight proves the configured public browser/API/gateway path and exact build identity
+ok 368 - PC B preflight proves the configured public browser/API/gateway path and exact build identity
+  ---
+  duration_ms: 0.93514
+  type: 'test'
+  ...
+# Subtest: API publishes only an exact non-secret deployment commit for qualification
+ok 369 - API publishes only an exact non-secret deployment commit for qualification
+  ---
+  duration_ms: 2.023701
+  type: 'test'
+  ...
+# Subtest: PC B reserves the workspace tab synchronously before requesting the one-time access grant
+ok 370 - PC B reserves the workspace tab synchronously before requesting the one-time access grant
+  ---
+  duration_ms: 1.028181
+  type: 'test'
+  ...
+# Subtest: evidence collector stays fail-closed and cannot self-declare physical qualification passed
+ok 371 - evidence collector stays fail-closed and cannot self-declare physical qualification passed
+  ---
+  duration_ms: 1.093249
+  type: 'test'
+  ...
+# Subtest: CI parses every physical qualification PowerShell helper before merge
+ok 372 - CI parses every physical qualification PowerShell helper before merge
+  ---
+  duration_ms: 0.814388
+  type: 'test'
+  ...
+# Subtest: current gate advertises tooling but remains NOT YET PASSED and evidence bundles are gitignored
+ok 373 - current gate advertises tooling but remains NOT YET PASSED and evidence bundles are gitignored
+  ---
+  duration_ms: 1.25714
+  type: 'test'
+  ...
+# Subtest: active web/build/deployment configuration contains no Render API or gateway hardcodes
+ok 374 - active web/build/deployment configuration contains no Render API or gateway hardcodes
+  ---
+  duration_ms: 23.114402
+  type: 'test'
+  ...
+# Subtest: verification scripts use the provider-neutral runtime contract, never the legacy Render blueprint
+ok 375 - verification scripts use the provider-neutral runtime contract, never the legacy Render blueprint
+  ---
+  duration_ms: 1.743028
+  type: 'test'
+  ...
+# Subtest: quarantine history is immutable: a second quarantine never overwrites the first, and is recorded as REENTERED
+ok 376 - quarantine history is immutable: a second quarantine never overwrites the first, and is recorded as REENTERED
+  ---
+  duration_ms: 104.587514
+  type: 'test'
+  ...
+# Subtest: clearQuarantine resolves open history events and appends a CLEARED entry
+ok 377 - clearQuarantine resolves open history events and appends a CLEARED entry
+  ---
+  duration_ms: 40.043409
+  type: 'test'
+  ...
+# Subtest: a forced admin clear is never hidden in history: details.forced is set with the operator id
+ok 378 - a forced admin clear is never hidden in history: details.forced is set with the operator id
+  ---
+  duration_ms: 39.959111
+  type: 'test'
+  ...
+# Subtest: diagnostic PASS on every mandatory check clears an active quarantine (controlled transition, not a bare heartbeat)
+ok 379 - diagnostic PASS on every mandatory check clears an active quarantine (controlled transition, not a bare heartbeat)
+  ---
+  duration_ms: 85.544105
+  type: 'test'
+  ...
+# Subtest: diagnostic FAIL on a mandatory check maintains the quarantine with the specific reasonCode
+ok 380 - diagnostic FAIL on a mandatory check maintains the quarantine with the specific reasonCode
+  ---
+  duration_ms: 53.55431
+  type: 'test'
+  ...
+# Subtest: a diagnostic that could not execute at all (agent-side error) maintains quarantine, never clears it
+ok 381 - a diagnostic that could not execute at all (agent-side error) maintains quarantine, never clears it
+  ---
+  duration_ms: 46.389858
+  type: 'test'
+  ...
+# Subtest: a second result submission for an already-completed diagnostic run is rejected as a conflict, never silently reapplied
+ok 382 - a second result submission for an already-completed diagnostic run is rejected as a conflict, never silently reapplied
+  ---
+  duration_ms: 51.261804
+  type: 'test'
+  ...
+# Subtest: repair never clears a quarantine by itself - a fresh diagnostic remains mandatory afterwards
+ok 383 - repair never clears a quarantine by itself - a fresh diagnostic remains mandatory afterwards
+  ---
+  duration_ms: 54.745706
+  type: 'test'
+  ...
+# Subtest: a quarantined machine cannot be published (createExactGpuListing fails closed with the real reason)
+ok 384 - a quarantined machine cannot be published (createExactGpuListing fails closed with the real reason)
+  ---
+  duration_ms: 36.392223
+  type: 'test'
+  ...
+# Subtest: a quarantined machine cannot be rented (allocateBookingResources fails closed)
+ok 385 - a quarantined machine cannot be rented (allocateBookingResources fails closed)
+  ---
+  duration_ms: 40.811847
+  type: 'test'
+  ...
+# Subtest: end-to-end: QUARANTINED -> diagnostic -> real PASS results -> CLEAR -> publication succeeds
+ok 386 - end-to-end: QUARANTINED -> diagnostic -> real PASS results -> CLEAR -> publication succeeds
+  ---
+  duration_ms: 79.633223
+  type: 'test'
+  ...
+# Subtest: a stale machine (30+ days without a heartbeat) is identified as STALE, distinct from a merely offline one
+ok 387 - a stale machine (30+ days without a heartbeat) is identified as STALE, distinct from a merely offline one
+  ---
+  duration_ms: 0.280814
+  type: 'test'
+  ...
+# Subtest: the agent challenge endpoint no longer requires moderationStatus CLEAR (a quarantined machine must still authenticate to run its diagnostic)
+ok 388 - the agent challenge endpoint no longer requires moderationStatus CLEAR (a quarantined machine must still authenticate to run its diagnostic)
+  ---
+  duration_ms: 1.773885
+  type: 'test'
+  ...
+# Subtest: quarantine UI shows the durable cause and exposes one automatic resolution action
+ok 389 - quarantine UI shows the durable cause and exposes one automatic resolution action
+  ---
+  duration_ms: 4.794129
+  type: 'test'
+  ...
+# Subtest: one-click resolution chains safe repair then a real diagnostic, never a force clear
+ok 390 - one-click resolution chains safe repair then a real diagnostic, never a force clear
+  ---
+  duration_ms: 0.414245
+  type: 'test'
+  ...
+# Subtest: quarantine-service remains the only production authority for quarantine state writes
+ok 391 - quarantine-service remains the only production authority for quarantine state writes
+  ---
+  duration_ms: 41.466775
+  type: 'test'
+  ...
+# Subtest: quarantine-service writes machine state and durable event history together
+ok 392 - quarantine-service writes machine state and durable event history together
+  ---
+  duration_ms: 1.283185
+  type: 'test'
+  ...
+# Subtest: configured Redis provides the atomic capabilities required by GPUbnb
+ok 393 - configured Redis provides the atomic capabilities required by GPUbnb
+  ---
+  duration_ms: 20.858727
+  type: 'test'
+  ...
+# Subtest: capability proof exercises every Redis semantic GPUbnb depends on
+ok 394 - capability proof exercises every Redis semantic GPUbnb depends on
+  ---
+  duration_ms: 1.192708
+  type: 'test'
+  ...
+# Subtest: capability proof fails closed when one-shot consumption is unavailable
+ok 395 - capability proof fails closed when one-shot consumption is unavailable
+  ---
+  duration_ms: 0.387614
+  type: 'test'
+  ...
+# Subtest: capability proof fails closed when Streams are unavailable
+ok 396 - capability proof fails closed when Streams are unavailable
+  ---
+  duration_ms: 0.207383
+  type: 'test'
+  ...
+# Subtest: readiness caches a successful full capability proof for a bounded interval
+ok 397 - readiness caches a successful full capability proof for a bounded interval
+  ---
+  duration_ms: 0.524241
+  type: 'test'
+  ...
+# Subtest: failed readiness proof is never cached
+ok 398 - failed readiness proof is never cached
+  ---
+  duration_ms: 0.347965
+  type: 'test'
+  ...
+# Subtest: runtime topology declares every Redis capability required by the state contract
+ok 399 - runtime topology declares every Redis capability required by the state contract
+  ---
+  duration_ms: 6.34815
+  type: 'test'
+  ...
+# Subtest: one-time credentials use atomic consume-once semantics
+ok 400 - one-time credentials use atomic consume-once semantics
+  ---
+  duration_ms: 1.831011
+  type: 'test'
+  ...
+# Subtest: agent anti-replay remains atomic under concurrent verification
+ok 401 - agent anti-replay remains atomic under concurrent verification
+  ---
+  duration_ms: 1.001169
+  type: 'test'
+  ...
+# Subtest: presence, leases and scheduler authority retain ownership-checked atomic operations
+ok 402 - presence, leases and scheduler authority retain ownership-checked atomic operations
+  ---
+  duration_ms: 3.738487
+  type: 'test'
+  ...
+# Subtest: workspace relay keeps bounded queue and backpressure primitives
+ok 403 - workspace relay keeps bounded queue and backpressure primitives
+  ---
+  duration_ms: 1.377207
+  type: 'test'
+  ...
+# Subtest: outbox remains durable in Postgres while Redis Streams are delivery-only
+ok 404 - outbox remains durable in Postgres while Redis Streams are delivery-only
+  ---
+  duration_ms: 1.086158
+  type: 'test'
+  ...
+# Subtest: routing prefers locality while never assigning a draining gateway
+ok 405 - routing prefers locality while never assigning a draining gateway
+  ---
+  duration_ms: 0.998155
+  type: 'test'
+  ...
+# Subtest: routing rejects saturated or unhealthy connection gateways
+ok 406 - routing rejects saturated or unhealthy connection gateways
+  ---
+  duration_ms: 0.500044
+  type: 'test'
+  ...
+# Subtest: capacity arithmetic is bounded and rejects incoherent snapshots
+ok 407 - capacity arithmetic is bounded and rejects incoherent snapshots
+  ---
+  duration_ms: 0.11932
+  type: 'test'
+  ...
+# Subtest: release identity prefers explicit provider-neutral override
+ok 408 - release identity prefers explicit provider-neutral override
+  ---
+  duration_ms: 1.044495
+  type: 'test'
+  ...
+# Subtest: release identity uses the Render deployment commit in production
+ok 409 - release identity uses the Render deployment commit in production
+  ---
+  duration_ms: 0.142685
+  type: 'test'
+  ...
+# Subtest: release identity accepts GitHub SHA for CI and rejects ambiguous values
+ok 410 - release identity accepts GitHub SHA for CI and rejects ambiguous values
+  ---
+  duration_ms: 0.107632
+  type: 'test'
+  ...
+# Subtest: production heartbeat retries only the PostgreSQL transaction after one-time Redis challenge consumption
+ok 411 - production heartbeat retries only the PostgreSQL transaction after one-time Redis challenge consumption
+  ---
+  duration_ms: 5.157956
+  type: 'test'
+  ...
+# Subtest: workspace stopped route retries both replay-safe Serializable cleanup transactions and deletes Redis only after commit
+ok 412 - workspace stopped route retries both replay-safe Serializable cleanup transactions and deletes Redis only after commit
+  ---
+  duration_ms: 1.706813
+  type: 'test'
+  ...
+# Subtest: canonical payload hash is stable across key order
+ok 413 - canonical payload hash is stable across key order
+  ---
+  duration_ms: 0.772445
+  type: 'test'
+  ...
+# Subtest: outbox validation rejects unsafe identifiers and oversized payloads
+ok 414 - outbox validation rejects unsafe identifiers and oversized payloads
+  ---
+  duration_ms: 1.608755
+  type: 'test'
+  ...
+# Subtest: machine commands require monotonic sequence and future expiry
+ok 415 - machine commands require monotonic sequence and future expiry
+  ---
+  duration_ms: 0.22581
+  type: 'test'
+  ...
+# Subtest: retry policy is bounded and deterministic
+ok 416 - retry policy is bounded and deterministic
+  ---
+  duration_ms: 0.19877
+  type: 'test'
+  ...
+# Subtest: worker-controlled limits are clamped
+ok 417 - worker-controlled limits are clamped
+  ---
+  duration_ms: 0.129865
+  type: 'test'
+  ...
+# Subtest: records a deterministic outbox event
+ok 418 - records a deterministic outbox event
+  ---
+  duration_ms: 1.329344
+  type: 'test'
+  ...
+# Subtest: preparation reserves an ordered command and matching event
+ok 419 - preparation reserves an ordered command and matching event
+  ---
+  duration_ms: 0.560435
+  type: 'test'
+  ...
+# Subtest: stop requests are reason-bound and idempotent
+ok 420 - stop requests are reason-bound and idempotent
+  ---
+  duration_ms: 0.35175
+  type: 'test'
+  ...
+# Subtest: rejects malformed identifiers before database writes
+ok 421 - rejects malformed identifiers before database writes
+  ---
+  duration_ms: 0.392702
+  type: 'test'
+  ...
+# Subtest: exact GPU is publishable only with fresh verified resource authority
+ok 422 - exact GPU is publishable only with fresh verified resource authority
+  ---
+  duration_ms: 1.137505
+  type: 'test'
+  ...
+# Subtest: missing Accelerator to MiningResource authority blocks publication before booking
+ok 423 - missing Accelerator to MiningResource authority blocks publication before booking
+  ---
+  duration_ms: 0.134423
+  type: 'test'
+  ...
+# Subtest: quarantine, missing isolation and stale evidence fail closed
+ok 424 - quarantine, missing isolation and stale evidence fail closed
+  ---
+  duration_ms: 0.142214
+  type: 'test'
+  ...
+# Subtest: resource authority quarantine and unsafe runtime block publication
+ok 425 - resource authority quarantine and unsafe runtime block publication
+  ---
+  duration_ms: 0.109876
+  type: 'test'
+  ...
+# Subtest: live allocation or another reservable listing blocks duplicate publication
+ok 426 - live allocation or another reservable listing blocks duplicate publication
+  ---
+  duration_ms: 0.168014
+  type: 'test'
+  ...
+# Subtest: listOwnerRentalGpus surfaces the blocking legacy listing id so the owner can archive it
+ok 427 - listOwnerRentalGpus surfaces the blocking legacy listing id so the owner can archive it
+  ---
+  duration_ms: 0.382737
+  type: 'test'
+  ...
+# Subtest: listOwnerRentalGpus never sets blockingListingId when the GPU is publishable
+ok 428 - listOwnerRentalGpus never sets blockingListingId when the GPU is publishable
+  ---
+  duration_ms: 0.238369
+  type: 'test'
+  ...
+# Subtest: pause hides new bookings without cancelling an existing committed booking
+ok 429 - pause hides new bookings without cancelling an existing committed booking
+  ---
+  duration_ms: 1.185568
+  type: 'test'
+  ...
+# Subtest: resume requires both fresh machine presence and healthy exact GPU
+ok 430 - resume requires both fresh machine presence and healthy exact GPU
+  ---
+  duration_ms: 0.803631
+  type: 'test'
+  ...
+# Subtest: archive is refused while a committed booking still exists
+ok 431 - archive is refused while a committed booking still exists
+  ---
+  duration_ms: 0.223036
+  type: 'test'
+  ...
+# Subtest: archive releases the listing identity once no committed booking remains
+ok 432 - archive releases the listing identity once no committed booking remains
+  ---
+  duration_ms: 0.195355
+  type: 'test'
+  ...
+# Subtest: security-suspended listing cannot be owner-resumed or owner-archived
+ok 433 - security-suspended listing cannot be owner-resumed or owner-archived
+  ---
+  duration_ms: 0.262396
+  type: 'test'
+  ...
+# Subtest: legacy FULL_MACHINE listing with no dependency is archived
+ok 434 - legacy FULL_MACHINE listing with no dependency is archived
+  ---
+  duration_ms: 0.390809
+  type: 'test'
+  ...
+# Subtest: legacy archive refuses a listing with an active booking
+ok 435 - legacy archive refuses a listing with an active booking
+  ---
+  duration_ms: 0.293552
+  type: 'test'
+  ...
+# Subtest: legacy archive refuses a listing with a live machine allocation
+ok 436 - legacy archive refuses a listing with a live machine allocation
+  ---
+  duration_ms: 0.217237
+  type: 'test'
+  ...
+# Subtest: legacy archive refuses a listing with a live accelerator allocation
+ok 437 - legacy archive refuses a listing with a live accelerator allocation
+  ---
+  duration_ms: 0.344409
+  type: 'test'
+  ...
+# Subtest: a released allocation does not block legacy archive
+ok 438 - a released allocation does not block legacy archive
+  ---
+  duration_ms: 0.367234
+  type: 'test'
+  ...
+# Subtest: legacy archive refuses a listing with a live job
+ok 439 - legacy archive refuses a listing with a live job
+  ---
+  duration_ms: 0.28547
+  type: 'test'
+  ...
+# Subtest: legacy archive refuses a listing with a live workspace session (lease)
+ok 440 - legacy archive refuses a listing with a live workspace session (lease)
+  ---
+  duration_ms: 0.233292
+  type: 'test'
+  ...
+# Subtest: legacy archive refuses a listing with an unsettled payment
+ok 441 - legacy archive refuses a listing with an unsettled payment
+  ---
+  duration_ms: 0.175395
+  type: 'test'
+  ...
+# Subtest: legacy archive allows a SETTLED booking whose payment was PARTIALLY_REFUNDED
+ok 442 - legacy archive allows a SETTLED booking whose payment was PARTIALLY_REFUNDED
+  ---
+  duration_ms: 0.211299
+  type: 'test'
+  ...
+# Subtest: legacy archive is a no-op success when the listing is already archived (idempotent)
+ok 443 - legacy archive is a no-op success when the listing is already archived (idempotent)
+  ---
+  duration_ms: 0.131748
+  type: 'test'
+  ...
+# Subtest: legacy archive never touches a SELECTED_ACCELERATORS listing
+ok 444 - legacy archive never touches a SELECTED_ACCELERATORS listing
+  ---
+  duration_ms: 0.160822
+  type: 'test'
+  ...
+# Subtest: archiving one legacy listing leaves a sibling legacy listing on the same machine untouched
+ok 445 - archiving one legacy listing leaves a sibling legacy listing on the same machine untouched
+  ---
+  duration_ms: 0.174903
+  type: 'test'
+  ...
+# Subtest: healthy exact GPU restores HIDDEN_OFFLINE listing
+ok 446 - healthy exact GPU restores HIDDEN_OFFLINE listing
+  ---
+  duration_ms: 1.222583
+  type: 'test'
+  ...
+# Subtest: stale or quarantined exact GPU never reactivates listing
+ok 447 - stale or quarantined exact GPU never reactivates listing
+  ---
+  duration_ms: 0.216297
+  type: 'test'
+  ...
+# Subtest: listing with zero or multiple accelerator links never auto-recovers
+ok 448 - listing with zero or multiple accelerator links never auto-recovers
+  ---
+  duration_ms: 0.180262
+  type: 'test'
+  ...
+# Subtest: legacy machine-level publication is blocked before historical handler execution
+ok 449 - legacy machine-level publication is blocked before historical handler execution
+  ---
+  duration_ms: 75.659734
+  type: 'test'
+  ...
+# Subtest: legacy FULL_MACHINE booking is blocked before historical handler execution
+ok 450 - legacy FULL_MACHINE booking is blocked before historical handler execution
+  ---
+  duration_ms: 6.468983
+  type: 'test'
+  ...
+# Subtest: SELECTED_ACCELERATORS booking reaches the historical booking transaction
+ok 451 - SELECTED_ACCELERATORS booking reaches the historical booking transaction
+  ---
+  duration_ms: 4.847137
+  type: 'test'
+  ...
+# Subtest: verified exact GPU with fresh authority remains public
+ok 452 - verified exact GPU with fresh authority remains public
+  ---
+  duration_ms: 0.687396
+  type: 'test'
+  ...
+# Subtest: reserved and running GPUs may remain visible while availability is handled separately
+ok 453 - reserved and running GPUs may remain visible while availability is handled separately
+  ---
+  duration_ms: 0.123696
+  type: 'test'
+  ...
+# Subtest: stale, quarantined or unisolated GPU disappears from public marketplace
+ok 454 - stale, quarantined or unisolated GPU disappears from public marketplace
+  ---
+  duration_ms: 0.111307
+  type: 'test'
+  ...
+# Subtest: missing, quarantined or unsafe MiningResource fails closed
+ok 455 - missing, quarantined or unsafe MiningResource fails closed
+  ---
+  duration_ms: 0.143657
+  type: 'test'
+  ...
+# Subtest: publish UI requires one exact server-qualified GPU
+ok 456 - publish UI requires one exact server-qualified GPU
+  ---
+  duration_ms: 5.613123
+  type: 'test'
+  ...
+# Subtest: exact GPU rental routes are registered in the real API route graph
+ok 457 - exact GPU rental routes are registered in the real API route graph
+  ---
+  duration_ms: 1.176724
+  type: 'test'
+  ...
+# Subtest: legacy machine-level listing publication and booking are fail-closed
+ok 458 - legacy machine-level listing publication and booking are fail-closed
+  ---
+  duration_ms: 1.826984
+  type: 'test'
+  ...
+# Subtest: new rental listing path is SELECTED_ACCELERATORS only
+ok 459 - new rental listing path is SELECTED_ACCELERATORS only
+  ---
+  duration_ms: 0.828159
+  type: 'test'
+  ...
+# Subtest: renter marketplace and workspace chooser use exact selected GPU routes
+ok 460 - renter marketplace and workspace chooser use exact selected GPU routes
+  ---
+  duration_ms: 0.958816
+  type: 'test'
+  ...
+# Subtest: owner machines and listings pages use server-authoritative rental views
+ok 461 - owner machines and listings pages use server-authoritative rental views
+  ---
+  duration_ms: 1.33338
+  type: 'test'
+  ...
+# Subtest: owner listing lifecycle exposes pause resume archive without overloading security statuses
+ok 462 - owner listing lifecycle exposes pause resume archive without overloading security statuses
+  ---
+  duration_ms: 1.236885
+  type: 'test'
+  ...
+# Subtest: buildRentalResourceAuthority resolves a real Compute/GPU_PROOF session (rental_resource_authority_missing_for_session regression)
+ok 463 - buildRentalResourceAuthority resolves a real Compute/GPU_PROOF session (rental_resource_authority_missing_for_session regression)
+  ---
+  duration_ms: 88.119098
+  type: 'test'
+  ...
+# Subtest: rental resource authority
+    # Subtest: preempts an older mining lease with one newer fence and refreshes idempotently
+    ok 1 - preempts an older mining lease with one newer fence and refreshes idempotently
+      ---
+      duration_ms: 2.159286
+      type: 'test'
+      ...
+    # Subtest: full-machine authority maps every qualified GPU resource
+    ok 2 - full-machine authority maps every qualified GPU resource
+      ---
+      duration_ms: 5.84362
+      type: 'test'
+      ...
+    # Subtest: repairs a missing GPU resource mapping from stable hardware identity
+    ok 3 - repairs a missing GPU resource mapping from stable hardware identity
+      ---
+      duration_ms: 0.53732
+      type: 'test'
+      ...
+    # Subtest: fails closed when an existing GPU resource is disabled
+    ok 4 - fails closed when an existing GPU resource is disabled
+      ---
+      duration_ms: 0.267604
+      type: 'test'
+      ...
+    # Subtest: rejects overlapping live sessions before creating a fencing war
+    ok 5 - rejects overlapping live sessions before creating a fencing war
+      ---
+      duration_ms: 0.486844
+      type: 'test'
+      ...
+    # Subtest: releases the exact rental lease only after stop intent
+    ok 6 - releases the exact rental lease only after stop intent
+      ---
+      duration_ms: 0.460485
+      type: 'test'
+      ...
+    # Subtest: does not release a live READY rental lease
+    ok 7 - does not release a live READY rental lease
+      ---
+      duration_ms: 0.283417
+      type: 'test'
+      ...
+    1..7
+ok 464 - rental resource authority
+  ---
+  duration_ms: 10.888876
+  type: 'suite'
+  ...
+# Subtest: rental authority polling has a dedicated rate-limit budget
+ok 465 - rental authority polling has a dedicated rate-limit budget
+  ---
+  duration_ms: 4.71613
+  type: 'test'
+  ...
+# Subtest: rental heartbeat policy defaults without importing production config
+ok 466 - rental heartbeat policy defaults without importing production config
+  ---
+  duration_ms: 0.648678
+  type: 'test'
+  ...
+# Subtest: rental heartbeat policy honors the same validated range as app config
+ok 467 - rental heartbeat policy honors the same validated range as app config
+  ---
+  duration_ms: 0.106291
+  type: 'test'
+  ...
+# Subtest: invalid rental heartbeat policy fails closed
+ok 468 - invalid rental heartbeat policy fails closed
+  ---
+  duration_ms: 0.349867
+  type: 'test'
+  ...
+# Subtest: prepareComputeRental writes session, job, outbox and machine command in one transaction
+ok 469 - prepareComputeRental writes session, job, outbox and machine command in one transaction
+  ---
+  duration_ms: 2.239266
+  type: 'test'
+  ...
+# Subtest: prepareComputeRental is idempotent for an existing renter session
+ok 470 - prepareComputeRental is idempotent for an existing renter session
+  ---
+  duration_ms: 0.242035
+  type: 'test'
+  ...
+# Subtest: stopRentalSession atomically requests cancellation and emits a runtime-bound stop command
+ok 471 - stopRentalSession atomically requests cancellation and emits a runtime-bound stop command
+  ---
+  duration_ms: 0.638493
+  type: 'test'
+  ...
+# Subtest: maintained API and web sources have no executable legacy copies at repository root
+ok 472 - maintained API and web sources have no executable legacy copies at repository root
+  ---
+  duration_ms: 6.4308
+  type: 'test'
+  ...
+# Subtest: repository entry points route to maintained API and web trees
+ok 473 - repository entry points route to maintained API and web trees
+  ---
+  duration_ms: 2.101369
+  type: 'test'
+  ...
+# Subtest: root agent.py remains an explicit compatibility launcher, not a duplicate implementation
+ok 474 - root agent.py remains an explicit compatibility launcher, not a duplicate implementation
+  ---
+  duration_ms: 2.301555
+  type: 'test'
+  ...
+# Subtest: allocateBookingResources creates a MachineAllocation for a FULL_MACHINE listing
+ok 475 - allocateBookingResources creates a MachineAllocation for a FULL_MACHINE listing
+  ---
+  duration_ms: 1.800855
+  type: 'test'
+  ...
+# Subtest: hot presence canary blocks the real allocation before any allocation write
+ok 476 - hot presence canary blocks the real allocation before any allocation write
+  ---
+  duration_ms: 0.996993
+  type: 'test'
+  ...
+# Subtest: allocateBookingResources refuses to double-allocate an already-allocated booking
+ok 477 - allocateBookingResources refuses to double-allocate an already-allocated booking
+  ---
+  duration_ms: 0.355997
+  type: 'test'
+  ...
+# Subtest: allocateBookingResources allocates the exact verified GPU linked to the listing
+ok 478 - allocateBookingResources allocates the exact verified GPU linked to the listing
+  ---
+  duration_ms: 0.419412
+  type: 'test'
+  ...
+# Subtest: allocateBookingResources rejects a selected accelerator that is not rentable
+ok 479 - allocateBookingResources rejects a selected accelerator that is not rentable
+  ---
+  duration_ms: 0.519393
+  type: 'test'
+  ...
+# Subtest: allocation fails closed when the exact GPU MiningResource authority is missing
+ok 480 - allocation fails closed when the exact GPU MiningResource authority is missing
+  ---
+  duration_ms: 0.343438
+  type: 'test'
+  ...
+# Subtest: allocation fails closed when exact GPU authority is stale or already bound to a rental
+ok 481 - allocation fails closed when exact GPU authority is stale or already bound to a rental
+  ---
+  duration_ms: 0.402457
+  type: 'test'
+  ...
+# Subtest: allocateBookingResources never allocates a resource for a booking that is no longer AWAITING_DEPOSIT
+ok 482 - allocateBookingResources never allocates a resource for a booking that is no longer AWAITING_DEPOSIT
+  ---
+  duration_ms: 0.516028
+  type: 'test'
+  ...
+# Subtest: allocateBookingResources fails closed when it loses the row-lock race for a booking the reconciler cancels mid-transaction
+ok 483 - allocateBookingResources fails closed when it loses the row-lock race for a booking the reconciler cancels mid-transaction
+  ---
+  duration_ms: 0.493945
+  type: 'test'
+  ...
+# Subtest: lease and fence keys are guaranteed to share a Redis Cluster slot
+ok 484 - lease and fence keys are guaranteed to share a Redis Cluster slot
+  ---
+  duration_ms: 0.699815
+  type: 'test'
+  ...
+# Subtest: lease acquisition is idempotent and produces monotonic fencing tokens
+ok 485 - lease acquisition is idempotent and produces monotonic fencing tokens
+  ---
+  duration_ms: 1.450988
+  type: 'test'
+  ...
+# Subtest: runtime authority snapshot matches regardless of ordering
+ok 486 - runtime authority snapshot matches regardless of ordering
+  ---
+  duration_ms: 0.702519
+  type: 'test'
+  ...
+# Subtest: runtime authority snapshot rejects a session that ended during the diagnostic
+ok 487 - runtime authority snapshot rejects a session that ended during the diagnostic
+  ---
+  duration_ms: 0.13289
+  type: 'test'
+  ...
+# Subtest: runtime authority snapshot rejects a session that started during the diagnostic
+ok 488 - runtime authority snapshot rejects a session that started during the diagnostic
+  ---
+  duration_ms: 0.084508
+  type: 'test'
+  ...
+# Subtest: runtime authority canonicalization is deterministic and de-duplicates ids
+ok 489 - runtime authority canonicalization is deterministic and de-duplicates ids
+  ---
+  duration_ms: 0.473895
+  type: 'test'
+  ...
+# Subtest: an old agent with no runtimeCleanup proof cannot clear quarantine
+ok 490 - an old agent with no runtimeCleanup proof cannot clear quarantine
+  ---
+  duration_ms: 0.870032
+  type: 'test'
+  ...
+# Subtest: runtime cleanup failure maps to WORKSPACE_CLEANUP_FAILED
+ok 491 - runtime cleanup failure maps to WORKSPACE_CLEANUP_FAILED
+  ---
+  duration_ms: 0.636189
+  type: 'test'
+  ...
+# Subtest: runtime cleanliness plus every existing mandatory check can pass
+ok 492 - runtime cleanliness plus every existing mandatory check can pass
+  ---
+  duration_ms: 0.116515
+  type: 'test'
+  ...
+# Subtest: diagnostic wiring derives runtime cleanliness server-side from bounded evidence and fresh authority
+ok 493 - diagnostic wiring derives runtime cleanliness server-side from bounded evidence and fresh authority
+  ---
+  duration_ms: 7.808212
+  type: 'test'
+  ...
+# Subtest: API reconciliation tick is protected by a distributed lease
+ok 494 - API reconciliation tick is protected by a distributed lease
+  ---
+  duration_ms: 6.854629
+  type: 'test'
+  ...
+# Subtest: API offline and stale-job sweep is protected by a distributed lease
+ok 495 - API offline and stale-job sweep is protected by a distributed lease
+  ---
+  duration_ms: 1.238177
+  type: 'test'
+  ...
+# Subtest: delivery worker uses the same development-bookings scheduler authority
+ok 496 - delivery worker uses the same development-bookings scheduler authority
+  ---
+  duration_ms: 0.923983
+  type: 'test'
+  ...
+# Subtest: distributed lease helper uses ownership-checked renewal and release
+ok 497 - distributed lease helper uses ownership-checked renewal and release
+  ---
+  duration_ms: 0.74928
+  type: 'test'
+  ...
+# Subtest: provider-specific single-process assumption is gone from runtime scheduler comments
+ok 498 - provider-specific single-process assumption is gone from runtime scheduler comments
+  ---
+  duration_ms: 1.079557
+  type: 'test'
+  ...
+# Subtest: cursor pagination is bounded and deterministic
+ok 499 - cursor pagination is bounded and deterministic
+  ---
+  duration_ms: 1.307902
+  type: 'test'
+  ...
+# Subtest: idempotency keys reject weak or injectable values
+ok 500 - idempotency keys reject weak or injectable values
+  ---
+  duration_ms: 0.207934
+  type: 'test'
+  ...
+# Subtest: batch sizes are capped to protect workers
+ok 501 - batch sizes are capped to protect workers
+  ---
+  duration_ms: 0.145208
+  type: 'test'
+  ...
+# Subtest: stable shard assignment is repeatable and bounded
+ok 502 - stable shard assignment is repeatable and bounded
+  ---
+  duration_ms: 0.231699
+  type: 'test'
+  ...
+# Subtest: billing evidence outlives raw telemetry
+ok 503 - billing evidence outlives raw telemetry
+  ---
+  duration_ms: 0.160982
+  type: 'test'
+  ...
+# {"level":"info","message":"scheduler_presence_shadow","machineId":"machine_00000001","live":false,"phase":null,"gatewayId":null,"reason":"presence_missing_or_expired"}
+# {"level":"info","message":"scheduler_presence_shadow","machineId":"machine_00000001","live":false,"phase":null,"gatewayId":null,"reason":"presence_read_error:redis_down"}
+# Subtest: presence bucket is deterministic and bounded
+ok 504 - presence bucket is deterministic and bounded
+  ---
+  duration_ms: 1.040849
+  type: 'test'
+  ...
+# Subtest: hot rollout cannot exceed parent Agent QUIC rollout
+ok 505 - hot rollout cannot exceed parent Agent QUIC rollout
+  ---
+  duration_ms: 0.498993
+  type: 'test'
+  ...
+# Subtest: legacy mode never blocks allocation on missing Redis presence
+ok 506 - legacy mode never blocks allocation on missing Redis presence
+  ---
+  duration_ms: 0.743391
+  type: 'test'
+  ...
+# Subtest: shadow mode observes missing presence without blocking allocation
+ok 507 - shadow mode observes missing presence without blocking allocation
+  ---
+  duration_ms: 0.894118
+  type: 'test'
+  ...
+# Subtest: hot mode with zero rollout remains non-blocking
+ok 508 - hot mode with zero rollout remains non-blocking
+  ---
+  duration_ms: 0.472322
+  type: 'test'
+  ...
+# Subtest: assigned hot machine must have a live gateway presence
+ok 509 - assigned hot machine must have a live gateway presence
+  ---
+  duration_ms: 0.30458
+  type: 'test'
+  ...
+# Subtest: live DRAINING phase proves connectivity but does not invent business availability
+ok 510 - live DRAINING phase proves connectivity but does not invent business availability
+  ---
+  duration_ms: 0.542928
+  type: 'test'
+  ...
+# Subtest: quarantined hot machine is rejected
+ok 511 - quarantined hot machine is rejected
+  ---
+  duration_ms: 0.251189
+  type: 'test'
+  ...
+# Subtest: Redis errors fail closed only for assigned hot machines
+ok 512 - Redis errors fail closed only for assigned hot machines
+  ---
+  duration_ms: 0.556549
+  type: 'test'
+  ...
+# Subtest: accepts a valid v2 signature exactly once
+ok 513 - accepts a valid v2 signature exactly once
+  ---
+  duration_ms: 41.6624
+  type: 'test'
+  ...
+# Subtest: rejects any body alteration
+ok 514 - rejects any body alteration
+  ---
+  duration_ms: 5.426731
+  type: 'test'
+  ...
+# Subtest: rejects an invalid signature and an expired timestamp
+ok 515 - rejects an invalid signature and an expired timestamp
+  ---
+  duration_ms: 8.427535
+  type: 'test'
+  ...
+# Subtest: rejects a signature presented for another machine
+ok 516 - rejects a signature presented for another machine
+  ---
+  duration_ms: 10.209571
+  type: 'test'
+  ...
+# Subtest: rejects malformed nonces and unsupported versions
+ok 517 - rejects malformed nonces and unsupported versions
+  ---
+  duration_ms: 8.445152
+  type: 'test'
+  ...
+# Subtest: constant-time token comparison accepts exact value
+ok 518 - constant-time token comparison accepts exact value
+  ---
+  duration_ms: 0.607966
+  type: 'test'
+  ...
+# Subtest: constant-time token comparison rejects missing, short and different values
+ok 519 - constant-time token comparison rejects missing, short and different values
+  ---
+  duration_ms: 0.199782
+  type: 'test'
+  ...
+# Subtest: trusts production and numbered GPUbnb Netlify previews only
+ok 520 - trusts production and numbered GPUbnb Netlify previews only
+  ---
+  duration_ms: 0.238019
+  type: 'test'
+  ...
+# Subtest: every agent endpoint carrying a body requires the raw-body-bound V2 signature
+ok 521 - every agent endpoint carrying a body requires the raw-body-bound V2 signature
+  ---
+  duration_ms: 5.025707
+  type: 'test'
+  ...
+# Subtest: registers device authorization routes after security plugins and hooks
+ok 522 - registers device authorization routes after security plugins and hooks
+  ---
+  duration_ms: 4.805925
+  type: 'test'
+  ...
+# Subtest: a frozen payment has a manual resolution path (C6)
+ok 523 - a frozen payment has a manual resolution path (C6)
+  ---
+  duration_ms: 5.787996
+  type: 'test'
+  ...
+# Subtest: settlement finalization is reachable via internal, token-protected routes
+ok 524 - settlement finalization is reachable via internal, token-protected routes
+  ---
+  duration_ms: 4.419402
+  type: 'test'
+  ...
+# Subtest: pays only forty minutes and refunds twenty minutes of a one-hour booking
+ok 525 - pays only forty minutes and refunds twenty minutes of a one-hour booking
+  ---
+  duration_ms: 0.713645
+  type: 'test'
+  ...
+# Subtest: does not grant full payment at ninety percent availability
+ok 526 - does not grant full payment at ninety percent availability
+  ---
+  duration_ms: 0.12561
+  type: 'test'
+  ...
+# Subtest: refunds the full escrow when no service time is validated
+ok 527 - refunds the full escrow when no service time is validated
+  ---
+  duration_ms: 0.091968
+  type: 'test'
+  ...
+# Subtest: complete-minute rounding never overpays and preserves the escrow invariant
+ok 528 - complete-minute rounding never overpays and preserves the escrow invariant
+  ---
+  duration_ms: 0.095414
+  type: 'test'
+  ...
+# Subtest: an incomplete first minute is not billed
+ok 529 - an incomplete first minute is not billed
+  ---
+  duration_ms: 0.151809
+  type: 'test'
+  ...
+# Subtest: rejects unsafe or impossible duration values
+ok 530 - rejects unsafe or impossible duration values
+  ---
+  duration_ms: 0.322366
+  type: 'test'
+  ...
+# Subtest: requestSettlement atomically persists calculated settlement and outbox event
+ok 531 - requestSettlement atomically persists calculated settlement and outbox event
+  ---
+  duration_ms: 1.882418
+  type: 'test'
+  ...
+# Subtest: confirmSettlement creates a partial refund, settles booking and releases resources once
+ok 532 - confirmSettlement creates a partial refund, settles booking and releases resources once
+  ---
+  duration_ms: 1.035851
+  type: 'test'
+  ...
+# Subtest: confirmSettlement is idempotent for the same finalized signature
+ok 533 - confirmSettlement is idempotent for the same finalized signature
+  ---
+  duration_ms: 0.261484
+  type: 'test'
+  ...
+# Subtest: confirmSettlement refuses a conflicting signature
+ok 534 - confirmSettlement refuses a conflicting signature
+  ---
+  duration_ms: 0.560815
+  type: 'test'
+  ...
+# Subtest: requestSettlement refuses an escrow amount mismatch
+ok 535 - requestSettlement refuses an escrow amount mismatch
+  ---
+  duration_ms: 0.327754
+  type: 'test'
+  ...
+# Subtest: billing unit is one minute
+ok 536 - billing unit is one minute
+  ---
+  duration_ms: 0.81621
+  type: 'test'
+  ...
+# Subtest: 45 minutes of a 60-minute reservation makes 4.50 of 6 payable
+ok 537 - 45 minutes of a 60-minute reservation makes 4.50 of 6 payable
+  ---
+  duration_ms: 0.188274
+  type: 'test'
+  ...
+# Subtest: 40 minutes of a 60-minute reservation is billed as 40 minutes
+ok 538 - 40 minutes of a 60-minute reservation is billed as 40 minutes
+  ---
+  duration_ms: 0.108023
+  type: 'test'
+  ...
+# Subtest: an incomplete minute is not billed
+ok 539 - an incomplete minute is not billed
+  ---
+  duration_ms: 0.09988
+  type: 'test'
+  ...
+# Subtest: the next completed minute becomes billable
+ok 540 - the next completed minute becomes billable
+  ---
+  duration_ms: 0.101913
+  type: 'test'
+  ...
+# Subtest: 90 percent availability remains minute-proportional
+ok 541 - 90 percent availability remains minute-proportional
+  ---
+  duration_ms: 0.090547
+  type: 'test'
+  ...
+# Subtest: full service pays the full escrow minus commission
+ok 542 - full service pays the full escrow minus commission
+  ---
+  duration_ms: 0.134563
+  type: 'test'
+  ...
+# Subtest: a fully completed non-round reservation pays the full escrow
+ok 543 - a fully completed non-round reservation pays the full escrow
+  ---
+  duration_ms: 0.092239
+  type: 'test'
+  ...
+# Subtest: zero validated service refunds the full amount
+ok 544 - zero validated service refunds the full amount
+  ---
+  duration_ms: 0.269417
+  type: 'test'
+  ...
+# Subtest: settlement invariant holds for every second of an hour
+ok 545 - settlement invariant holds for every second of an hour
+  ---
+  duration_ms: 3.086103
+  type: 'test'
+  ...
+# Subtest: integer rounding never overcharges the renter
+ok 546 - integer rounding never overcharges the renter
+  ---
+  duration_ms: 0.098098
+  type: 'test'
+  ...
+# Subtest: rejects invalid durations and commissions
+ok 547 - rejects invalid durations and commissions
+  ---
+  duration_ms: 0.249426
+  type: 'test'
+  ...
+# Subtest: one lamport never creates money
+ok 548 - one lamport never creates money
+  ---
+  duration_ms: 0.310768
+  type: 'test'
+  ...
+# Subtest: escrow expires one hour after booking end
+ok 549 - escrow expires one hour after booking end
+  ---
+  duration_ms: 0.092519
+  type: 'test'
+  ...
+# Subtest: booking digest is deterministic and domain separated
+ok 550 - booking digest is deterministic and domain separated
+  ---
+  duration_ms: 1.076814
+  type: 'test'
+  ...
+# Subtest: escrow PDA is deterministic
+ok 551 - escrow PDA is deterministic
+  ---
+  duration_ms: 3.573577
+  type: 'test'
+  ...
+# Subtest: stalled activation re-checks execution liveness inside a serializable, retry-wrapped transaction
+ok 552 - stalled activation re-checks execution liveness inside a serializable, retry-wrapped transaction
+  ---
+  duration_ms: 5.27992
+  type: 'test'
+  ...
+# Subtest: expired claimed activation fails closed instead of releasing the machine
+ok 553 - expired claimed activation fails closed instead of releasing the machine
+  ---
+  duration_ms: 1.358107
+  type: 'test'
+  ...
+# Subtest: only never-claimed work can release a machine and release is guarded by runtime absence
+ok 554 - only never-claimed work can release a machine and release is guarded by runtime absence
+  ---
+  duration_ms: 1.128051
+  type: 'test'
+  ...
+# Subtest: stalled activation never claims financial success
+ok 555 - stalled activation never claims financial success
+  ---
+  duration_ms: 1.162793
+  type: 'test'
+  ...
+# Subtest: reconcileStalledActivations degrades FUNDED/STARTING bookings whose start time is long past without reaching ACTIVE
+ok 556 - reconcileStalledActivations degrades FUNDED/STARTING bookings whose start time is long past without reaching ACTIVE
+  ---
+  duration_ms: 5.360091
+  type: 'test'
+  ...
+# Subtest: the grace period is a real safety margin, not effectively zero
+ok 557 - the grace period is a real safety margin, not effectively zero
+  ---
+  duration_ms: 1.627533
+  type: 'test'
+  ...
+# Subtest: the reconciliation interval runs both reconcilers on every tick, independently of each other failing
+ok 558 - the reconciliation interval runs both reconcilers on every tick, independently of each other failing
+  ---
+  duration_ms: 1.263084
+  type: 'test'
+  ...
+# Subtest: browser Supabase usage is auth-only and never queries Prisma application tables directly
+ok 559 - browser Supabase usage is auth-only and never queries Prisma application tables directly
+  ---
+  duration_ms: 6.262361
+  type: 'test'
+  ...
+# Subtest: rejected Supabase sessions are cleared locally instead of retried forever
+ok 560 - rejected Supabase sessions are cleared locally instead of retried forever
+  ---
+  duration_ms: 1.123514
+  type: 'test'
+  ...
+# Subtest: database migration revokes current and future Data API privileges from browser roles
+ok 561 - database migration revokes current and future Data API privileges from browser roles
+  ---
+  duration_ms: 1.165266
+  type: 'test'
+  ...
+# Subtest: transaction advisory helper reports PostgreSQL lock ownership
+ok 562 - transaction advisory helper reports PostgreSQL lock ownership
+  ---
+  duration_ms: 0.824333
+  type: 'test'
+  ...
+# Subtest: transaction advisory helper rejects unbounded task names
+ok 563 - transaction advisory helper rejects unbounded task names
+  ---
+  duration_ms: 0.382416
+  type: 'test'
+  ...
+# Subtest: destructive periodic sweeps are fenced before reading mutable state
+ok 564 - destructive periodic sweeps are fenced before reading mutable state
+  ---
+  duration_ms: 7.13724
+  type: 'test'
+  ...
+# Subtest: portal pages expose accessible navigation and real targets
+ok 565 - portal pages expose accessible navigation and real targets
+  ---
+  duration_ms: 6.667802
+  type: 'test'
+  ...
+# Subtest: account pages render real API collections safely
+ok 566 - account pages render real API collections safely
+  ---
+  duration_ms: 1.676467
+  type: 'test'
+  ...
+# Subtest: cross-origin GET requests remain simple and preserve error status
+ok 567 - cross-origin GET requests remain simple and preserve error status
+  ---
+  duration_ms: 2.331064
+  type: 'test'
+  ...
+# Subtest: listing publication requires a server-qualified exact GPU linked by Host
+ok 568 - listing publication requires a server-qualified exact GPU linked by Host
+  ---
+  duration_ms: 1.239228
+  type: 'test'
+  ...
+# Subtest: installer downloads are verified by the Netlify function
+ok 569 - installer downloads are verified by the Netlify function
+  ---
+  duration_ms: 1.453972
+  type: 'test'
+  ...
+# Subtest: heartbeat accepts NVIDIA with cudaVersion
+ok 570 - heartbeat accepts NVIDIA with cudaVersion
+  ---
+  duration_ms: 3.347817
+  type: 'test'
+  ...
+# Subtest: heartbeat accepts AMD without cudaVersion
+ok 571 - heartbeat accepts AMD without cudaVersion
+  ---
+  duration_ms: 0.367854
+  type: 'test'
+  ...
+# Subtest: heartbeat accepts Intel with gpuVendor INTEL
+ok 572 - heartbeat accepts Intel with gpuVendor INTEL
+  ---
+  duration_ms: 0.198479
+  type: 'test'
+  ...
+# Subtest: inventory accepts without nvidiaRuntimeAvailable
+ok 573 - inventory accepts without nvidiaRuntimeAvailable
+  ---
+  duration_ms: 2.388411
+  type: 'test'
+  ...
+# Subtest: inventory accepts with nvidiaRuntimeAvailable false
+ok 574 - inventory accepts with nvidiaRuntimeAvailable false
+  ---
+  duration_ms: 0.223327
+  type: 'test'
+  ...
+# Subtest: allows only a healthy ready renter session
+ok 575 - allows only a healthy ready renter session
+  ---
+  duration_ms: 1.095471
+  type: 'test'
+  ...
+# Subtest: rejects another user
+ok 576 - rejects another user
+  ---
+  duration_ms: 0.11251
+  type: 'test'
+  ...
+# Subtest: rejects unready workspace
+ok 577 - rejects unready workspace
+  ---
+  duration_ms: 0.087482
+  type: 'test'
+  ...
+# Subtest: rejects expired session
+ok 578 - rejects expired session
+  ---
+  duration_ms: 0.084047
+  type: 'test'
+  ...
+# Subtest: rejects stale heartbeat
+ok 579 - rejects stale heartbeat
+  ---
+  duration_ms: 0.206351
+  type: 'test'
+  ...
+# Subtest: rejects quarantined machine
+ok 580 - rejects quarantined machine
+  ---
+  duration_ms: 0.109425
+  type: 'test'
+  ...
+# Subtest: a 35s-old heartbeat - representative of real agent cadence, not just clock skew - must still be accepted
+ok 581 - a 35s-old heartbeat - representative of real agent cadence, not just clock skew - must still be accepted
+  ---
+  duration_ms: 0.134763
+  type: 'test'
+  ...
+# Subtest: workspace-renter-routes.ts wires a heartbeat threshold wide enough for real agent cadence, never the tighter clock-skew-on-submission constant
+ok 582 - workspace-renter-routes.ts wires a heartbeat threshold wide enough for real agent cadence, never the tighter clock-skew-on-submission constant
+  ---
+  duration_ms: 0.508266
+  type: 'test'
+  ...
+# Subtest: workspace access grant is opaque, scoped, correlated and one-time
+ok 583 - workspace access grant is opaque, scoped, correlated and one-time
+  ---
+  duration_ms: 1.169423
+  type: 'test'
+  ...
+# Subtest: workspace access request correlation remains optional for compatibility
+ok 584 - workspace access request correlation remains optional for compatibility
+  ---
+  duration_ms: 0.182755
+  type: 'test'
+  ...
+# Subtest: invalid oversized token is rejected without lookup
+ok 585 - invalid oversized token is rejected without lookup
+  ---
+  duration_ms: 0.145529
+  type: 'test'
+  ...
+# Subtest: activates from STARTING exactly as before: booking becomes ACTIVE, real clock starts
+ok 586 - activates from STARTING exactly as before: booking becomes ACTIVE, real clock starts
+  ---
+  duration_ms: 101.68626
+  type: 'test'
+  ...
+# Subtest: also activates from ACTIVE (the GPU_DIAGNOSTIC beta-bypass path already proved the GPU before any workspace opened)
+ok 587 - also activates from ACTIVE (the GPU_DIAGNOSTIC beta-bypass path already proved the GPU before any workspace opened)
+  ---
+  duration_ms: 58.893173
+  type: 'test'
+  ...
+# Subtest: a 15-minute booking still grants a full ~15 minutes after activation, even though 8 minutes already elapsed since booking creation
+ok 588 - a 15-minute booking still grants a full ~15 minutes after activation, even though 8 minutes already elapsed since booking creation
+  ---
+  duration_ms: 60.121554
+  type: 'test'
+  ...
+# Subtest: is idempotent: a second call (refresh, reconnect, double click) never re-extends the deadline
+ok 589 - is idempotent: a second call (refresh, reconnect, double click) never re-extends the deadline
+  ---
+  duration_ms: 66.738923
+  type: 'test'
+  ...
+# Subtest: refuses to activate a session that is not actually READY yet
+ok 590 - refuses to activate a session that is not actually READY yet
+  ---
+  duration_ms: 56.003229
+  type: 'test'
+  ...
+# Subtest: refuses to activate a booking in a status that was never eligible in the first place
+ok 591 - refuses to activate a booking in a status that was never eligible in the first place
+  ---
+  duration_ms: 56.633649
+  type: 'test'
+  ...
+# Subtest: runtime registration opens a bounded activation window without starting paid time
+ok 592 - runtime registration opens a bounded activation window without starting paid time
+  ---
+  duration_ms: 7.053046
+  type: 'test'
+  ...
+# Subtest: grant consumption authenticates the browser but cannot activate or bill the booking
+ok 593 - grant consumption authenticates the browser but cannot activate or bill the booking
+  ---
+  duration_ms: 1.375567
+  type: 'test'
+  ...
+# Subtest: only the first authenticated upstream WebSocket frame starts paid time
+ok 594 - only the first authenticated upstream WebSocket frame starts paid time
+  ---
+  duration_ms: 2.160034
+  type: 'test'
+  ...
+# Subtest: developer usage remains zero while READY and increments only for RUNNING plus ACTIVE
+ok 595 - developer usage remains zero while READY and increments only for RUNNING plus ACTIVE
+  ---
+  duration_ms: 0.877322
+  type: 'test'
+  ...
+# Subtest: a cleaned workspace that never became interactive is recorded as a failure
+ok 596 - a cleaned workspace that never became interactive is recorded as a failure
+  ---
+  duration_ms: 0.857121
+  type: 'test'
+  ...
+# Subtest: verified Developer cleanup cannot release a machine while another runtime still owns it
+ok 597 - verified Developer cleanup cannot release a machine while another runtime still owns it
+  ---
+  duration_ms: 0.878814
+  type: 'test'
+  ...
+# Subtest: generic compute start and metrics routes cannot bypass the Developer billing gate
+ok 598 - generic compute start and metrics routes cannot bypass the Developer billing gate
+  ---
+  duration_ms: 1.480791
+  type: 'test'
+  ...
+# Subtest: the dev-bypass diagnostic reconciler never touches a booking with a real Developer session
+ok 599 - the dev-bypass diagnostic reconciler never touches a booking with a real Developer session
+  ---
+  duration_ms: 0.761392
+  type: 'test'
+  ...
+# Subtest: workspace browser CSP is scoped away from agent and API routes
+ok 600 - workspace browser CSP is scoped away from agent and API routes
+  ---
+  duration_ms: 0.72326
+  type: 'test'
+  ...
+# Subtest: workspace response overrides API CSP and grants only the authenticated session service-worker scope
+ok 601 - workspace response overrides API CSP and grants only the authenticated session service-worker scope
+  ---
+  duration_ms: 82.853349
+  type: 'test'
+  ...
+# Subtest: workspace service-worker scope encodes the session id and cannot escape the gateway prefix
+ok 602 - workspace service-worker scope encodes the session id and cannot escape the gateway prefix
+  ---
+  duration_ms: 0.162966
+  type: 'test'
+  ...
+# Subtest: workspace absolute-path redirects remain inside the authenticated session prefix
+ok 603 - workspace absolute-path redirects remain inside the authenticated session prefix
+  ---
+  duration_ms: 4.364936
+  type: 'test'
+  ...
+# Subtest: high-end machine receives an explainable AI score
+ok 604 - high-end machine receives an explainable AI score
+  ---
+  duration_ms: 0.943621
+  type: 'test'
+  ...
+# Subtest: missing requirements produce explicit incompatibility
+ok 605 - missing requirements produce explicit incompatibility
+  ---
+  duration_ms: 0.125759
+  type: 'test'
+  ...
+# Subtest: catalogue contains exactly thirteen unique workspaces
+ok 606 - catalogue contains exactly thirteen unique workspaces
+  ---
+  duration_ms: 0.262696
+  type: 'test'
+  ...
+# Subtest: a real low-VRAM machine (this session's own 4GB GTX 1650) is incompatible with AI Workspace (needs 8GB minimum)
+ok 607 - a real low-VRAM machine (this session's own 4GB GTX 1650) is incompatible with AI Workspace (needs 8GB minimum)
+  ---
+  duration_ms: 0.211589
+  type: 'test'
+  ...
+# Subtest: the same real low-VRAM machine is compatible with Compute Workspace (no VRAM requirement)
+ok 608 - the same real low-VRAM machine is compatible with Compute Workspace (no VRAM requirement)
+  ---
+  duration_ms: 0.138459
+  type: 'test'
+  ...
+# Subtest: a mid-tier machine meets AI Workspace minimum but not its recommended tier, scored as LIMITED not READY
+ok 609 - a mid-tier machine meets AI Workspace minimum but not its recommended tier, scored as LIMITED not READY
+  ---
+  duration_ms: 0.117367
+  type: 'test'
+  ...
+# Subtest: a high-tier 24GB card is READY for every GPU-requiring workspace in the catalogue
+ok 610 - a high-tier 24GB card is READY for every GPU-requiring workspace in the catalogue
+  ---
+  duration_ms: 0.339392
+  type: 'test'
+  ...
+# Subtest: the engine produces a strictly different verdict across the three tiers for the same workspace
+ok 611 - the engine produces a strictly different verdict across the three tiers for the same workspace
+  ---
+  duration_ms: 0.114883
+  type: 'test'
+  ...
+# Subtest: no GPU detected at all is incompatible with any workspace requiring VRAM
+ok 612 - no GPU detected at all is incompatible with any workspace requiring VRAM
+  ---
+  duration_ms: 0.249386
+  type: 'test'
+  ...
+# Subtest: insufficient RAM alone is incompatible even with an otherwise capable GPU
+ok 613 - insufficient RAM alone is incompatible even with an otherwise capable GPU
+  ---
+  duration_ms: 0.328454
+  type: 'test'
+  ...
+# Subtest: insufficient storage alone is flagged explicitly, not silently ignored
+ok 614 - insufficient storage alone is flagged explicitly, not silently ignored
+  ---
+  duration_ms: 0.108213
+  type: 'test'
+  ...
+# Subtest: Docker unavailable blocks any workspace whose manifest requires it
+ok 615 - Docker unavailable blocks any workspace whose manifest requires it
+  ---
+  duration_ms: 0.09311
+  type: 'test'
+  ...
+# Subtest: CUDA unavailable blocks a CUDA-requiring workspace even with ample VRAM
+ok 616 - CUDA unavailable blocks a CUDA-requiring workspace even with ample VRAM
+  ---
+  duration_ms: 0.083326
+  type: 'test'
+  ...
+# Subtest: a workspace with no GPU requirement at all is never blocked by GPU fields, even when they are null
+ok 617 - a workspace with no GPU requirement at all is never blocked by GPU fields, even when they are null
+  ---
+  duration_ms: 0.071919
+  type: 'test'
+  ...
+# Subtest: creator Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+ok 618 - creator Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+  ---
+  duration_ms: 0.083977
+  type: 'test'
+  ...
+# Subtest: creator Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+ok 619 - creator Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+  ---
+  duration_ms: 0.064818
+  type: 'test'
+  ...
+# Subtest: cloud-desktop Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+ok 620 - cloud-desktop Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+  ---
+  duration_ms: 0.0529
+  type: 'test'
+  ...
+# Subtest: cloud-desktop Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+ok 621 - cloud-desktop Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+  ---
+  duration_ms: 0.04012
+  type: 'test'
+  ...
+# Subtest: cad Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+ok 622 - cad Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+  ---
+  duration_ms: 0.036144
+  type: 'test'
+  ...
+# Subtest: cad Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+ok 623 - cad Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+  ---
+  duration_ms: 0.034943
+  type: 'test'
+  ...
+# Subtest: gaming Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+ok 624 - gaming Workspace requires desktopGpuRendering - a real CUDA-compute-capable machine without /dev/dri is never READY
+  ---
+  duration_ms: 0.034071
+  type: 'test'
+  ...
+# Subtest: gaming Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+ok 625 - gaming Workspace is compatible on a machine with a real /dev/dri render node + NVIDIA Container Toolkit
+  ---
+  duration_ms: 0.032179
+  type: 'test'
+  ...
+# Subtest: workspace/developer atomically re-verifies the booking (status + endsAt) inside its own transaction, before creating the session
+ok 626 - workspace/developer atomically re-verifies the booking (status + endsAt) inside its own transaction, before creating the session
+  ---
+  duration_ms: 5.794589
+  type: 'test'
+  ...
+# Subtest: safeConnection requires a well-formed gatewayPath, not just a truthy object
+ok 627 - safeConnection requires a well-formed gatewayPath, not just a truthy object
+  ---
+  duration_ms: 1.107559
+  type: 'test'
+  ...
+# Subtest: preparationPhase reports GATEWAY_NOT_READY when status is READY but the gateway has not registered
+ok 628 - preparationPhase reports GATEWAY_NOT_READY when status is READY but the gateway has not registered
+  ---
+  duration_ms: 0.163536
+  type: 'test'
+  ...
+# Subtest: preparationPhase reports the real READY status once the gateway connection is confirmed
+ok 629 - preparationPhase reports the real READY status once the gateway connection is confirmed
+  ---
+  duration_ms: 0.111228
+  type: 'test'
+  ...
+# Subtest: preparationPhase is unaffected by connectionReady while still PREPARING
+ok 630 - preparationPhase is unaffected by connectionReady while still PREPARING
+  ---
+  duration_ms: 0.094852
+  type: 'test'
+  ...
+# Subtest: preparationPhase passes through terminal/running statuses unchanged regardless of connectionReady
+ok 631 - preparationPhase passes through terminal/running statuses unchanged regardless of connectionReady
+  ---
+  duration_ms: 0.109575
+  type: 'test'
+  ...
+# Subtest: gateway never returns a direct host endpoint to the renter
+ok 632 - gateway never returns a direct host endpoint to the renter
+  ---
+  duration_ms: 1.078335
+  type: 'test'
+  ...
+# Subtest: websocket upgrades fail explicitly and expose a minimal edge health probe
+ok 633 - websocket upgrades fail explicitly and expose a minimal edge health probe
+  ---
+  duration_ms: 0.158579
+  type: 'test'
+  ...
+# Subtest: browser websocket consumes an explicit signed agent open acknowledgement
+ok 634 - browser websocket consumes an explicit signed agent open acknowledgement
+  ---
+  duration_ms: 0.20577
+  type: 'test'
+  ...
+# Subtest: legacy agents retain first-upstream-frame readiness during rollout
+ok 635 - legacy agents retain first-upstream-frame readiness during rollout
+  ---
+  duration_ms: 0.122805
+  type: 'test'
+  ...
+# Subtest: nonce-bound v2 auth is preferred for both GET and body relay traffic
+ok 636 - nonce-bound v2 auth is preferred for both GET and body relay traffic
+  ---
+  duration_ms: 0.117076
+  type: 'test'
+  ...
+# Subtest: websocket tunnel batches both directions with bounded payloads
+ok 637 - websocket tunnel batches both directions with bounded payloads
+  ---
+  duration_ms: 0.148143
+  type: 'test'
+  ...
+# Subtest: agent tunnel preserves long-lived websocket handshakes and absorbs startup bursts
+ok 638 - agent tunnel preserves long-lived websocket handshakes and absorbs startup bursts
+  ---
+  duration_ms: 0.174523
+  type: 'test'
+  ...
+# Subtest: batched upstream frames are retry-idempotent before entering browser queue
+ok 639 - batched upstream frames are retry-idempotent before entering browser queue
+  ---
+  duration_ms: 0.115154
+  type: 'test'
+  ...
+# Subtest: websocket tunnel has dedicated throughput and payload guards
+ok 640 - websocket tunnel has dedicated throughput and payload guards
+  ---
+  duration_ms: 0.22573
+  type: 'test'
+  ...
+# Subtest: browser delivery pump is serialized, bounded and close-aware
+ok 641 - browser delivery pump is serialized, bounded and close-aware
+  ---
+  duration_ms: 0.390789
+  type: 'test'
+  ...
+# Subtest: redis relay queues are bounded by item count, bytes and ttl
+ok 642 - redis relay queues are bounded by item count, bytes and ttl
+  ---
+  duration_ms: 0.12615
+  type: 'test'
+  ...
+# Subtest: billing activation remains tied to a real upstream websocket frame
+ok 643 - billing activation remains tied to a real upstream websocket frame
+  ---
+  duration_ms: 0.095684
+  type: 'test'
+  ...
+# Subtest: concurrent websocket activation accepts the transaction winner
+ok 644 - concurrent websocket activation accepts the transaction winner
+  ---
+  duration_ms: 0.072219
+  type: 'test'
+  ...
+# Subtest: session activation is cached away from repeated websocket frames
+ok 645 - session activation is cached away from repeated websocket frames
+  ---
+  duration_ms: 0.137708
+  type: 'test'
+  ...
+# Subtest: websocket subprotocol may cross the authenticated gateway
+ok 646 - websocket subprotocol may cross the authenticated gateway
+  ---
+  duration_ms: 0.106921
+  type: 'test'
+  ...
+# Subtest: agent developer runtime binds only to loopback and has no host bind mount
+ok 647 - agent developer runtime binds only to loopback and has no host bind mount
+  ---
+  duration_ms: 0.127542
+  type: 'test'
+  ...
+# Subtest: cleanup is fail closed and expired sessions are stopped
+ok 648 - cleanup is fail closed and expired sessions are stopped
+  ---
+  duration_ms: 0.093821
+  type: 'test'
+  ...
+# Subtest: an already accepted websocket frame is deduped before queue capacity rejection
+ok 649 - an already accepted websocket frame is deduped before queue capacity rejection
+  ---
+  duration_ms: 0.627365
+  type: 'test'
+  ...
+# Subtest: workspace gateway liveness tolerates several missed 10s reports but expires stale registrations
+ok 650 - workspace gateway liveness tolerates several missed 10s reports but expires stale registrations
+  ---
+  duration_ms: 0.614756
+  type: 'test'
+  ...
+# Subtest: future gateway timestamps are fail-closed
+ok 651 - future gateway timestamps are fail-closed
+  ---
+  duration_ms: 0.125769
+  type: 'test'
+  ...
+# Subtest: gateway register is the only thing that makes a Developer workspace openable, and is idempotent
+ok 652 - gateway register is the only thing that makes a Developer workspace openable, and is idempotent
+  ---
+  duration_ms: 280.332513
+  type: 'test'
+  ...
+# Subtest: browser pending budget is bounded by both items and bytes
+ok 653 - browser pending budget is bounded by both items and bytes
+  ---
+  duration_ms: 1.187019
+  type: 'test'
+  ...
+# Subtest: strict base64 rejects malformed or decoded-oversize frames
+ok 654 - strict base64 rejects malformed or decoded-oversize frames
+  ---
+  duration_ms: 0.204969
+  type: 'test'
+  ...
+# Subtest: workspace absolute redirects stay inside the authenticated gateway prefix
+ok 655 - workspace absolute redirects stay inside the authenticated gateway prefix
+  ---
+  duration_ms: 0.114933
+  type: 'test'
+  ...
+# Subtest: websocket data normalization preserves bytes and fragmented buffers
+ok 656 - websocket data normalization preserves bytes and fragmented buffers
+  ---
+  duration_ms: 0.234042
+  type: 'test'
+  ...
+# Subtest: websocket rejection is a complete non-cacheable HTTP response
+ok 657 - websocket rejection is a complete non-cacheable HTTP response
+  ---
+  duration_ms: 1.103192
+  type: 'test'
+  ...
+# Subtest: websocket rejection never exposes internal details beyond the stable error code
+ok 658 - websocket rejection never exposes internal details beyond the stable error code
+  ---
+  duration_ms: 0.254484
+  type: 'test'
+  ...
+# Subtest: renter workspace access propagates the Fastify request id into the one-time grant
+ok 659 - renter workspace access propagates the Fastify request id into the one-time grant
+  ---
+  duration_ms: 6.05366
+  type: 'test'
+  ...
+# Subtest: gateway critical websocket logs share one complete correlation context
+ok 660 - gateway critical websocket logs share one complete correlation context
+  ---
+  duration_ms: 1.665368
+  type: 'test'
+  ...
+# Subtest: workspace correlation never adds bearer secrets or payload data to the child logger
+ok 661 - workspace correlation never adds bearer secrets or payload data to the child logger
+  ---
+  duration_ms: 1.323795
+  type: 'test'
+  ...
+# Subtest: ensureComputePreparation is Serializable and recovers from the WorkspaceSession.bookingId race (C7)
+ok 662 - ensureComputePreparation is Serializable and recovers from the WorkspaceSession.bookingId race (C7)
+  ---
+  duration_ms: 4.900883
+  type: 'test'
+  ...
+# Subtest: the workspace-sessions route never returns a raw Prisma error message to the client (C7)
+ok 663 - the workspace-sessions route never returns a raw Prisma error message to the client (C7)
+  ---
+  duration_ms: 1.781164
+  type: 'test'
+  ...
+# Subtest: workspace progress reports are authenticated, fenced and refresh the explicit lease
+ok 664 - workspace progress reports are authenticated, fenced and refresh the explicit lease
+  ---
+  duration_ms: 6.306611
+  type: 'test'
+  ...
+# Subtest: Developer workspace retry remains restricted to terminal sessions and creates one new immutable attempt
+ok 665 - Developer workspace retry remains restricted to terminal sessions and creates one new immutable attempt
+  ---
+  duration_ms: 1.256493
+  type: 'test'
+  ...
+# Subtest: Developer workspace status module still exposes phase, elapsed time, last activity and terminal error
+ok 666 - Developer workspace status module still exposes phase, elapsed time, last activity and terminal error
+  ---
+  duration_ms: 1.169722
+  type: 'test'
+  ...
+# Subtest: private-beta renter UI separates current Compute reservations from collapsed history
+ok 667 - private-beta renter UI separates current Compute reservations from collapsed history
+  ---
+  duration_ms: 3.302065
+  type: 'test'
+  ...
+# Subtest: workspace retry now covers a failed Compute/GPU_PROOF session too, creating the correct job type
+ok 668 - workspace retry now covers a failed Compute/GPU_PROOF session too, creating the correct job type
+  ---
+  duration_ms: 0.862334
+  type: 'test'
+  ...
+# Subtest: private-beta renter UI keeps the latest terminal GPU_PROOF failure visible
+ok 669 - private-beta renter UI keeps the latest terminal GPU_PROOF failure visible
+  ---
+  duration_ms: 0.910071
+  type: 'test'
+  ...
+# Subtest: WorkspaceSession is unique per (bookingId, machineWorkspaceId), not per bookingId alone
+ok 670 - WorkspaceSession is unique per (bookingId, machineWorkspaceId), not per bookingId alone
+  ---
+  duration_ms: 5.360706
+  type: 'test'
+  ...
+# Subtest: a matching migration drops the old constraint and creates the composite one
+ok 671 - a matching migration drops the old constraint and creates the composite one
+  ---
+  duration_ms: 1.232116
+  type: 'test'
+  ...
+# Subtest: requesting a Developer session scopes its existing-session lookup to the Developer machineWorkspace
+ok 672 - requesting a Developer session scopes its existing-session lookup to the Developer machineWorkspace
+  ---
+  duration_ms: 1.137493
+  type: 'test'
+  ...
+# Subtest: the Developer workspace status and access routes never return an unrelated compute session
+ok 673 - the Developer workspace status and access routes never return an unrelated compute session
+  ---
+  duration_ms: 1.105585
+  type: 'test'
+  ...
+# Subtest: POST /workspace-sessions/:id/start re-anchors expiresAt to startedAt + expectedSeconds (source check)
+ok 674 - POST /workspace-sessions/:id/start re-anchors expiresAt to startedAt + expectedSeconds (source check)
+  ---
+  duration_ms: 1.079706
+  type: 'test'
+  ...
+# Subtest: workspace-sessions/:id/start formula: expiresAt tracks expectedSeconds, not the original booking window
+ok 675 - workspace-sessions/:id/start formula: expiresAt tracks expectedSeconds, not the original booking window
+  ---
+  duration_ms: 81.286254
+  type: 'test'
+  ...
+# Subtest: verified activated Developer cleanup finalizes once and releases an idle machine
+ok 676 - verified activated Developer cleanup finalizes once and releases an idle machine
+  ---
+  duration_ms: 1.743096
+  type: 'test'
+  ...
+# Subtest: already terminal session is an idempotent success with no second state mutation
+ok 677 - already terminal session is an idempotent success with no second state mutation
+  ---
+  duration_ms: 0.306311
+  type: 'test'
+  ...
+# Subtest: missing or non-Developer session fails closed
+ok 678 - missing or non-Developer session fails closed
+  ---
+  duration_ms: 0.546714
+  type: 'test'
+  ...
+# Subtest: counts only available intervals backed by a workload proof
+ok 679 - counts only available intervals backed by a workload proof
+  ---
+  duration_ms: 0.588176
+  type: 'test'
+  ...
+# Subtest: never validates more usage than the booking duration
+ok 680 - never validates more usage than the booking duration
+  ---
+  duration_ms: 0.107702
+  type: 'test'
+  ...
+1..680
+# tests 708
+# suites 3
+# pass 706
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 41058.602564

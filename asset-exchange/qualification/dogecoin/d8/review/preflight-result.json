@@ -1,0 +1,28 @@
+{
+  "scope": "SOFTWARE_PREFLIGHT_ONLY_NATIVE_NOT_EXECUTED",
+  "baseLocalCommit": "97925aff6b99f8ec854b9ddd027b610423cc7759",
+  "command": "TMPDIR=\"$PWD/evidence/d8-preflight-20261122/tmp\" python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p \"test_*.py\" -v",
+  "pass": 13,
+  "fail": 0,
+  "skip": 0,
+  "nativeLibraryLoads": 0,
+  "fixturePrivateKeysGenerated": 0,
+  "nativeRpcCalls": 0,
+  "nativeNodesStarted": 0,
+  "nativeBlocksGenerated": 0,
+  "nativeBroadcasts": 0,
+  "nativeSignaturesCreated": 0,
+  "evidenceContractMutations": 21,
+  "shellSyntaxPassed": true,
+  "pythonSyntaxPassed": true,
+  "sourcesSha256": {
+    "broker_consensus.py": "1f38e4deb53bd8d636b3e7bbf310a634be7cfd88989bc517ab7fd261bcd46e71",
+    "fixture_signer.py": "7d94aa2ba9c3b821a67f97c9696df06ce2fcdbd378d310f50630a5fe9bc13bb1",
+    "run-consensus.sh": "6b653ec83ed30a75cb8df8232e9cb415b86efb7ae9355b7c913b240efd218932",
+    "test_broker_consensus.py": "f3a8c2668f704fd1455462410c0ae2aabfc56391f7ef12fd43120a824afa64a9",
+    "README.md": "d99ccb9e0205a8f42fe3ffb8027bdd55d4f21372b412e10547e70d8830576701"
+  },
+  "logSha256": "aafd4af3448a84b1e1a034f533b6c549e69416432daec0d45a7cfe9840d28088",
+  "note": "Preflight mocks all native loads and fixture-key generation. Model native-proof rows are fabricated unit data, never native evidence. The actual six-call run is prepared and requires reviewed freeze plus explicit private authorization.",
+  "negativeBindingCorrection": "negative-binding-result.json"
+}

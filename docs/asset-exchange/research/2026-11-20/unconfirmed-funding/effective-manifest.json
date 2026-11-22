@@ -1,0 +1,72 @@
+{
+  "acceptNonstandard": false,
+  "archiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+  "authorization": "AUTHORIZE_D6_PRIVATE_MULTINODE_REGTEST",
+  "externalNetwork": false,
+  "importedPublicBlocksMaximum": 1355,
+  "initialAuxpow": false,
+  "keys": "no signing keys created or provided",
+  "labSuite": "recovery-funding-reorg",
+  "librarySha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b",
+  "maxAddressSpaceMiBPerProcess": 2048,
+  "maxAuxpowFixtures": 0,
+  "maxAuxpowParentAttemptsPerFixture": 256,
+  "maxBroadcastFixtures": 2,
+  "maxCpuSecondsPerProcess": 600,
+  "maxDataMiB": 1024,
+  "maxFixtureBytes": 10000,
+  "maxForkDepth": 5,
+  "maxGeneratedBlocks": 2,
+  "maxObservedRollbackDepth": 3,
+  "maxRpc": 400,
+  "maxStandaloneInvocations": 8,
+  "maxWallSeconds": 900,
+  "network": "regtest",
+  "nodes": 2,
+  "notCovered": [
+    "independent external review",
+    "complete AuxPoW adversarial matrix beyond eight fixed fixtures",
+    "production watcher deployment",
+    "all D0-D9 requirements"
+  ],
+  "peerEndpoints": [
+    "127.0.0.1:18444",
+    "127.0.0.1:18445"
+  ],
+  "postActivationForkAuxpow": true,
+  "promiscuousMempoolFlags": null,
+  "qualificationStatus": "BLOCKED",
+  "repeatsPreviouslyQualifiedSuite": false,
+  "rpcAllowlist": [
+    "addnode",
+    "generatetoaddress",
+    "getblock",
+    "getblockchaininfo",
+    "getblockhash",
+    "getblockheader",
+    "getmempoolentry",
+    "getmempoolinfo",
+    "getnetworkinfo",
+    "getpeerinfo",
+    "getrawmempool",
+    "getrawtransaction",
+    "gettxout",
+    "invalidateblock",
+    "reconsiderblock",
+    "sendrawtransaction",
+    "setnetworkactive",
+    "stop"
+  ],
+  "rpcEndpoints": [
+    "127.0.0.1:18332",
+    "127.0.0.1:18333"
+  ],
+  "schemaVersion": 1,
+  "selectedNativeCases": [
+    "unconfirmed-funding-refuses-rebroadcast"
+  ],
+  "settlementAllowed": false,
+  "signingAllowed": false,
+  "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "walletEnabled": false
+}

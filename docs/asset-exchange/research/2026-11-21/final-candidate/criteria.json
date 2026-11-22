@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+  "sourceTree": "4fb75f3aab95895b8d841e240932cad083687fc6",
+  "internalTechnicalQualification": "BLOCKED",
+  "softwareCandidateChecks": "PASS",
+  "independentAudit": "NOT_PERFORMED_OUTSIDE_MISSION",
+  "blockingInternalConditions": [
+    "D2 final profile requires unproven external/hardware compatibility",
+    "D8 device transport/adapter/pairing absent and real-device qualification not executed"
+  ],
+  "criteria": [
+    {
+      "id": "D0",
+      "internal": "PASS_LIMITED",
+      "phase": "PASS_LIMITED_SOURCE_REBUILD_ROUTE",
+      "run": 40866305437,
+      "execution": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+      "archiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+      "limit": "Separate prebuilt GPG route not selected."
+    },
+    {
+      "id": "D1",
+      "internal": "PASS_LIMITED",
+      "phase": "PASS_LIMITED_PRIVATE_REGTEST_IDENTITY",
+      "run": 40892872892,
+      "execution": "1636df354d4fafd2cc2d9ab8595f4dca52582ad7",
+      "limit": "No Mainnet identity or production effect."
+    },
+    {
+      "id": "D2",
+      "internal": "PASS_MEASURED_CASES",
+      "phase": "BLOCKED",
+      "run": 42875442068,
+      "execution": "5d5d6fc9825e9b24bea061570982ad77d727a25c",
+      "nativeCases": 32,
+      "typedPredicates": 24,
+      "additionalRun": 43005573333,
+      "additionalExecution": "9fb396839eefc8cdc47028d6f8e0aecf516752cf",
+      "missing": "Specification section7 requires external and hardware signer compatibility before freezing the final profile."
+    },
+    {
+      "id": "D3",
+      "internal": "PASS_BOUNDED",
+      "phase": "BLOCKED_FINAL_PROFILE_PREREQUISITE",
+      "run": 43060202035,
+      "execution": "66afc5bf1fdff1666280a74c8f45604a14ca89b8",
+      "assertions": 2357,
+      "selected": 4,
+      "unselected": 249,
+      "missing": "D2 final profile; unselected cases are not PASS."
+    },
+    {
+      "id": "D4",
+      "internal": "PASS_BOUNDED",
+      "phase": "BLOCKED_FINAL_PROFILE_PREREQUISITE",
+      "run": 43052066409,
+      "execution": "4a253fc15503e9e9a164ce96375f1729c915c020",
+      "supplementaryRuns": [
+        44400212431,
+        44652078768
+      ],
+      "missing": "D2 final profile; no live automatic exchange integration claimed."
+    },
+    {
+      "id": "D5",
+      "internal": "PASS_BOUNDED",
+      "phase": "BLOCKED_FINAL_PROFILE_PREREQUISITE",
+      "run": 43108343770,
+      "execution": "06c96c6284d1c33a771c41d1f9b6ffe533c946bf",
+      "selectedCases": 15,
+      "additionalRun": 43484240757,
+      "additionalExecution": "fc2d34c58e0696e48c4490cf758070d861058fc8",
+      "additionalAssertions": 73,
+      "historicalFailureRetained": 43326020199,
+      "limit": "Finite pre-signed fee ladder; refusing rates above its cap is expected safe behavior, not an invented failure."
+    },
+    {
+      "id": "D6",
+      "internal": "PASS_BOUNDED",
+      "phase": "BLOCKED_FINAL_PROFILE_PREREQUISITE",
+      "run": 43074060943,
+      "execution": "6ebdaef913e6b102c0835fbab261da9ac4cc11b6",
+      "additionalRun": 43311713839,
+      "additionalExecution": "c7adde84149250c3a972e570b5df4911b20778ee",
+      "additionalProperties": 12,
+      "additionalNegative": 16,
+      "additionalPositive": 4,
+      "currentD6SoftwareTests": 51,
+      "supplementaryRuns": [
+        44400212431,
+        44652078768
+      ],
+      "limit": "Measured AuxPoW/fork/reorg/watcher matrix; no exhaustive universal claim."
+    },
+    {
+      "id": "D7",
+      "internal": "PASS_SCOPED_SOFTWARE_AND_NATIVE_EVIDENCE",
+      "phase": "BLOCKED_FINAL_PROFILE_PREREQUISITES",
+      "currentRecoverySoftwareTests": 40,
+      "currentSigkillBoundaries": 17,
+      "softwareRpcSendRestartBoundaries": 3,
+      "historicalVmRun": 43111959236,
+      "historicalVmExecution": "6307538265aef8273447891f445a28531043d1b5",
+      "historicalVmCases": 15,
+      "currentCoreNativeRuns": [
+        44400212431,
+        44652078768
+      ],
+      "attribution": "Historical VM source is preserved at its own SHA; current-core native and software evidence is separate.",
+      "physicalPowerLoss": "NOT_TESTED_SUPPLEMENTARY_NOT_A_NORMATIVE_GATE",
+      "missing": "Final profile prerequisites."
+    },
+    {
+      "id": "D8",
+      "internal": "PASS_SOFTWARE_16_TESTS_ONLY",
+      "phase": "BLOCKED",
+      "transportAdapterPairing": "NOT_IMPLEMENTED",
+      "deviceFirmwareDisplayDisconnect": "NOT_TESTED",
+      "missing": "A chosen compatible device, firmware/profile, reviewed transport/adapter and operator-reviewed exact display/disconnect evidence.",
+      "classification": [
+        "TECHNICALLY_DEVELOPABLE_NEW_INTEGRATION_OUTSIDE_CORRECTION_ONLY_SCOPE",
+        "HARDWARE_UNAVAILABLE",
+        "OWNER_PROFILE_AND_SCOPE_DECISION"
+      ]
+    },
+    {
+      "id": "D9",
+      "internal": "EVIDENCE_DOSSIER_AND_BOUNDED_CHECKS_PREPARED_PASS",
+      "phase": "BLOCKED_COMPLETE_D0_D8_AND_INDEPENDENT_REVIEW",
+      "externalIndependentAudit": "NOT_PERFORMED_OUTSIDE_MISSION",
+      "externalAuditBlocksPrivateTests": false,
+      "newSourceAttestation": "NOT_PERFORMED",
+      "formalEvidence": "Historical unchanged bounded models and manual code map; no complete mechanized refinement claim.",
+      "activation": "NOT_AUTHORIZED_NOT_PERFORMED"
+    }
+  ]
+}

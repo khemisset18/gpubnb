@@ -1,0 +1,11 @@
+test_alternate_verifier_path_is_rejected (test_financial_profile.FinancialProfileBoundaryTests.test_alternate_verifier_path_is_rejected) ... ok
+test_changed_financial_protocol_source_is_rejected (test_financial_profile.FinancialProfileBoundaryTests.test_changed_financial_protocol_source_is_rejected) ... ok
+test_modified_pins_are_rejected_before_importing_valid_verifier (test_financial_profile.FinancialProfileBoundaryTests.test_modified_pins_are_rejected_before_importing_valid_verifier) ... ok
+test_modified_verifier_is_not_imported (test_financial_profile.FinancialProfileBoundaryTests.test_modified_verifier_is_not_imported) ... ok
+test_resolved_graph_different_from_reviewed_profile_is_rejected (test_financial_profile.FinancialProfileBoundaryTests.test_resolved_graph_different_from_reviewed_profile_is_rejected) ... ok
+test_unapproved_profile_is_rejected (test_financial_profile.FinancialProfileBoundaryTests.test_unapproved_profile_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.006s
+
+OK

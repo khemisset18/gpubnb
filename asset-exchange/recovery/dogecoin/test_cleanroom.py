@@ -1,15 +1,49 @@
+import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import cleanroom
 from recovery_core import Rpc
 
 
 class CleanroomBoundaries(unittest.TestCase):
+    def test_different_known_refusal_is_retained_and_still_fails_the_expectation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);out=root/'evidence';out.mkdir()
+            hidden=[root/name for name in ('backend','node-a','keys')]
+            for path in hidden:path.mkdir()
+            node=root/'node-b';(node/'regtest').mkdir(parents=True)
+            (node/'regtest'/'.cookie').write_bytes(b'test-service:fixture')
+            clean=root/'recovery-cleanroom-18332-funding-reorg'
+            (clean/'rpc'/'regtest').mkdir(parents=True)
+            (clean/'doge-recovery.pyz').write_bytes(b'test package')
+            cleanroom.PACKAGE_DIGESTS[str(clean)]=hashlib.sha256(b'test package').hexdigest()
+            actual='node has an unresolved header lead; no broadcast'
+            refusal={'state':'UNKNOWN','error':actual,'automaticSettlement':False}
+            child=Mock(returncode=1)
+            child.communicate.return_value=('',json.dumps(refusal))
+            process=Mock();process.__enter__=Mock(return_value=child);process.__exit__=Mock(return_value=False)
+            context={'bundlePath':'unused','bundleSha256':'0'*64,'cliPath':'unused',
+                'nodeBDataDirectory':str(node),'nodeBRpcPort':18332,
+                **dict(zip(('backendDirectoryToHide','nodeADataDirectoryToHide','originalKeysDirectoryToHide'),
+                           map(str,hidden))),
+                'parentNetNs':'test-net','parentMountNs':'test-mount','evidenceDirectory':str(out),
+                'mode':'rebroadcast','labLabel':'funding-reorg',
+                'expectedError':'funding is not confirmed on active chain; no broadcast'}
+            try:
+                with patch('cleanroom.load_bundle'),patch('cleanroom.subprocess.Popen',return_value=process):
+                    with self.assertRaisesRegex(ValueError,'different recovery refusal observed'):
+                        cleanroom.run_recovery_hook(context)
+                retained=out/'cleanroom-refusal-18332-funding-reorg-rebroadcast.json'
+                self.assertTrue(retained.is_file(),'actual refusal was lost from native failure evidence')
+                self.assertEqual(json.loads(retained.read_bytes()),refusal)
+            finally:cleanroom.PACKAGE_DIGESTS.pop(str(clean),None)
+
     def test_private_service_cookie_rotates_after_restart_without_exposing_original_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);source=root/'source';target=root/'copy'

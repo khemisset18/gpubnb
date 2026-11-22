@@ -1,0 +1,74 @@
+[
+  {
+    "platform": "macos",
+    "runId": 44184744520,
+    "sourceHead": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+    "syntheticExecution": "a0e6202c1646d503d46ad1a05498fc5f2d84414a",
+    "verifiedGitTree": "3c888f0e6f9118f97f449735d01ac16fede946f7",
+    "artifactId": 14457684191,
+    "zipSha256": "eabdaff7c128e73e506a1c696f01a5ac3911dd2646afcc76a3e278e1409c4f89",
+    "internalBundleDigestsVerified": 5,
+    "installer": {
+      "file": "dmg/GPUbnb Host_0.1.0_aarch64.dmg",
+      "sha256": "0532cac582e4658ed21baa1a5177c3d9d170f0e276cea2dd277008670e4a4e7d"
+    },
+    "locksMatch": true,
+    "metadataFeatures": [
+      "default",
+      "desktop-runtime"
+    ],
+    "actualVendorGlib": true,
+    "rand07AndLibsecpAbsent": true,
+    "buildAndArtifactIntegrity": "PASS",
+    "applicationInstalledOrLaunched": false,
+    "verifiedAtUtc": "2026-11-18T18:48:39.061023+00:00"
+  },
+  {
+    "platform": "windows",
+    "runId": 44184744520,
+    "sourceHead": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+    "syntheticExecution": "a0e6202c1646d503d46ad1a05498fc5f2d84414a",
+    "verifiedGitTree": "3c888f0e6f9118f97f449735d01ac16fede946f7",
+    "artifactId": 14374680975,
+    "zipSha256": "d97839b05db04733ea546cff4e3d6ed3186c6f7e8f163dea4ca79ff6958b9cac",
+    "internalBundleDigestsVerified": 1,
+    "installer": {
+      "file": "nsis/GPUbnb Host_0.1.0_x64-setup.exe",
+      "sha256": "044777e5b66dd18c7191f8b251827ee50ff6d5c660c380e5906ce93f0670cc5b"
+    },
+    "locksMatch": true,
+    "metadataFeatures": [
+      "default",
+      "desktop-runtime"
+    ],
+    "actualVendorGlib": true,
+    "rand07AndLibsecpAbsent": true,
+    "buildAndArtifactIntegrity": "PASS",
+    "applicationInstalledOrLaunched": false,
+    "verifiedAtUtc": "2026-11-18T18:48:39.466927+00:00"
+  },
+  {
+    "platform": "linux",
+    "runId": 44184744520,
+    "sourceHead": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+    "syntheticExecution": "a0e6202c1646d503d46ad1a05498fc5f2d84414a",
+    "verifiedGitTree": "3c888f0e6f9118f97f449735d01ac16fede946f7",
+    "artifactId": 14374451068,
+    "zipSha256": "f3bb31d26aa3cf1f04d343093ad798fa5ffcfded1828987a336fa6bcea5206c2",
+    "internalBundleDigestsVerified": 8,
+    "installer": {
+      "file": "deb/GPUbnb Host_0.1.0_amd64.deb",
+      "sha256": "c83dd49cdd64931952817b3022859aa6aed3ae8452107ee133cbe85780d6cd09"
+    },
+    "locksMatch": true,
+    "metadataFeatures": [
+      "default",
+      "desktop-runtime"
+    ],
+    "actualVendorGlib": true,
+    "rand07AndLibsecpAbsent": true,
+    "buildAndArtifactIntegrity": "PASS",
+    "applicationInstalledOrLaunched": false,
+    "verifiedAtUtc": "2026-11-18T18:48:40.115430+00:00"
+  }
+]

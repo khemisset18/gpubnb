@@ -1,0 +1,19 @@
+test_changed_upstream_file_rejected (test_guards.Guards.test_changed_upstream_file_rejected) ... ok
+test_d3_selection_requires_every_native_metric_and_never_qualifies (test_guards.Guards.test_d3_selection_requires_every_native_metric_and_never_qualifies) ... ok
+test_dirty_source_rejected (test_guards.Guards.test_dirty_source_rejected) ... ok
+test_existing_second_suite_rejected_before_first_target_is_written (test_guards.Guards.test_existing_second_suite_rejected_before_first_target_is_written) ... ok
+test_existing_third_suite_rejected_before_any_registration (test_guards.Guards.test_existing_third_suite_rejected_before_any_registration) ... ok
+test_prepare_registers_both_suites_without_touching_implementations (test_guards.Guards.test_prepare_registers_both_suites_without_touching_implementations) ... ok
+test_rbf_selection_requires_both_negative_reasons_and_valid_boundary_controls (test_guards.Guards.test_rbf_selection_requires_both_negative_reasons_and_valid_boundary_controls) ... ok
+test_retry_selects_only_the_failed_input_case_and_requires_its_own_pass_record (test_guards.Guards.test_retry_selects_only_the_failed_input_case_and_requires_its_own_pass_record) ... ok
+test_same_namespace_rejected_before_binary_read (test_guards.Guards.test_same_namespace_rejected_before_binary_read) ... ok
+test_unknown_suite_rejected_before_namespace_or_native_operation (test_guards.Guards.test_unknown_suite_rejected_before_namespace_or_native_operation) ... ok
+test_wrong_binary_rejected_before_execution (test_guards.Guards.test_wrong_binary_rejected_before_execution) ... ok
+test_wrong_commit_rejected_before_changes (test_guards.Guards.test_wrong_commit_rejected_before_changes) ... ok
+test_child_policy_rbf_cannot_run_on_another_branch_or_event (test_rbf_routes.RbfManualRoutes.test_child_policy_rbf_cannot_run_on_another_branch_or_event) ... ok
+test_every_doge_mode_keeps_its_exact_manual_repository_and_branch (test_rbf_routes.RbfManualRoutes.test_every_doge_mode_keeps_its_exact_manual_repository_and_branch) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.405s
+
+OK

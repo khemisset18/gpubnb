@@ -1,0 +1,95 @@
+name: Experimental GTK migration native GUI qualification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - qualification/doge-gtk-20261118
+    # Source/behavior changes require a new native run. Workflow routing alone
+    # does not repeat an unchanged native build already running on this branch.
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - apps/host-desktop/**
+      - prototypes/gtk-migration/**
+      - vendor/security/**
+
+permissions:
+  contents: read
+
+jobs:
+  linux-gui:
+    if: github.ref == 'refs/heads/qualification/doge-gtk-20261118'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_PROFILE_DEV_DEBUG: 0
+      GPUBNB_RELEASE_CHANNEL: development
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Prepare native evidence directory before tool installation
+        run: mkdir -p "$RUNNER_TEMP/gtk-native"
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+      - name: Install official native development and GUI test dependencies
+        run: |
+          set -o pipefail
+          sudo apt-get -o Acquire::Retries=2 update 2>&1 | tee "$RUNNER_TEMP/gtk-native/apt-update.log"
+          apt-cache show webkit2gtk-driver > "$RUNNER_TEMP/gtk-native/webkit-driver-package.txt"
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev webkit2gtk-driver libappindicator3-dev librsvg2-dev patchelf xvfb dbus-x11 \
+            2>&1 | tee "$RUNNER_TEMP/gtk-native/apt-install.log"
+      - name: Build locked frontend
+        run: |
+          npm ci --prefix apps/host-desktop --ignore-scripts --no-audit --no-fund
+          npm run check --prefix apps/host-desktop
+          npm run build --prefix apps/host-desktop
+      - name: Verify exact active official sources before native execution
+        run: |
+          mkdir -p "$RUNNER_TEMP/gtk-native"
+          cargo metadata --locked --all-features --format-version 1 > "$RUNNER_TEMP/gtk-native/metadata.json"
+          python3 - <<'PY'
+          import importlib.util,json,os,pathlib
+          p=pathlib.Path('prototypes/gtk-migration/prepare.py')
+          spec=importlib.util.spec_from_file_location('qualification',p)
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          output=pathlib.Path(os.environ['RUNNER_TEMP'])/'gtk-native'
+          result=module.selected_sources(json.loads((output/'metadata.json').read_text()),pathlib.Path.cwd(),json.loads(p.with_name('source-pins.json').read_text()))
+          (output/'selected-sources.json').write_text(json.dumps(result,indent=2)+'\n')
+          PY
+      - name: Install pinned official Tauri WebDriver
+        run: cargo install tauri-driver --version '=2.1.0' --locked --root "$RUNNER_TEMP/tauri-webdriver"
+      - name: Materialize existing reproducible icon
+        run: |
+          node - <<'JS'
+          const fs=require('node:fs');
+          const source='apps/host-desktop/src-tauri/icons/icon.ico.base64';
+          const bytes=Buffer.from(fs.readFileSync(source,'utf8').trim(),'base64');
+          if(bytes.length<256)throw new Error('Invalid existing icon');
+          fs.writeFileSync('apps/host-desktop/src-tauri/icons/icon.ico',bytes);
+          JS
+      - name: Compile actual native application in release mode
+        run: |
+          set -o pipefail
+          cargo build --locked --release -p gpubnb-host-desktop --features desktop-runtime,tauri/custom-protocol 2>&1 | tee "$RUNNER_TEMP/gtk-native/native-build.log"
+      - name: Exercise actual native welcome, status and safe IPC
+        run: |
+          export PATH="$RUNNER_TEMP/tauri-webdriver/bin:$PATH"
+          dbus-run-session -- xvfb-run -a python3 prototypes/gtk-migration/native_smoke.py \
+            target/release/gpubnb-host-desktop "$RUNNER_TEMP/gtk-native/gui"
+      - name: Preserve native source, binary and GUI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtk-native-gui-${{ github.sha }}
+          path: ${{ runner.temp }}/gtk-native
+          if-no-files-found: error
+          retention-days: 30

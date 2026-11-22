@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "source": "https://itunes.apple.com/lookup?id=1288339409&country=fr",
+  "platform": "iOS",
+  "installedAppTested": false,
+  "resultCount": 1,
+  "records": [
+    {
+      "version": "26.46.9",
+      "currentVersionReleaseDate": "2026-11-14T21:42:23Z",
+      "bundleId": "com.sixdays.trust",
+      "sellerName": "DApps Platform Software Services Ltd.",
+      "minimumOsVersion": "15.1",
+      "trackViewUrl": "https://apps.apple.com/fr/app/trust-wallet-bitcoin-crypto/id1288339409?uo=4"
+    }
+  ]
+}

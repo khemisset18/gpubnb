@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-21",
+  "sources": [
+    {
+      "key": "borsh",
+      "url": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+      "id": "GHSA-fjx5-qpf4-xjf2",
+      "modified": "2024-09-23T16:34:09Z",
+      "withdrawn": null,
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "crates.io",
+            "name": "borsh"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "1.0.0-alpha.1"
+                }
+              ]
+            }
+          ],
+          "database_specific": {
+            "last_known_affected_version_range": "<= 0.10.3"
+          }
+        }
+      ],
+      "refs": [
+        "https://github.com/near/borsh-rs/issues/19",
+        "https://rustsec.org/advisories/RUSTSEC-2023-0033.html"
+      ]
+    },
+    {
+      "key": "rustsec",
+      "url": "https://github.com/rustsec/advisory-db/blob/main/crates/borsh/RUSTSEC-2023-0033.md",
+      "patched": [
+        ">=1.0.0-alpha.1",
+        "^0.10.4"
+      ]
+    },
+    {
+      "key": "glib",
+      "url": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2024/12/GHSA-wrw7-89jp-8q8g/GHSA-wrw7-89jp-8q8g.json",
+      "id": "GHSA-wrw7-89jp-8q8g",
+      "modified": "2024-12-23T20:19:24Z",
+      "withdrawn": null,
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "crates.io",
+            "name": "glib"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0.15.0"
+                },
+                {
+                  "fixed": "0.20.0"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "refs": [
+        "https://github.com/gtk-rs/gtk-rs-core/pull/1343",
+        "https://rustsec.org/advisories/RUSTSEC-2024-0429.html"
+      ]
+    },
+    {
+      "key": "picomatch",
+      "url": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/10/GHSA-fc5q-39xc-vjpf/GHSA-fc5q-39xc-vjpf.json",
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "modified": "2026-11-19T16:07:39Z",
+      "withdrawn": "2026-11-18T15:38:56Z",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "picomatch"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "last_affected": "4.0.7"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-112366",
+        "https://github.com/micromatch/picomatch/pull/194",
+        "https://github.com/micromatch/picomatch/blob/4.0.7/lib/parse.js#L287-L307",
+        "https://www.vulncheck.com/advisories/picomatch-through-4.0.7-redos-via-single-branch-repeated-extglob-patterns"
+      ]
+    },
+    {
+      "key": "effect",
+      "url": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/11/GHSA-7589-6fvf-x4pw/GHSA-7589-6fvf-x4pw.json",
+      "id": "GHSA-7589-6fvf-x4pw",
+      "modified": "2026-11-19T20:51:01Z",
+      "withdrawn": null,
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "effect"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "3.22.1"
+                }
+              ]
+            }
+          ],
+          "database_specific": {
+            "last_known_affected_version_range": "<= 3.22.0"
+          }
+        }
+      ],
+      "refs": [
+        "https://github.com/Effect-TS/effect/security/advisories/GHSA-7589-6fvf-x4pw",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-121707",
+        "https://github.com/Effect-TS/effect/pull/6761",
+        "https://github.com/Effect-TS/effect/commit/3cc3c6e1a64cbdc360e9d28e44f3ec3ce0ece6e3",
+        "https://github.com/Effect-TS/effect/releases/tag/effect@3.22.1"
+      ]
+    }
+  ],
+  "resolution": {
+    "borsh": {
+      "old": "0.10.4",
+      "active": "1.8.0",
+      "parent": "anchor-lang1.2.2",
+      "remaining010Parents": 0,
+      "contradiction": "RustSec/OSV recognizes ^0.10.4; GitHub human affected range ends at0.10.3 while machine events only fix1.0.0-alpha.1. No exception, fake version or source guard removal.",
+      "evidence": "../../2026-11-20/anchor-sdk/wire-result.json"
+    },
+    "glib": {
+      "old": "0.18.5",
+      "active": "0.22.11",
+      "gtk": "0.19.0",
+      "officialGitCrates": 15,
+      "officialRepositories": 7,
+      "publishedTauriChecked": {
+        "tag": "tauri-v2.12.7",
+        "gtkRequirement": "0.18"
+      },
+      "coordinatedUpstream": {
+        "url": "https://github.com/tauri-apps/tauri/pull/16170",
+        "head": "899ca2105ffd06293013b6d2bff4416987d99010",
+        "state": "open",
+        "draft": true
+      },
+      "stableMigrationReleased": false,
+      "scope": "Reviewed immutable upstream snapshots; internal candidate, not stable release certification."
+    },
+    "picomatch": {
+      "active": "4.0.5 unchanged",
+      "fixedReleaseClaimed": false,
+      "resolution": "Official advisory withdrawn, official Trivy database synchronized; no local ignore or package mutation."
+    },
+    "effect": {
+      "old": "3.21.0",
+      "active": "3.22.1",
+      "parent": "@prisma/config6.19.3",
+      "prismaVersionChanged": false,
+      "upstreamFix": "https://github.com/Effect-TS/effect/commit/3cc3c6e1a64cbdc360e9d28e44f3ec3ce0ece6e3"
+    }
+  },
+  "strictGate": {
+    "result": "PASS",
+    "findings": 0,
+    "run": "https://github.com/khemisset18/gpubnb/actions/runs/44952572246",
+    "artifactId": 14725898440,
+    "allReportedVulnerabilitiesEnforced": true,
+    "controlsModified": false
+  }
+}

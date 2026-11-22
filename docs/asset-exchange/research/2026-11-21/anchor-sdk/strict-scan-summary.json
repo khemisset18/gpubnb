@@ -1,0 +1,68 @@
+{
+  "verifiedAt": "2026-11-21T09:58:44.489064+00:00",
+  "result": "EXISTING_DESKTOP_AND_NEW_NPM_FINDINGS_REMAIN",
+  "scanner": "Trivy0.76.2 strict filesystem including dev dependencies and all severities",
+  "exitCode": 1,
+  "reportSha256": "d2ca08636da299097ae20cf6f7cc65266b1858ec998ea26014dbb88c95665b58",
+  "db": {
+    "Version": 2,
+    "NextUpdate": "2026-11-22T07:02:51.626719593Z",
+    "UpdatedAt": "2026-11-21T07:02:51.626719824Z",
+    "DownloadedAt": "2026-11-21T09:55:11.055792304Z"
+  },
+  "officialManifest": {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "artifactType": "application/vnd.aquasec.trivy.config.v1+json",
+    "config": {
+      "mediaType": "application/vnd.oci.empty.v1+json",
+      "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "size": 2,
+      "data": "e30="
+    },
+    "layers": [
+      {
+        "mediaType": "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip",
+        "digest": "sha256:4e33a88ce4ccb0b982849070758ea692d0fed096ccc08e9091fa7e28b75076cf",
+        "size": 142567123,
+        "annotations": {
+          "org.opencontainers.image.title": "db.tar.gz"
+        }
+      }
+    ],
+    "annotations": {
+      "org.opencontainers.image.created": "2026-11-21T07:12:45Z"
+    }
+  },
+  "findings": [
+    {
+      "target": "Cargo.lock",
+      "package": "glib",
+      "version": "0.18.5",
+      "id": "GHSA-wrw7-89jp-8q8g",
+      "severity": "MEDIUM"
+    },
+    {
+      "target": "apps/api/package-lock.json",
+      "package": "effect",
+      "version": "3.21.0",
+      "id": "CVE-2026-121707",
+      "severity": "HIGH"
+    },
+    {
+      "target": "package-lock.json",
+      "package": "effect",
+      "version": "3.21.0",
+      "id": "CVE-2026-121707",
+      "severity": "HIGH"
+    }
+  ],
+  "newRuntimeFindings": 0,
+  "Borsh010ParentsRemaining": 0,
+  "scannerControlsChanged": false,
+  "sourceScopeSha256": "013c09d4981463ce39e2981926248abe1f913111f258f14373778b84c3d9c54f",
+  "remainingOwnership": {
+    "glib": "separately qualified GTK migration to consolidate",
+    "effect": "root/API Prisma exact dependency; assigned independent correction worktree"
+  }
+}

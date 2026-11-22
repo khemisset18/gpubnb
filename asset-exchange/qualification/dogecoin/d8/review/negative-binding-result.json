@@ -1,0 +1,12 @@
+{
+  "finding": "D8_NEGATIVE_EVIDENCE_NOT_BOUND_TO_EXACT_REFUND_MUTATION",
+  "scope": "SOFTWARE_ONLY_MODEL_NO_CABI_KEYS_RPC",
+  "beforeCommit": "6add91f8f06286d31307af2d0d304ccd8e64522a",
+  "beforeAcceptedUnrelatedNegativeWithRecomputedSha256": true,
+  "nativeLibraryLoads": 0,
+  "fixtureKeysCreated": 0,
+  "nativeRpcCalls": 0,
+  "afterRejected": true,
+  "afterReason": "native rejected bytes differ from exact broker-refund mutation",
+  "fix": "Bind each negative raw transaction to mutated_output of its corresponding broker refund, independently of a recalculated checksum."
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "sourceUrl": "https://play.google.com/store/apps/details?id=com.wallet.crypto.trustapp&hl=en&gl=FR",
+  "htmlSha256": "fd03928a3823f01bfc0a0cb42d270a4bc2faa9c34a89a57fb92430dc943cc480",
+  "structuredCurrentVersion": [
+    {
+      "callback": "ds:5",
+      "path": [
+        1,
+        2,
+        140,
+        0,
+        0,
+        0
+      ],
+      "version": "26.46.9"
+    }
+  ],
+  "notReviewVersion": true,
+  "installedAppTested": false
+}

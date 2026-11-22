@@ -1,0 +1,320 @@
+{
+  "schemaVersion": 1,
+  "assessmentKind": "INTERNAL_TECHNICAL_QUALIFICATION",
+  "finalizedAtUtc": "2026-11-18T18:49:47.809419+00:00",
+  "pr": 376,
+  "referenceHead": "3a482ed02eb1374520aaeb4540dbf1c36e362d8a",
+  "candidateCodeCommit": "624e9f7f0a6eb09f731e1a1db25bca306506a508",
+  "candidateCodeTree": "3c888f0e6f9118f97f449735d01ac16fede946f7",
+  "candidateSyntheticMerge": "a0e6202c1646d503d46ad1a05498fc5f2d84414a",
+  "syntheticAndCandidateTreesVerifiedEqualDirectly": true,
+  "newlyFixedFinding": "RPC_CONFIRMATION_ANCHOR_INCONSISTENT_WITH_OBSERVED_TIP",
+  "affectedSoftwareTests": {
+    "recovery": 33,
+    "d6": 45,
+    "policy": 14,
+    "signer": 12,
+    "total": 104,
+    "fail": 0,
+    "skip": 0
+  },
+  "newRegressionMethods": 3,
+  "regressionMethodsIncludedInRecoveryCount": true,
+  "privateNativeRunId": 44185056368,
+  "privateNativeExecution": "e9291dfcbeaa287291f530df8bb8f5c527161650",
+  "reviewedNativeHarness": "7d884845657368c28d8ec5c56f8a01d0a3dad814",
+  "privateNativeResult": "PASS_2_SELECTED_SCENARIOS",
+  "internalTechnicalDecision": "FAIL",
+  "decisionBasis": "mandatory strict zero-finding Trivy gate remains FAIL on the three retained reported dependencies, including a withdrawn GHSA not yet reflected in the newest official DB snapshot",
+  "independentAudit": "NON_REALISE_HORS_MISSION",
+  "independentAuditRequiredForPrivateTests": false,
+  "fullFinancialQualification": "BLOCKED",
+  "currentWorkflows": [
+    {
+      "id": 44184744499,
+      "name": "Rust compatible backport workspace qualification",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44184744594,
+      "name": "workspace-reliability",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44184744453,
+      "name": "Solana host recovery compatibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44184744468,
+      "name": "host-desktop",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44184744584,
+      "name": "Asset Exchange G5 Foundation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44184744472,
+      "name": "artifact-storage-s3-integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44184744507,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44184744520,
+      "name": "host-desktop-dev-installers",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44184744365,
+      "name": "host-windows-preflight",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "windowsPreflight": {
+    "id": 135040678132,
+    "name": "windows-installer",
+    "status": "completed",
+    "conclusion": "success",
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Validate language-independent installer ACLs",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run actions/setup-python@v6",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run actions/setup-node@v6",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run dtolnay/rust-toolchain@1.97.1",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run Swatinem/rust-cache@v2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Materialize Windows bundle icon",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Install locked desktop dependencies",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Apply reviewed deterministic source-map compatibility patch",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Desktop security regressions",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Audit actual Windows desktop dependencies at all severities",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Install agent and PyInstaller",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Test agent CLI",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build standalone agent",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build Windows Host tunnel sidecar",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify standalone agent",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Type-check and build frontend",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Test and lint native host",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build Windows installer with embedded agent and Host tunnel",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Verify installer and bundled sidecars",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Upload Windows preflight artifact",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Post Run Swatinem/rust-cache@v2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Post Run actions/setup-node@v6",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Post Run actions/setup-python@v6",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Post Run actions/checkout@v6",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "nativeWorkflowJobs": [
+    {
+      "id": 134399254842,
+      "name": "Workspace Agent soak (25 clean passes)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 134399255410,
+      "name": "Workspace API contract soak (10 clean passes)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 134399255810,
+      "name": "doge-recovery-consistency-private-manual / private-multinode",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 134399257056,
+      "name": "doge-d3-private-manual",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 134399257687,
+      "name": "doge-recovery-multinode-private-manual",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 134399258991,
+      "name": "doge-source-audit-manual",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 134399691795,
+      "name": "doge-recovery-consistency-private-manual / independent-vm",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 134399692339,
+      "name": "doge-recovery-consistency-private-manual / replacement-vm",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "npmDesktopJob": "PASS_0_FINDINGS_506_NATIVE_TESTS",
+  "strictScannerJob": "FAIL_2_MEDIUM_1_HIGH",
+  "freshUncachedOfficialTrivyDbScan": "FAIL_SAME_3_FINDINGS",
+  "picomatchAdvisoryWithdrawnAt": "2026-11-18T15:38:56Z",
+  "sourceAndLocksChangedForNpmSuccess": false,
+  "remainingResolutionCategories": {
+    "borsh": "OFFICIAL_ADVISORY_DATA_RECONCILIATION",
+    "glib": "STABLE_COMPATIBLE_OFFICIAL_MIGRATION_UNPUBLISHED",
+    "picomatch": "WITHDRAWN_GHSA_NOT_YET_REFLECTED_IN_CURRENT_OFFICIAL_TRIVY_DB",
+    "physicalRecoveryAndSigner": "HARDWARE_UNAVAILABLE",
+    "independentD9Audit": "EXTERNAL_HUMAN_CONTROL_OUTSIDE_MISSION",
+    "mergeAndFinancialActivation": "EXPLICIT_OWNER_DECISION"
+  },
+  "criteria": {
+    "D0": "PASS_LIMITED",
+    "D1": "PASS_LIMITED",
+    "D2": "BLOCKED",
+    "D3": "BLOCKED",
+    "D4": "BLOCKED",
+    "D5": "BLOCKED",
+    "D6": "BLOCKED",
+    "D7": "BLOCKED",
+    "D8": "BLOCKED",
+    "D9": "BLOCKED"
+  },
+  "unchangedHistoricalCriticalSources": 188,
+  "reviewedChangedCriticalSources": 3,
+  "originalPreservedManifestCount": 191,
+  "noRealFunds": true,
+  "noMainnet": true,
+  "noUserPrivateKeys": true,
+  "noFinancialDeployment": true,
+  "noMainOrDevMerge": true,
+  "automaticSettlement": false,
+  "activeExchangeDirections": 0,
+  "newProductFeatures": 0,
+  "scannerControlsWeakened": false,
+  "officialDatabaseModified": false,
+  "previousSuccessfulNativeSuitesRepeatedUnchanged": false
+}

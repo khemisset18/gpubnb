@@ -1,0 +1,67 @@
+{
+  "date": "2026-11-15",
+  "baseCommit": "3866ddd1229fec81e5abfbf6a268309669cf262d",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14",
+  "node": "v24.22.1",
+  "nativeStatus": "BLOCKED_AUTHENTICATION_NOT_EXECUTED",
+  "nativeGuardPriorityEvidence": "software simulation; no new native PASS",
+  "originalNativeFailure": {
+    "run": 43487873755,
+    "head": "496664163fb3242be3f56e5bee439c018c874330",
+    "artifact": 14067004885,
+    "downloadedZipSha256": "60d434157830d308f754dc47332badf1016c843c7a9791a9844b73f525beb59d",
+    "observedError": "different recovery refusal observed",
+    "actualRefusalJsonInArchive": false
+  },
+  "sourceSha256": {
+    "asset-exchange/recovery/dogecoin/cleanroom.py": "af96b684e833c64fc763f0157bf601668d87f2b9fd233ada03da4caa5e2fdbb2",
+    "asset-exchange/recovery/dogecoin/test_cleanroom.py": "88330bf11c996d795e47c539db93915fe6b5e141702be267591271fe9ab4459a",
+    "asset-exchange/recovery/dogecoin/test_rpc_consistency.py": "d14f47bc5884ef55951bf4d318c419fd49bbd0c55b735c51e22c2fc3ff078736",
+    "asset-exchange/recovery/dogecoin/recovery_core.py": "0b5ea29713c5878e6787e38d46951f41acc54f0bafaf7e2424d51e82a871bd37"
+  },
+  "tests": [
+    {
+      "suite": "recovery-baseline",
+      "pass": 28,
+      "fail": 0,
+      "skip": 0,
+      "logSha256": "e489315e28bb9112f73e82f54ad5341aeb9ee29a4c79d7638ac6170e568c8ba6"
+    },
+    {
+      "suite": "cleanroom-before",
+      "pass": 6,
+      "fail": 1,
+      "skip": 0,
+      "logSha256": "7f6998780974140a3ac0f8b4f6ea1ffb2b2d340fda7da2ab6ac1022505baaacd"
+    },
+    {
+      "suite": "recovery-after",
+      "pass": 30,
+      "fail": 0,
+      "skip": 0,
+      "logSha256": "5885c13b87a7fabc77d728b33bfce55499cf48c3222217e849155838b8956685"
+    },
+    {
+      "suite": "d6-after",
+      "pass": 45,
+      "fail": 0,
+      "skip": 0,
+      "logSha256": "e852af54a08105d0ad4ab6e71a06ac960c94d43fcaf3adb46b5a716be2c88d8c"
+    },
+    {
+      "suite": "wallet-after",
+      "pass": 12,
+      "fail": 0,
+      "skip": 0,
+      "logSha256": "203c96c9a72e475be1dbd4ee9675688a3c41ecaf89ceb4fcdd06218cf676bf43"
+    },
+    {
+      "suite": "watchers-after",
+      "pass": 24,
+      "fail": 0,
+      "skip": 0,
+      "logSha256": "b3583a9a5feded2685af0ce87a750372d446e36eb8fde95021a456a2feca680e"
+    }
+  ]
+}

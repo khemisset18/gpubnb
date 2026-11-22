@@ -1,0 +1,67 @@
+{
+  "SbfRuntime": "NOT_TESTED_BY_HOST_JOB",
+  "candidate": {
+    "anchorVersion": "1.2.2",
+    "borsh010ParentsRemaining": 0,
+    "financialGraphSha256": "6b616dcf73618ebd71e849ecdad3cb974e798ac1aa4a22bc9977b451ee3644e9",
+    "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "packages": 182
+  },
+  "commands": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gpu_escrow",
+        "--test",
+        "anchor_wire_compatibility",
+        "--",
+        "--nocapture"
+      ],
+      "logSha256": "498710362a0f5593599ffc234f4faa0c14de6737180f6b02793ec88d32b3f768",
+      "result": "PASS"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gpu_escrow",
+        "--",
+        "--nocapture"
+      ],
+      "logSha256": "000de6469ff35c56aaff80741d9269ea4847bcb25d6cb8ebc694a813ca2a44d3",
+      "result": "PASS"
+    }
+  ],
+  "executionCommit": "898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+  "financialDeployment": false,
+  "hostTestsPassed": 17,
+  "mode": "host",
+  "networkRpc": false,
+  "publicRecoveryCases": 1636,
+  "result": "PASS",
+  "runtimeLockSha256": "a49195e74e78d0932bf81427b0a27750d1c51937664b28a453822204856bce09",
+  "scannerExemptions": false,
+  "schemaVersion": 1,
+  "scope": "internal technical qualification",
+  "sourceFiles": {
+    "programs/gpu_escrow/Anchor.toml": "ba5899cd426d4aed9b577297f7f6b07e9b00ba85160f43c05601bd501d6b6713",
+    "programs/gpu_escrow/Cargo.toml": "64e6f5b0080dfcba80fd1b80b6bca07e43b87702397409677ce4d3d955c3f3c4",
+    "programs/gpu_escrow/src/lib.rs": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "programs/gpu_escrow/tests/anchor_wire_compatibility.rs": "17452ee04dbb6f1120a898681c112991580c2696beef9eaaf5fc52cbd828636b",
+    "programs/gpu_escrow/tests/borsh_zst_regression.rs": "9478e44e103aef887c21a24911f116a8bc016fdf147c20009e18eeadf71a38c3",
+    "programs/gpu_escrow/tests/secp256k1_host_compatibility.rs": "9c6ca1c93bd986b26e3e539db23c7068e771e093d050bc86170cf031cb711d45"
+  },
+  "toolchain": {
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+  },
+  "userKeys": false,
+  "wireRecords": 38,
+  "wireRecordsSha256": "a071dc6e64629ddf7155001a92acfb593761bacbcc1ab03a28a9b080a88e3700",
+  "workspaceLockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf"
+}

@@ -1,6 +1,74 @@
 # DOGE external-signing and pre-signed refund policy
 
-Regtest-only reusable policy code; financial activation remains blocked. This is a local library, not an HTTP Wallet Agent service or a hardware-wallet integration.
+Regtest-only policy and an explicitly paired external software-signer broker;
+financial activation remains blocked. There is no HTTP Wallet Agent service or
+qualified hardware-wallet driver. The existing recovery zipapp remains keyless
+and excludes the new signing transport.
+
+## Paired software-signer broker — 22 November 2026
+
+`external_signer.py` sends the existing, unchanged signing request to an
+independently pinned Python zipapp through `external_transport.py`. It requires
+separately retained pairing, terms and request digests. The paired refund public
+key must match the contract. Mainnet, unknown profiles, hardware self-certification,
+extra financial fields and changed package bytes are refused before signing.
+
+The transport uses a private copy, Python `-I -S`, an empty working directory,
+minimal environment and bounded parallel pipes: package 8 MiB, request 64 KiB,
+stdout 128 KiB, stderr 8 KiB, timeout 1–120 seconds. It never returns child stderr.
+The implementation requires POSIX; the current software evidence is Linux.
+This is process separation, not an OS/network sandbox. Normal exit/error/timeout
+cleanup kills the created process group; it does not guarantee containment of
+descendants creating another session, or cleanup if the broker itself receives
+SIGKILL in the middle of an exchange.
+
+A private owner-only journal binds each `(pairingDigest, requestId)` to its
+request digest. `IN_FLIGHT` is fsynced before dispatch. Interrupted or uncertain
+attempts never authorize an automatic second signing call. `COMPLETE` stores
+only the verified public response, original acceptance height and session/review
+binding before returning. Identical completed requests recover identical raw
+refunds, without another signature. An expired new request is refused; already
+signed refunds remain recoverable after the signing deadline.
+
+`external_cli.py` supplies `pair`, `review`, `sign` and `recover`. `sign` requires
+an existing D0-pinned private-Regtest RPC context and reuses the unchanged
+`recovery_core.Rpc`/`online_context` guards for both height observations (maximum
+16 RPC calls). Those observations control the signing deadline; a serialized
+funding transaction is still not evidence of an available/confirmed UTXO.
+The CLI never broadcasts. `recover` needs no adapter, signing key or RPC and
+writes the ordinary recovery bundle through the unchanged durable bundle writer.
+
+Pairing is a deliberate local operation. It pins code and a public signing role;
+it does not attest a device firmware, prove physical display or obtain user
+approval merely by echoing a digest. The external signer must independently
+validate and actually present the approved review fields. The included fixture
+signer is disposable qualification software, never a production signer.
+
+```bash
+python3 -I asset-exchange/wallet-agent/dogecoin/external_cli.py --help
+python3 -I asset-exchange/wallet-agent/dogecoin/external_cli.py pair --help
+python3 -I asset-exchange/wallet-agent/dogecoin/external_cli.py sign --help
+python3 -I asset-exchange/wallet-agent/dogecoin/external_cli.py recover --help
+```
+
+Supply an independently reviewed adapter SHA256, retained request receipts and
+the approved public refund key. No command accepts a private key or seed from
+Core/backend. Keep the adapter's private key management outside this component.
+Do not fund before obtaining and retaining the verified recovery-bundle receipt.
+
+New software tests cover actual signer subprocesses, malformed/oversized output,
+independent receipt mismatch, strict bool/float rejection, mutation, replay,
+deadlines, namespace refusal, I/O failures and three real SIGKILL checkpoints.
+The new private [D8 controller](../../qualification/dogecoin/d8/README.md) checks
+only three refund scripts and three exact post-signature mutations against the
+source-qualified native consensus library. It has 0 RPC/node/block/broadcast effects
+and proves no mempool/UTXO/confirmation or physical hardware result. Its actual
+run and artifacts must be checked before presenting native PASS.
+
+The complete D8 hardware criterion remains BLOCKED. The source review found no
+examined official firmware establishing the complete DOGE Regtest legacy
+P2SH/HTLC/CLTV display profile. In particular, a generic DOGE coin entry or a valid
+ECDSA signature does not prove the exact device screen, firmware or network.
 
 `refund_ladder.py` reuses the existing strict HTLC profile, legacy serializer, SIGHASH_ALL construction and DER checks. The recovery transaction reader is shared with `asset-exchange/recovery/dogecoin/transaction.py`. OpenSSL verifies public-key signatures; this component never creates a key or signs anything.
 

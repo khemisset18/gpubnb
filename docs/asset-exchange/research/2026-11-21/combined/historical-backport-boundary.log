@@ -1,0 +1,13 @@
+test_archive_symlink_is_refused_without_writing (test_prepare.PreparationBoundaryTests.test_archive_symlink_is_refused_without_writing) ... ok
+test_archive_traversal_is_refused_without_writing (test_prepare.PreparationBoundaryTests.test_archive_traversal_is_refused_without_writing) ... ok
+test_exact_prefix_regular_archive_is_extracted (test_prepare.PreparationBoundaryTests.test_exact_prefix_regular_archive_is_extracted) ... ok
+test_existing_work_directory_fails_before_network_or_process (test_prepare.PreparationBoundaryTests.test_existing_work_directory_fails_before_network_or_process) ... ok
+test_modified_preimage_refuses_patch_process (test_prepare.PreparationBoundaryTests.test_modified_preimage_refuses_patch_process) ... ok
+test_nonregistry_download_is_refused_before_network (test_prepare.PreparationBoundaryTests.test_nonregistry_download_is_refused_before_network) ... ok
+test_registry_glib_is_refused_before_regression_execution (test_prepare.PreparationBoundaryTests.test_registry_glib_is_refused_before_regression_execution) ... ok
+test_removed_rand_chain_is_refused_before_regression_execution (test_prepare.PreparationBoundaryTests.test_removed_rand_chain_is_refused_before_regression_execution) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.005s
+
+OK

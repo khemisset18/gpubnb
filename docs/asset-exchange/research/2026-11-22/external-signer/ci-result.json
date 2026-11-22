@@ -1,0 +1,498 @@
+{
+  "schemaVersion": 1,
+  "observedAtUtc": "2026-11-22",
+  "candidateCommit": "68ca4f72db340053d0208424ddba0235a57052d1",
+  "candidateTree": "afcf418adda6bcad73131598e9fe39116dac38ee",
+  "virtualMergeCommit": "abc05e271bf814bc7e1e95bea771a7b41b04c86b",
+  "virtualMergeTree": "afcf418adda6bcad73131598e9fe39116dac38ee",
+  "workflowCount": 14,
+  "jobsSuccess": 43,
+  "jobsSkipped": 5,
+  "runs": [
+    {
+      "id": 45045603023,
+      "name": "CI",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:48:22Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045603023",
+      "jobs": [
+        {
+          "id": 137279412484,
+          "name": "contract",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412673,
+          "name": "production-gates",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412682,
+          "name": "agent",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412706,
+          "name": "desktop-security",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412725,
+          "name": "security-static-analysis",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412752,
+          "name": "dependency-audit",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412755,
+          "name": "api",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045602845,
+      "name": "Asset Exchange G5 Foundation",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:46:17Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602845",
+      "jobs": [
+        {
+          "id": 137279412464,
+          "name": "Zero-dependency foundation safety tests",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045602869,
+      "name": "artifact-storage-s3-integration",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:46:25Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602869",
+      "jobs": [
+        {
+          "id": 137279411940,
+          "name": "minio-roundtrip",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045603021,
+      "name": "workspace-reliability",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:47:20Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045603021",
+      "jobs": [
+        {
+          "id": 137279413038,
+          "name": "Workspace API contract soak (10 clean passes)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279413318,
+          "name": "Workspace Agent soak (25 clean passes)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279414120,
+          "name": "doge-recovery-consistency-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 137279414473,
+          "name": "doge-source-audit-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 137279414793,
+          "name": "doge-recovery-multinode-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 137279414978,
+          "name": "doge-d3-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 137279451511,
+          "name": "doge-rbf-boundaries-private-manual",
+          "status": "completed",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "id": 45045602911,
+      "name": "api-mining-ci",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:47:40Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602911",
+      "jobs": [
+        {
+          "id": 137279412519,
+          "name": "Prisma, TypeScript and tests",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045603014,
+      "name": "deployment-readiness",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:48:26Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045603014",
+      "jobs": [
+        {
+          "id": 137279412647,
+          "name": "Runtime process topology",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412945,
+          "name": "Deployment configuration safety",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412985,
+          "name": "Netlify static site",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279413087,
+          "name": "API container",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045602892,
+      "name": "host-desktop",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:48:24Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602892",
+      "jobs": [
+        {
+          "id": 137279412583,
+          "name": "frontend typecheck and build",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412772,
+          "name": "rust tests and lint (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412794,
+          "name": "pinned miner provenance",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412802,
+          "name": "rust tests and lint (macos-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412899,
+          "name": "production security gate",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412903,
+          "name": "rust tests and lint (windows-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045602922,
+      "name": "Solana host recovery compatibility",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:49:08Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602922",
+      "jobs": [
+        {
+          "id": 137279412289,
+          "name": "public-host-recovery (macos-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412442,
+          "name": "public-host-recovery (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412446,
+          "name": "public-host-recovery (windows-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045602844,
+      "name": "Rust compatible backport workspace qualification",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:50:03Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602844",
+      "jobs": [
+        {
+          "id": 137279412005,
+          "name": "actual-workspace",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045602908,
+      "name": "Anchor SDK private compatibility",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:50:08Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602908",
+      "jobs": [
+        {
+          "id": 137279412105,
+          "name": "private-sbf-baseline-and-candidate",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412336,
+          "name": "host-wire-and-recovery (windows-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412432,
+          "name": "host-wire-and-recovery (ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412435,
+          "name": "host-wire-and-recovery (macos-latest)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045603032,
+      "name": "host-desktop-dev-installers",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:51:15Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045603032",
+      "jobs": [
+        {
+          "id": 137279412636,
+          "name": "Public release policy",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412838,
+          "name": "Windows x64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412905,
+          "name": "Linux x64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279412958,
+          "name": "macOS arm64",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045602896,
+      "name": "host-windows-preflight",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:28Z",
+      "updatedAt": "2026-11-22T16:53:49Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045602896",
+      "jobs": [
+        {
+          "id": 137279412443,
+          "name": "windows-installer",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045596919,
+      "name": "CI",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:25Z",
+      "updatedAt": "2026-11-22T16:46:55Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045596919",
+      "jobs": [
+        {
+          "id": 137279394544,
+          "name": "agent",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279394707,
+          "name": "dependency-audit",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279394728,
+          "name": "production-gates",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279394744,
+          "name": "api",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279394789,
+          "name": "contract",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279394829,
+          "name": "security-static-analysis",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 137279394847,
+          "name": "desktop-security",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 45045597033,
+      "name": "DOGE external signer private qualification",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "68ca4f72db340053d0208424ddba0235a57052d1",
+      "runAttempt": 1,
+      "createdAt": "2026-11-22T16:45:25Z",
+      "updatedAt": "2026-11-22T16:45:49Z",
+      "url": "https://github.com/khemisset18/gpubnb/actions/runs/45045597033",
+      "jobs": [
+        {
+          "id": 137279395249,
+          "name": "native-consensus-input-only",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "scope": "run metadata and complete job conclusions; step logs remain at the linked GitHub executions"
+}

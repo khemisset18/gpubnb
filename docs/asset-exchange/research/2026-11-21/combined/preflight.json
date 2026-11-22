@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T21:35:06.831998+00:00",
+  "result": "INTEGRATED_SOURCE_PREFLIGHT_PASS",
+  "qualificationKind": "internal candidate; complete integrated GitHub CI still required",
+  "externalAudit": "NOT_PERFORMED",
+  "inputs": {
+    "publishedDogeBase": "4d31a8b7f1b113467368cfba3048f779ef55cf55",
+    "publishedGtk": "c7f32c1a2922c217e02d1cb4d91f005af89acdf1",
+    "publishedAnchor": "39156eee6a9c85248d90591fda8d2a52a8601d4f",
+    "effectLocalCommit": "27e3ef2c561f60a951ff3de8fb59d4fcfeeb15db"
+  },
+  "financialProfile": {
+    "financialGraphSha256": "6b616dcf73618ebd71e849ecdad3cb974e798ac1aa4a22bc9977b451ee3644e9",
+    "packages": 182,
+    "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "anchorVersion": "1.2.2",
+    "borsh010ParentsRemaining": 0,
+    "profile": "qualified-anchor-sdk-1.2.2",
+    "integrityModuleSha256": "1f14c1631d7e9c7ca855a110e46dfa4ff7a038000d48795c08ded7063b6f5b9a",
+    "sourcePinsSha256": "f3190633aa0099c477b77d4413df4615c4161b95f7c9c18ba8aaefadcdf17be7",
+    "unchangedAgainstReviewedBaseline": true
+  },
+  "activeCargoLockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf",
+  "activeMetadataSha256": "3faf3f37c19877f7aed3ce185d063371609088086a6ac70664e694895f1f82a5",
+  "originalElevenDogeDocumentsPreserved": true,
+  "newProfileRefusalTestsPassed": 6,
+  "historicalBackportBoundaryTestsPassed": 8,
+  "desktopSelectedBuildGraphIdenticalOnAllThreeOs": true,
+  "officialGtkGitPinsSelected": 15,
+  "glibVersion": "0.22.11",
+  "gtkVersion": "0.19.0",
+  "scanner": {
+    "name": "Trivy0.76.2",
+    "command": "fs --scanners vuln --include-dev-deps --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --ignore-unfixed=false --exit-code 1 --format json .",
+    "exitCode": 0,
+    "findings": 0,
+    "db": {
+      "Version": 2,
+      "NextUpdate": "2026-11-22T07:02:51.626719593Z",
+      "UpdatedAt": "2026-11-21T07:02:51.626719824Z",
+      "DownloadedAt": "2026-11-21T09:55:11.055792304Z"
+    },
+    "controlsChanged": false
+  },
+  "reusedComponentExecutions": {
+    "gtkThreeOsInstallers": "https://github.com/khemisset18/gpubnb/actions/runs/44651472969",
+    "gtkSourceAndReleaseIterator2080": "https://github.com/khemisset18/gpubnb/actions/runs/44651884472",
+    "nativeGtkGuiAndIpc": "https://github.com/khemisset18/gpubnb/actions/runs/44891701749"
+  },
+  "proofFiles": {
+    "docs/asset-exchange/research/2026-11-21/combined/active-gtk-source-identities.json": "6cfba3a3dfaf3dc971d438ea4539a014d90bf9fe8841b1083b952d8efb8422fe",
+    "docs/asset-exchange/research/2026-11-21/combined/desktop-build-graph-equivalence.json": "4f305ca79d08a1a1c58040c1b78234d80e23763364b762c6035d04fcd87ecb79",
+    "docs/asset-exchange/research/2026-11-21/combined/financial-profile-boundary.log": "dc37b9ed0ed654444668b4c7c3978fb6d84eaffc789aeda737d4ce110b55b443",
+    "docs/asset-exchange/research/2026-11-21/combined/historical-backport-boundary.log": "2394c28f8f82ef899be02f9d2df695f81dd21a42c43e3877fc2556ba4b98d7d0",
+    "docs/asset-exchange/research/2026-11-21/combined/strict-trivy-results.json": "b183dbc172d2e4b2a74c4cebf7f8dcd779badbeb084fa2b9b0de0097d30b8bb7"
+  },
+  "limitations": [
+    "Full integrated candidate GitHub Actions has not yet run.",
+    "No funds, Mainnet, user keys, financial deployment, or merge was used.",
+    "External independent audit remains NOT_PERFORMED; hardware criteria retain their individual qualification states."
+  ]
+}

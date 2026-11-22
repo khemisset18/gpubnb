@@ -1,5 +1,8 @@
 # DOGE D2–D9 qualification roadmap
 
+> Dernier bilan : [candidat interne du 21 novembre](DOGE_INTERNAL_CANDIDATE_2026-11-21.md).
+> Les tableaux normatifs restent la grille ; les états datés ci-dessous sont historiques.
+
 > État courant au 12 novembre : voir [le dossier de revue](DOGE_REVIEW_CANDIDATE_2026-11-12.md).
 > Les trois nouveaux incréments frais, VM distinctes et AuxPoW sont exécutés.
 > D0/D1 conservent leur PASS limité ; D2–D9 restent BLOCKED.

@@ -146,15 +146,19 @@ def online_context(rpc):
     return chain,network
 
 
-def active_confirmation(rpc,transaction):
+def active_confirmation(rpc,transaction,tip_height):
     confirmations=transaction.get('confirmations',0)
     require(type(confirmations) is int,'invalid confirmation observation')
     if confirmations<=0:return False
     block=transaction.get('blockhash')
     require(type(block) is str and re.fullmatch('[0-9a-f]{64}',block),'confirmed transaction missing block')
     header=rpc('getblockheader',block)
-    require(type(header.get('height')) is int and header.get('confirmations',0)>0,'inactive confirmation anchor')
-    require(rpc('getblockhash',header['height'])==block,'confirmation is outside active chain')
+    height=header.get('height');depth=header.get('confirmations',0)
+    require(type(height) is int and type(depth) is int and depth>0,'inactive confirmation anchor')
+    require(0<=height<=tip_height,'confirmation anchor outside observed chain height')
+    # Both RPC declarations must describe the same observed chain snapshot.
+    require(confirmations==depth==tip_height-height+1,'incoherent confirmation depth observation')
+    require(rpc('getblockhash',height)==block,'confirmation is outside active chain')
     return True
 
 
@@ -165,25 +169,31 @@ def observe(bundle,rpc,previous=None):
     fund_tx=rpc('getrawtransaction',funding['txid'],1,missing_ok=True)
     if fund_tx is not None:
         require(fund_tx.get('hex')==funding['transactionHex'],'RPC funding bytes mismatch')
-        funding_confirmed=active_confirmation(rpc,fund_tx)
+        funding_confirmed=active_confirmation(rpc,fund_tx,chain['blocks'])
     else:funding_confirmed=False
     for entry in bundle['refunds']:
         value=rpc('getrawtransaction',entry['txid'],1,missing_ok=True)
         if value is None:continue
         require(value.get('hex')==entry['transactionHex'],'RPC refund bytes mismatch')
-        confirmed=active_confirmation(rpc,value)
+        confirmed=active_confirmation(rpc,value,chain['blocks'])
         pending=None if confirmed else rpc('getmempoolentry',entry['txid'],missing_ok=True)
         if confirmed or pending is not None:known.append((entry,confirmed,value))
-    require(sum(bool(x[1]) for x in known)<=1,'conflicting active refund observations')
+    # Every ladder entry spends the same outpoint. Multiple pending/confirmed
+    # entries are inconsistent too; never choose the first contradictory RPC.
+    require(len(known)<=1,'conflicting active refund observations')
     utxo=rpc('gettxout',funding['txid'],funding['vout'],'true')
+    require(not known or utxo is None,'refund and unspent funding observations conflict')
     if utxo is not None:
         live_amount=Decimal(str(utxo.get('value')))*100_000_000
         require(live_amount==amount(funding['valueKoinu']) and utxo.get('scriptPubKey',{}).get('hex')==bundle['contract']['outputHex'],
                 'live funding UTXO terms mismatch')
     current=rpc('getblockchaininfo')
     require(current.get('bestblockhash')==chain['bestblockhash'] and current.get('blocks')==chain['blocks'],'chain changed during observation; retry required')
+    require(type(current.get('headers')) is int and current['headers']>=current['blocks'],
+            'incoherent chain/header observation')
     confirmed=next((x for x in known if x[1]),None)
     pending=next((x for x in known if not x[1]),None)
+    require(not confirmed or funding_confirmed,'confirmed refund without confirmed funding; inconsistent RPC observations')
     if confirmed:state='CONFIRMED';entry=confirmed[0]
     elif pending:state='PENDING';entry=pending[0]
     elif utxo is not None and funding_confirmed:state='UTXO_AVAILABLE';entry=None
@@ -194,7 +204,8 @@ def observe(bundle,rpc,previous=None):
     return {'schemaVersion':1,'state':state,'transition':transition,'tipHeight':chain['blocks'],'tipHash':chain['bestblockhash'],
             'fundingConfirmed':funding_confirmed,'refundTxid':entry['txid'] if entry else None,
             'confirmedBlock':confirmed[2].get('blockhash') if confirmed else None,'automaticSettlement':False,
-            'nodeSynchronized':chain['headers']==chain['blocks'],'qualificationStatus':'BLOCKED','observationOnly':True}
+            'nodeSynchronized':chain['headers']==chain['blocks'] and current['headers']==current['blocks'],
+            'qualificationStatus':'BLOCKED','observationOnly':True}
 
 
 def fee_floor_koinu(rate):
@@ -208,7 +219,17 @@ def rebroadcast(bundle,rpc,previous=None):
     if status['state']=='CONFIRMED':return {**status,'action':'ALREADY_CONFIRMED'}
     require(status['nodeSynchronized'],'node has an unresolved header lead; no broadcast')
     require(status['state'] in ('UTXO_AVAILABLE','PENDING'),'funding unavailable or ambiguous; no broadcast')
-    chain=rpc('getblockchaininfo');info=rpc('getmempoolinfo');network=rpc('getnetworkinfo')
+    require(status['fundingConfirmed'],'funding is not confirmed on active chain; no broadcast')
+    chain=rpc('getblockchaininfo')
+    # Funding and spendability were checked against observe's snapshot. A new
+    # tip (including a same-height fork) requires a fresh observation instead
+    # of reusing that authorization with a different finality cutoff.
+    require(type(chain.get('blocks')) is int and chain['blocks']==status['tipHeight']
+            and chain.get('bestblockhash')==status['tipHash'],
+            'chain changed before rebroadcast; retry required')
+    require(type(chain.get('headers')) is int and chain['headers']==chain['blocks'],
+            'node has an unresolved header lead; no broadcast')
+    info=rpc('getmempoolinfo');network=rpc('getnetworkinfo')
     rate=max(fee_floor_koinu(info['mempoolminfee']),fee_floor_koinu(network['relayfee']))
     eligible=[]
     for entry in bundle['refunds']:

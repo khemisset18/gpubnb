@@ -1,0 +1,138 @@
+{
+  "accountSnapshotsAndIndependentRent": "PASS",
+  "binaries": {
+    "baseline": {
+      "bytes": 242136,
+      "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+      "lockSha256": "af9bb9a1fef24b84a616f1c8b5017a99f4cb3aea57134fd8fdc393e336b7611d",
+      "sha256": "3a251cfe910c752663b4cab0d78534f5038c28d52d66cb9b31064148af2eeef3"
+    },
+    "candidate": {
+      "bytes": 216408,
+      "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+      "lockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf",
+      "sha256": "123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125"
+    }
+  },
+  "candidate": {
+    "anchorVersion": "1.2.2",
+    "borsh010ParentsRemaining": 0,
+    "financialGraphSha256": "6b616dcf73618ebd71e849ecdad3cb974e798ac1aa4a22bc9977b451ee3644e9",
+    "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "packages": 182
+  },
+  "commands": [
+    {
+      "command": [
+        "/home/runner/work/_temp/anchor-sbf-evidence/tools/agave/solana-release/bin/cargo-build-sbf",
+        "--manifest-path",
+        "programs/gpu_escrow/Cargo.toml",
+        "--skip-tools-install",
+        "--tools-version",
+        "v1.57",
+        "--arch",
+        "v0",
+        "--jobs",
+        "2",
+        "--sbf-out-dir",
+        "/home/runner/work/_temp/anchor-sbf-evidence/baseline-sbf",
+        "--",
+        "--locked"
+      ],
+      "logSha256": "d166bcee2dfd69f85a13760ef2499d37ac2c535eb70159377bfafc3cc859a491",
+      "result": "PASS"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "/home/runner/work/gpubnb/gpubnb/prototypes/anchor-sdk-migration/runtime/Cargo.toml",
+        "--",
+        "--nocapture"
+      ],
+      "logSha256": "6d0d46678af40ba24b954216555a6386d3e2f61c6db485d254cedd9a04f2affc",
+      "result": "PASS"
+    },
+    {
+      "command": [
+        "/home/runner/work/_temp/anchor-sbf-evidence/tools/agave/solana-release/bin/cargo-build-sbf",
+        "--manifest-path",
+        "programs/gpu_escrow/Cargo.toml",
+        "--skip-tools-install",
+        "--tools-version",
+        "v1.57",
+        "--arch",
+        "v0",
+        "--jobs",
+        "2",
+        "--sbf-out-dir",
+        "/home/runner/work/_temp/anchor-sbf-evidence/candidate-sbf",
+        "--",
+        "--locked"
+      ],
+      "logSha256": "b2dafbe7e227187adcecb9bf47ea457b97f506b4e0031ac4be2952f0096fb784",
+      "result": "PASS"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "/home/runner/work/gpubnb/gpubnb/prototypes/anchor-sdk-migration/runtime/Cargo.toml",
+        "--",
+        "--nocapture"
+      ],
+      "logSha256": "15c347535c6bae8e388e723ccee97bc1487bbb5a86ba710b3fe4b0c5f6e2751f",
+      "result": "PASS"
+    }
+  ],
+  "executionCommit": "898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+  "financialDeployment": false,
+  "instructionCoverage": 11,
+  "mode": "sbf",
+  "networkRpc": false,
+  "privateSbfBaselineTestsPassed": 6,
+  "privateSbfCandidateTestsPassed": 6,
+  "realNetworkConsensus": "NOT_TESTED",
+  "realSystemProgramCpi": "PASS",
+  "result": "PASS",
+  "runtime": "LiteSVM0.18.2 with pinned mainnet-feature snapshot and standard builtins; optional precompiles NOT_QUALIFIED",
+  "runtimeLockSha256": "a49195e74e78d0932bf81427b0a27750d1c51937664b28a453822204856bce09",
+  "scannerExemptions": false,
+  "schemaVersion": 1,
+  "scope": "internal technical qualification",
+  "signatureAndBlockhashRefusals": "PASS",
+  "sourceFiles": {
+    "programs/gpu_escrow/Anchor.toml": "ba5899cd426d4aed9b577297f7f6b07e9b00ba85160f43c05601bd501d6b6713",
+    "programs/gpu_escrow/Cargo.toml": "64e6f5b0080dfcba80fd1b80b6bca07e43b87702397409677ce4d3d955c3f3c4",
+    "programs/gpu_escrow/src/lib.rs": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "programs/gpu_escrow/tests/anchor_wire_compatibility.rs": "17452ee04dbb6f1120a898681c112991580c2696beef9eaaf5fc52cbd828636b",
+    "programs/gpu_escrow/tests/borsh_zst_regression.rs": "9478e44e103aef887c21a24911f116a8bc016fdf147c20009e18eeadf71a38c3",
+    "programs/gpu_escrow/tests/secp256k1_host_compatibility.rs": "9c6ca1c93bd986b26e3e539db23c7068e771e093d050bc86170cf031cb711d45"
+  },
+  "toolchain": {
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+  },
+  "tools": [
+    {
+      "bytes": 82900972,
+      "name": "agave",
+      "observedSha256": "5b0f0fc7e4eedace05f6455de00aa1f2f3d1642068f1e8d50760ba49112c3941",
+      "sha256": "5b0f0fc7e4eedace05f6455de00aa1f2f3d1642068f1e8d50760ba49112c3941",
+      "url": "https://github.com/anza-xyz/agave/releases/download/v4.4.1/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+    },
+    {
+      "bytes": 531380716,
+      "name": "platform-tools",
+      "observedSha256": "b0f7af104adf726fff2a6a09ea2eb2f2d2965c92295f4d7388c08d140e0c2b00",
+      "sha256": "b0f7af104adf726fff2a6a09ea2eb2f2d2965c92295f4d7388c08d140e0c2b00",
+      "url": "https://github.com/anza-xyz/platform-tools/releases/download/v1.57/platform-tools-linux-x86_64.tar.bz2"
+    }
+  ],
+  "userKeys": false,
+  "workspaceLockSha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf"
+}

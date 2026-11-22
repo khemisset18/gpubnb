@@ -46,6 +46,8 @@ exec "$@"
 '''
 PACKAGE_DIGESTS={}
 EXPECTED_REFUSALS=frozenset({
+    'node has an unresolved header lead; no broadcast',
+    'funding is not confirmed on active chain; no broadcast',
     'funding unavailable or ambiguous; no broadcast',
     'no pre-signed refund covers current fee floor; signatory or new authorization required',
     'pending refund no longer covers fee floor; automatic non-RBF replacement forbidden',
@@ -135,8 +137,13 @@ def run_recovery_hook(context):
             require(child.returncode==1 and not stdout.strip(),'expected recovery refusal did not occur')
             refusal=json.loads(stderr)
             require(set(refusal)=={'state','error','automaticSettlement'} and refusal['state']=='UNKNOWN'
-                    and refusal['error']==expected_error and refusal['automaticSettlement'] is False,
-                    'different recovery refusal observed')
+                    and refusal['error'] in EXPECTED_REFUSALS and refusal['automaticSettlement'] is False,
+                    'invalid recovery refusal observed')
+            # Keep only the closed, non-secret refusal schema, including when
+            # the native guard differs from the test's exact expectation.
+            (out/('cleanroom-refusal-'+str(port)+suffix+'-'+context['mode']+'.json')).write_text(
+                json.dumps(refusal,sort_keys=True)+'\n')
+            require(refusal['error']==expected_error,'different recovery refusal observed')
             observation={'state':'UNKNOWN','transition':'EXPECTED_REFUSAL','error':expected_error}
         else:
             if child.returncode:raise ValueError('independent recovery failed: '+stderr.strip())
@@ -148,6 +155,7 @@ def run_recovery_hook(context):
     require((isolation['networkNamespace']!=os.readlink('/proc/self/ns/net'))==disconnected,
             'recovery network incident isolation mismatch')
     return {'txid':observation.get('refundTxid'),'state':observation['state'],
+            'fundingConfirmed':observation.get('fundingConfirmed'),
             'transition':observation['transition'],'rpcCalls':calls,'isolationProof':isolation,
             'action':observation.get('action'),'selectedFeeKoinu':observation.get('selectedFeeKoinu'),
             'expectedRefusal':observation.get('error'),

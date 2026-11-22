@@ -1,0 +1,11 @@
+{
+  "finding": "NATIVE_EVIDENCE_CONTRACT_MISSING_REFUND_IDENTITY",
+  "scope": "software-only fabricated report, no node/RPC/keys/signatures",
+  "beforeSourceCommit": "fa55bca9b2dc7e0b837533abe96f9390e3f8d9ac",
+  "beforeExit": 0,
+  "afterExit": 1,
+  "beforeAcceptedMissingBothRefundTxidFields": true,
+  "afterRejected": true,
+  "rootCause": "Strict equality allowed undefined === undefined when both asserted identities were absent.",
+  "fix": "Require canonical 64-lowercase-hex identities/digests before comparing observed refund TXID."
+}

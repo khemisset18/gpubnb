@@ -1,0 +1,25 @@
+{
+  "url": "https://crates.io/api/v1/crates/tauri/2.12.7/dependencies",
+  "sha256": "e12ff39b88b46453349c89f67f12f5611bf4e2d6656cc1ba31c8dd3d465ae9e9",
+  "checkedAtUtc": "2026-11-18T18:31:24.337925+00:00",
+  "dependencies": [
+    {
+      "crate_id": "gtk",
+      "req": "^0.18",
+      "kind": "normal",
+      "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+    },
+    {
+      "crate_id": "tauri-runtime-wry",
+      "req": "~2.12.5",
+      "kind": "normal",
+      "target": null
+    },
+    {
+      "crate_id": "webkit2gtk",
+      "req": "^2",
+      "kind": "normal",
+      "target": "cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))"
+    }
+  ]
+}

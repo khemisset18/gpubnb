@@ -1,0 +1,7 @@
+{
+  "format": "captured-test-output-utf8-v1",
+  "originalFile": "schema-after.log",
+  "originalBytes": 306,
+  "originalSha256": "382e642a56328b7ec9ed866943089d05aa095a0d2db965eb240b68fa6e1ef6fa",
+  "text": "test_strict_schema_version_cannot_be_normalized_for_dispatch_or_cache_recovery (test_external_signer.ExternalSignerTests.test_strict_schema_version_cannot_be_normalized_for_dispatch_or_cache_recovery) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.168s\n\nOK\n\n"
+}

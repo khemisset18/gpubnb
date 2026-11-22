@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-21T21:36:37.055816+00:00",
+  "scope": "internal API retry regression; no deployment or blockchain operations",
+  "baselineCommit": "4d31a8b7f1b113467368cfba3048f779ef55cf55",
+  "rootCause": "Three raw Serializable transactions bypassed the existing bounded transient-conflict retry helper. Allowlist positions were stale; they are removed, not expanded.",
+  "callbackReview": "Callbacks use the transaction database client only. Their logic, isolation and options are preserved; Redis authentication/challenge consumption stays outside retries.",
+  "before": {
+    "newTestsPassed": 1,
+    "newTestsFailed": 2,
+    "errorsObserved": [
+      "P2034",
+      "P2028"
+    ],
+    "serializableGuard": "FAIL: 3 raw calls"
+  },
+  "after": {
+    "targetedTestsPassed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "serializableGuard": "PASS"
+  },
+  "localEnvironment": {
+    "node": "v24.22.3",
+    "database": "synthetic fault-injection client; real PostgreSQL/Redis integration remains required in CI"
+  },
+  "sources": {
+    "apps/api/src/accelerator-heartbeat-service.ts": {
+      "afterSha256": "c25da0adadc4b9965c58f83556374e087bc96edfd3f6edff65dff381c0f4c500",
+      "beforeSha256": "e23d7e11919aad4c91800f16dd74c545544ab77aba72318692a4ffe4c52ca502"
+    },
+    "apps/api/src/server.ts": {
+      "afterSha256": "c3ad55f5be65ab1c4cb5b238dfc74ec75b5a2409db742fc213a8f348358f7b02",
+      "beforeSha256": "ca272941283af52bd449413e04d39ed557d3897547322ff4160a6e66452132c8"
+    },
+    "apps/api/scripts/serializable-guard-allowlist.json": {
+      "afterSha256": "9a5896fe176e53bf615f135e4758719769dcc50520d526c4b0d62f76406b25f4",
+      "beforeSha256": "8eb70ec6f0e3807789102180160d76db8b0ce651ae931659d8e9fa4ea4ee23cf"
+    },
+    "apps/api/test/accelerator-heartbeat-retry.test.ts": {
+      "afterSha256": "02aa53cf88a2ae7ca0a2a616fbfd2cbaef91c17d493e1b6010598a4b81ebfad9"
+    }
+  }
+}

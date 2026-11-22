@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "runId": 43487873755,
+  "executionCommit": "496664163fb3242be3f56e5bee439c018c874330",
+  "harnessCommit": "0f03e1230b4c02aeef02828b8bef60412e41306f",
+  "artifactId": 14067004885,
+  "artifactZipSha256": "60d434157830d308f754dc47332badf1016c843c7a9791a9844b73f525beb59d",
+  "nativeStatus": "FAIL",
+  "error": "ValueError: different recovery refusal observed",
+  "completedTargetCases": 0,
+  "generatedBlocks": 1,
+  "harnessRpcCallsRecorded": 58,
+  "standaloneObservationsRecorded": [
+    {
+      "state": "PENDING",
+      "fundingConfirmed": true
+    },
+    {
+      "state": "PENDING",
+      "fundingConfirmed": false
+    }
+  ],
+  "seedInitialBlockDownload": {
+    "a": true,
+    "b": true
+  },
+  "fundingBlockExitedInitialDownload": true,
+  "nativeRollback": {
+    "blocks": 1355,
+    "headers": 1356,
+    "parentAndRefundPending": true
+  },
+  "actualRefusalMessageRetained": false,
+  "causeFromSourceAndRpcReview": "Existing nodeSynchronized/header-lead guard executes before the new fundingConfirmed guard. invalidateblock retains headers1356 with active blocks1355; test expected a later refusal and its exact cleanroom check failed. No native refusal JSON was retained in this failed artifact.",
+  "correction": "Keep recovery_core unchanged; require exact native blocks1355/headers1356 and expect the existing header-lead refusal. The new funding guard is independently exercised in software with matching header/chain heights.",
+  "newFundingGuardIsolatedNatively": false,
+  "keysCreated": 0,
+  "transactionsSigned": 0,
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false
+}

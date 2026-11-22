@@ -1,0 +1,4 @@
+gpu.k.p2p-asset-exchange-source-v1.tar.gz: OK
+gpu.k.p2p-asset-exchange-source-v1.spdx.json: OK
+Asset Exchange source audit bundle verified: files=721 source=17bb3e2e7774d97538305759e706de6f6a8da0d1 tree=4fb75f3aab95895b8d841e240932cad083687fc6 archive_sha256=0cc2947df3c311329725c3d78e42be0bb30709965c63cea0309a082fa4246ded
+Asset Exchange source audit bundle hashes, scope, SBOM, and source identity verified.

@@ -1,0 +1,433 @@
+[
+  {
+    "id": 14726223194,
+    "name": "anchor-private-sbf-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "4dedfc17bb5f41a3f1da9a9f2b55d7db92139cf9c0d57477ebc3bbaec3a8e600",
+    "bytes": 137393,
+    "run": 44952572222,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "baseline-sbf-runtime.log",
+        "bytes": 52477,
+        "sha256": "6d0d46678af40ba24b954216555a6386d3e2f61c6db485d254cedd9a04f2affc"
+      },
+      {
+        "path": "baseline-sbf/gpu_escrow.so",
+        "bytes": 242136,
+        "sha256": "3a251cfe910c752663b4cab0d78534f5038c28d52d66cb9b31064148af2eeef3"
+      },
+      {
+        "path": "candidate-sbf/gpu_escrow.so",
+        "bytes": 216408,
+        "sha256": "123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125"
+      },
+      {
+        "path": "baseline-sbf-build.log",
+        "bytes": 26189,
+        "sha256": "d166bcee2dfd69f85a13760ef2499d37ac2c535eb70159377bfafc3cc859a491"
+      },
+      {
+        "path": "candidate-sbf-build.log",
+        "bytes": 20628,
+        "sha256": "b2dafbe7e227187adcecb9bf47ea457b97f506b4e0031ac4be2952f0096fb784"
+      },
+      {
+        "path": "candidate-sbf-runtime.log",
+        "bytes": 21485,
+        "sha256": "15c347535c6bae8e388e723ccee97bc1487bbb5a86ba710b3fe4b0c5f6e2751f"
+      },
+      {
+        "path": "report.json",
+        "bytes": 5330,
+        "sha256": "3c7453c55f1ea9e2bd31fed494ce0d1966944fe85c179b0142281ec7d54767b2"
+      }
+    ]
+  },
+  {
+    "id": 14726565428,
+    "name": "anchor-host-macOS-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "59aa9c00409fb0c52490b243b92f6ed212f6227932c219ac286b0124208d5338",
+    "bytes": 11008,
+    "run": 44952572222,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "candidate-host.log",
+        "bytes": 32405,
+        "sha256": "3c7eda7391f22a4bb94044f5f4eaeacc83ef6108a415d6b33f29291aec51026f"
+      },
+      {
+        "path": "baseline-wire.log",
+        "bytes": 41848,
+        "sha256": "3f59714fed2ca2f5860bf455b183a19427a0a8620f1f3068117e8e37c6ee2995"
+      },
+      {
+        "path": "report.json",
+        "bytes": 2457,
+        "sha256": "d1abcb8e45ed8a947dafb4bc52bd277e6408aa3baee4404918f8119376c53a64"
+      }
+    ]
+  },
+  {
+    "id": 14726162637,
+    "name": "anchor-host-Linux-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "3b5a45d519ac015c0badc01b0239d18374e8c234d45671bb7c6e531921443ac2",
+    "bytes": 11072,
+    "run": 44952572222,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "baseline-wire.log",
+        "bytes": 41959,
+        "sha256": "498710362a0f5593599ffc234f4faa0c14de6737180f6b02793ec88d32b3f768"
+      },
+      {
+        "path": "candidate-host.log",
+        "bytes": 32456,
+        "sha256": "000de6469ff35c56aaff80741d9269ea4847bcb25d6cb8ebc694a813ca2a44d3"
+      },
+      {
+        "path": "report.json",
+        "bytes": 2457,
+        "sha256": "348fa88fc5de9f04ced767e87a85f1381c697efe910f1fca1c1e4e049d16a19b"
+      }
+    ]
+  },
+  {
+    "id": 14725938930,
+    "name": "anchor-host-Windows-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "6aa59f81b5197a1b3d8b5efbe51f53931c4e8429fa086c90c77cadcdc12242e0",
+    "bytes": 11094,
+    "run": 44952572222,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "baseline-wire.log",
+        "bytes": 42374,
+        "sha256": "2025be7e2d451bf741a1cdb6103ba7bef9f8fc9a1ebaa6bb30bee114f4627e54"
+      },
+      {
+        "path": "candidate-host.log",
+        "bytes": 32849,
+        "sha256": "bd965a4fa246c6d50693dfa172a02b58b6db6e393c2934ecfe88add9a2e328ba"
+      },
+      {
+        "path": "report.json",
+        "bytes": 2524,
+        "sha256": "c4fcc1ca2da78ba1aaf41bfd22bb921a9620483ee363057f83f53eb1c8b4dc42"
+      }
+    ]
+  },
+  {
+    "id": 14726511216,
+    "name": "gpubnb-host-Windows-X64-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "1e52f16ffb7a67dde3d05ef959d72a3848456545511f972d0f9096f31334cf47",
+    "bytes": 1544817,
+    "run": 44952572210,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "dist-installers/nsis/GPUbnb Host_0.1.0_x64-setup.exe",
+        "bytes": 1276376,
+        "sha256": "e39d13a92cf5b7485aaae76e3f3a9865929251d17cfbf562217bb05e2a6c68f5"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-DIRECTORY.txt",
+        "bytes": 22,
+        "sha256": "f6dd663bc233511e632a06fbde9e7f5435c22cd065a93902adba5e4df3de8533"
+      },
+      {
+        "path": "dist-evidence/BUILD-NOTICE.txt",
+        "bytes": 139,
+        "sha256": "dd344e4898e62118812538ca7ab2b212cbe4d8fef0ac41bb65748e54a404d213"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-FORMAT.txt",
+        "bytes": 5,
+        "sha256": "028a4d851238975cae3a83e987fb7c919c380cf0962ff948ea0a88216d7bd78f"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-ICON-SHA256.txt",
+        "bytes": 109,
+        "sha256": "de9425aed630b8ee69fb8220ad85037d979cce2c99b303a3df43382e69d0d396"
+      },
+      {
+        "path": "dist-evidence/CARGO-LOCK-SHA256.txt",
+        "bytes": 77,
+        "sha256": "2be9f1682ef575ffcefc87f7ee46048fc5a3a512f41fbeacc1bf8a3b0c0e67f2"
+      },
+      {
+        "path": "dist-evidence/CARGO-METADATA.json",
+        "bytes": 2913478,
+        "sha256": "419cf3d2d1291a0cd069d657f8ec9756dfb07dd810c8f4b404b49274519a9789"
+      },
+      {
+        "path": "dist-evidence/Cargo.lock.resolved",
+        "bytes": 148119,
+        "sha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf"
+      },
+      {
+        "path": "dist-evidence/EXPECTED-INSTALLER-PATTERN.txt",
+        "bytes": 6,
+        "sha256": "a5270f91138fc2bb5470ecb521dab043140d7e0fd8cb33bb0644ac13efb60fe7"
+      },
+      {
+        "path": "dist-evidence/NPM-LOCK-SHA256.txt",
+        "bytes": 102,
+        "sha256": "b236063b026968b227dde30566dd7d2fb4a36861f385e31bc54aa4023d35519c"
+      },
+      {
+        "path": "dist-evidence/NPM-SBOM.cdx.json",
+        "bytes": 5267,
+        "sha256": "b4d961ee4cce27aeadb32d75a9e43c261c1fdbe976dd5404dd6f008506abb865"
+      },
+      {
+        "path": "dist-evidence/SHA256SUMS.txt",
+        "bytes": 125,
+        "sha256": "5c976b9cae24eef7150b2f42c0191d85eb56fb3d9f2d8b389f597b21478c591b"
+      }
+    ]
+  },
+  {
+    "id": 14726322586,
+    "name": "gpubnb-host-macOS-ARM64-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "c384e0af3900ddf1abf0f81d9e69ab9a6774432f54992eefc502d0af2645c85b",
+    "bytes": 1832825,
+    "run": 44952572210,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "dist-installers/dmg/GPUbnb Host.icns",
+        "bytes": 1864,
+        "sha256": "1c91e64aae2d19174bb399fbaec3b6560d126ac6106eae822b239e5f3804299a"
+      },
+      {
+        "path": "dist-installers/dmg/support/eula-resources-template.xml",
+        "bytes": 2376,
+        "sha256": "7d61d948ba7f118306d61107fead78f04e3338585e2ec729abb65d5d2e21012d"
+      },
+      {
+        "path": "dist-installers/dmg/bundle_dmg.sh",
+        "bytes": 14157,
+        "sha256": "0409bf0283eef673d20cc008ce9d1c004111de4eeb4814215cc01c40386c7040"
+      },
+      {
+        "path": "dist-installers/dmg/GPUbnb Host_0.1.0_aarch64.dmg",
+        "bytes": 1548663,
+        "sha256": "5c7901c064688f82769bda2c5e02fd284b5815b87e0268f1671410dfc567da6f"
+      },
+      {
+        "path": "dist-installers/dmg/support/template.applescript",
+        "bytes": 1828,
+        "sha256": "13727c7930c50be639a1eb191e893f1ebc72c270268d4611391b41410a3e862a"
+      },
+      {
+        "path": "dist-evidence/BUILD-NOTICE.txt",
+        "bytes": 139,
+        "sha256": "686cc4fe6e835f89ac360ceb8d8262e85a8c46e999436c15c36889cf48be90de"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-DIRECTORY.txt",
+        "bytes": 22,
+        "sha256": "f6dd663bc233511e632a06fbde9e7f5435c22cd065a93902adba5e4df3de8533"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-FORMAT.txt",
+        "bytes": 4,
+        "sha256": "da0150516d36115eb20049749f11871010145cbe186afc9494fe5457a343b84c"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-ICON-SHA256.txt",
+        "bytes": 109,
+        "sha256": "de9425aed630b8ee69fb8220ad85037d979cce2c99b303a3df43382e69d0d396"
+      },
+      {
+        "path": "dist-evidence/CARGO-LOCK-SHA256.txt",
+        "bytes": 77,
+        "sha256": "2be9f1682ef575ffcefc87f7ee46048fc5a3a512f41fbeacc1bf8a3b0c0e67f2"
+      },
+      {
+        "path": "dist-evidence/CARGO-METADATA.json",
+        "bytes": 2870159,
+        "sha256": "547942451023de286aa2ddd2a0ba4b96d34fa8fa4fd22d26cf1d4cff622bb7d2"
+      },
+      {
+        "path": "dist-evidence/Cargo.lock.resolved",
+        "bytes": 148119,
+        "sha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf"
+      },
+      {
+        "path": "dist-evidence/EXPECTED-INSTALLER-PATTERN.txt",
+        "bytes": 6,
+        "sha256": "0f7fc1d8a8577865faea6bb9d6b0a24f91cb489f447c0a7c5b6649cd8bdf58ca"
+      },
+      {
+        "path": "dist-evidence/NPM-LOCK-SHA256.txt",
+        "bytes": 102,
+        "sha256": "b236063b026968b227dde30566dd7d2fb4a36861f385e31bc54aa4023d35519c"
+      },
+      {
+        "path": "dist-evidence/NPM-SBOM.cdx.json",
+        "bytes": 5267,
+        "sha256": "5a859fc1505d89ede4402734d19ec2006f5d7e265ea3442aaf2d60ab413938d7"
+      },
+      {
+        "path": "dist-evidence/SHA256SUMS.txt",
+        "bytes": 586,
+        "sha256": "6939aa579e0bc971717751cef75b07d8a2b3b6a3b156fa27112a4a690461f6c3"
+      }
+    ]
+  },
+  {
+    "id": 14726267664,
+    "name": "gpubnb-host-Linux-X64-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "3e393fd1c9ddee2fd1b68807cb7152760bbee9ffac5822c162c33df7c5f98233",
+    "bytes": 6284020,
+    "run": 44952572210,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64/control/control",
+        "bytes": 222,
+        "sha256": "1f797402abf80de0c759a287fddab89299f9240c3ed03c6f44563f26602fecac"
+      },
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64/control.tar.gz",
+        "bytes": 375,
+        "sha256": "f44ee865b98270c12b20e1c21689d6432b990039b666e22bca803c66312bcf6a"
+      },
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64/control/md5sums",
+        "bytes": 139,
+        "sha256": "9fafa73d077692b98c5d5f7863fe55ac0dfa3edd1bf83baa59f7aeb1f82a90aa"
+      },
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64/data/usr/bin/gpubnb-host-desktop",
+        "bytes": 4796120,
+        "sha256": "37005ff2e8489950d5e233f90b1d11ad571a61c4ab8d61b77b3212ff52f5496b"
+      },
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64/data/usr/share/applications/GPUbnb Host.desktop",
+        "bytes": 187,
+        "sha256": "3fbc04b0e875525afae284aa573e758f9f2bd96e71b56aa92dd7c84e0306bc2f"
+      },
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64/data.tar.gz",
+        "bytes": 1989209,
+        "sha256": "86991083cfa8604b6b363526c6a1dbe35178d90763de9a916670f7bd06fa741f"
+      },
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64/debian-binary",
+        "bytes": 4,
+        "sha256": "d526eb4e878a23ef26ae190031b4efd2d58ed66789ac049ea3dbaf74c9df7402"
+      },
+      {
+        "path": "dist-installers/deb/GPUbnb Host_0.1.0_amd64.deb",
+        "bytes": 1989778,
+        "sha256": "bbfeef8eca8c8dcb07323bb7797d43bb7eec6f9d04401fa7e9d25bd6a8b77851"
+      },
+      {
+        "path": "dist-evidence/BUILD-NOTICE.txt",
+        "bytes": 137,
+        "sha256": "680e40275ad7622b0ec4f81a60d30e595e8cb7fd07a23a4e6ca6aee448e4945a"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-DIRECTORY.txt",
+        "bytes": 22,
+        "sha256": "f6dd663bc233511e632a06fbde9e7f5435c22cd065a93902adba5e4df3de8533"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-FORMAT.txt",
+        "bytes": 4,
+        "sha256": "dae45e9c4c5641b0e8a58b6c3f0de0dd946b9ac47502cc45ef451f3119ebacd7"
+      },
+      {
+        "path": "dist-evidence/BUNDLE-ICON-SHA256.txt",
+        "bytes": 109,
+        "sha256": "de9425aed630b8ee69fb8220ad85037d979cce2c99b303a3df43382e69d0d396"
+      },
+      {
+        "path": "dist-evidence/CARGO-LOCK-SHA256.txt",
+        "bytes": 77,
+        "sha256": "2be9f1682ef575ffcefc87f7ee46048fc5a3a512f41fbeacc1bf8a3b0c0e67f2"
+      },
+      {
+        "path": "dist-evidence/CARGO-METADATA.json",
+        "bytes": 2867353,
+        "sha256": "b476eb44b4584a5ae18ee3532976f4c08bde8b87da5972dc5c1d664daeeb0740"
+      },
+      {
+        "path": "dist-evidence/EXPECTED-INSTALLER-PATTERN.txt",
+        "bytes": 6,
+        "sha256": "f4bfb5e9e8721ef827ad924cacbdddee234dca558da468db0d822e24607a8bb9"
+      },
+      {
+        "path": "dist-evidence/Cargo.lock.resolved",
+        "bytes": 148119,
+        "sha256": "6919a9b221c32ff7a1a243659fe0eb73c843ff6fd2f9e0512ab17ed0bb448ecf"
+      },
+      {
+        "path": "dist-evidence/NPM-LOCK-SHA256.txt",
+        "bytes": 102,
+        "sha256": "b236063b026968b227dde30566dd7d2fb4a36861f385e31bc54aa4023d35519c"
+      },
+      {
+        "path": "dist-evidence/NPM-SBOM.cdx.json",
+        "bytes": 5267,
+        "sha256": "7bf330b3cb9c45c3490ec6451ee49ea13d2ff62244288ddd1346b54c0672280b"
+      },
+      {
+        "path": "dist-evidence/SHA256SUMS.txt",
+        "bytes": 1086,
+        "sha256": "d971e27b58c3c000b2f4581f6d8f9fa8b3c3052ebb62bbd10309362e2fd8e14c"
+      }
+    ]
+  },
+  {
+    "id": 14726144105,
+    "name": "gpubnb-host-windows-preflight-898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+    "sha256": "8f2edc2bcae1f8eb2e43c4bb8c20cd0f4791b07b4567c1b09e66a02ce1448580",
+    "bytes": 48129114,
+    "run": 44952572199,
+    "head": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+    "verified": true,
+    "zipCrc": "PASS",
+    "files": [
+      {
+        "path": "gpubnb-agent.exe",
+        "bytes": 22277813,
+        "sha256": "fcc6caeea3c288f1d7a997492b465e6b971314b3628ec5a5ea7d6a0517f66e5d"
+      },
+      {
+        "path": "gpubnb-host-tunnel.exe",
+        "bytes": 3841024,
+        "sha256": "316559d1d78f7364df1bda3be26a90266a6d54d3f22cd20b5e031a179adf2516"
+      },
+      {
+        "path": "GPUbnb Host_0.1.0_x64-setup.exe",
+        "bytes": 24415176,
+        "sha256": "0449493f47ae1c5862f0b60b7530cb97ff4270dcad0ab0ad776f916ee3154ee4"
+      },
+      {
+        "path": "SHA256SUMS.txt",
+        "bytes": 273,
+        "sha256": "255a81284a4917c5e05ce340f5b54b1871ac38499ad981dff3032e357ec1518b"
+      }
+    ]
+  }
+]

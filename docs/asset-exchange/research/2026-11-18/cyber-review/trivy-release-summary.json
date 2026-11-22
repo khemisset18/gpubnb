@@ -1,0 +1,9 @@
+{
+  "url": "https://api.github.com/repos/aquasecurity/trivy/releases/latest",
+  "sha256": "57fb624d52ff83d0a1c925c4a4604982e0d649b5731c878c4d3430b51ec85a6a",
+  "tag": "v0.76.2",
+  "publishedAt": "2026-11-05T12:50:25Z",
+  "draft": false,
+  "prerelease": false,
+  "checkedAtUtc": "2026-11-18T18:33:34.431256+00:00"
+}

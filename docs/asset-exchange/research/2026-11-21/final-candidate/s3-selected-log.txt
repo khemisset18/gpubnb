@@ -1,0 +1,12 @@
+2026-11-21T21:39:50.8423340Z # Subtest: S3-compatible backend performs a real put/get round trip
+2026-11-21T21:39:50.8430437Z ok 1 - S3-compatible backend performs a real put/get round trip
+2026-11-21T21:39:50.8596852Z # tests 1
+2026-11-21T21:39:50.8600276Z # pass 1
+2026-11-21T21:39:50.8600642Z # fail 0
+2026-11-21T21:39:50.8602076Z # skipped 0
+2026-11-21T21:39:51.5870996Z # Subtest: historical filesystem artifact migrates through a real S3-compatible server
+2026-11-21T21:39:51.5890727Z ok 1 - historical filesystem artifact migrates through a real S3-compatible server
+2026-11-21T21:39:51.6031430Z # tests 1
+2026-11-21T21:39:51.6032521Z # pass 1
+2026-11-21T21:39:51.6033952Z # fail 0
+2026-11-21T21:39:51.6035500Z # skipped 0

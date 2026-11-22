@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "checkedDate": "2026-11-17",
+  "candidatePr": 376,
+  "baseCommit": "b72fce17d75d0e75bcda36aab486d13c1c116871",
+  "executedCommit": "9a00e701ba124c3333d13d22dd2bb58e6817ff26",
+  "executedTree": "4a220b8b04e6b3bcc8c85a58d6ef43b0c4ef8a82",
+  "codeDelta": [
+    ".github/workflows/artifact-storage-s3-integration.yml: only index and amd64 SHA256 pins"
+  ],
+  "financialSourceChanged": false,
+  "scannerPolicyChanged": false,
+  "preservedSourcesFileSha256": "6c5eedfa4056350639dc2b5128112ac1607ef6e804ff8ae441b30ce76554aed0",
+  "preservedSourceCount": 191,
+  "minio": {
+    "status": "PASS",
+    "runId": 44164350361,
+    "jobId": 134326295509,
+    "artifactId": 14364652313,
+    "artifactZipSha256": "412e80512243969413d224398b1cb1d8437873030dec1ff55d7bc9ab32fe8dd8",
+    "indexDigest": "sha256:68aab277f9748c7c3eb85f178744adba1655c8e33a86987b22d2879ca507c332",
+    "amd64Digest": "sha256:7cf811b382510dc44cda32f659a198a58a99fddf4209c86f4c0f968306219ca3",
+    "ciCosignSignatureAndSpdxAttestation": "PASS with original exact issuer/identity and transparency checks",
+    "downloadInspectionIsNotSignatureVerification": true,
+    "scanner": "Trivy0.76.2 UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL; ignore-unfixed=false; exit-code1",
+    "findings": 0,
+    "selectedPackages": {
+      "mc": "0.20250813.083541-r29",
+      "minio": "0.20261116.001140-r0"
+    },
+    "realTests": {
+      "putGet": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "historicalMigration": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    "filesSha256": {
+      "signed-sbom.jsonl": "fbee5d95c23a0a065545f0bf818a5281ce48663a41ca136b89262c49042b8a6d",
+      "migration.log": "61e5f546556e7015e1c8baaa4a20f78287799f47c6715e8eee103cfb699f436e",
+      "image-trivy.json": "6a9552e86ca049c7a279fe41cbc6156369cf26a00d5c4d5524e6efe31c482219",
+      "roundtrip.log": "07daa62edcf64e703d001fd023e26bbfa95ee14ee391c3efcf2f07a089e0642f",
+      "minio-container.log": "9948af313e94e4227e1d51c237543a180ab0eb576736d357b5e1b970e66d1dc9",
+      "image-signature.json": "a1f309018c80f27c6c97104197cec8ce571c0b62a2e7958414b1462c2fdc93f9"
+    },
+    "priorFailure": {
+      "runId": 43760867576,
+      "artifactId": 14180690379,
+      "zipSha256": "36ec71f1dd5800c4a3a2792b15ce395d5d3ea51750fd53a5da46fb65eaf15775",
+      "findings": [
+        {
+          "id": "CVE-2026-97054",
+          "package": "mc",
+          "version": "0.20250813.083541-r28",
+          "fixed": "0.20250813.083541-r29",
+          "severity": "UNKNOWN"
+        },
+        {
+          "id": "CVE-2026-128085",
+          "package": "minio",
+          "version": "0.20261110.211811-r0",
+          "fixed": "0.20261112.011523-r1",
+          "severity": "MEDIUM"
+        }
+      ]
+    },
+    "artifactExpiresAt": "2026-12-17T19:59:22Z"
+  },
+  "rustRand": {
+    "status": "ABSENT_0.7",
+    "resolvedLockSha256": "af9bb9a1fef24b84a616f1c8b5017a99f4cb3aea57134fd8fdc393e336b7611d",
+    "solanaHostRecoveryRun": 44164350314,
+    "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41"
+  },
+  "strictFilesystemScan": {
+    "status": "FAIL",
+    "runId": 44164350399,
+    "artifactId": 14363334667,
+    "zipSha256": "e99f51c89b6ef4f1ce108a509b62d4aba1c14ef4aa27b65702cf7b29e85d4b3f",
+    "findings": [
+      {
+        "target": "Cargo.lock",
+        "package": "borsh",
+        "version": "0.10.4",
+        "id": "GHSA-fjx5-qpf4-xjf2",
+        "severity": "MEDIUM",
+        "fixed": "1.0.0-alpha.1"
+      },
+      {
+        "target": "Cargo.lock",
+        "package": "glib",
+        "version": "0.18.5",
+        "id": "GHSA-wrw7-89jp-8q8g",
+        "severity": "MEDIUM",
+        "fixed": "0.20.0"
+      },
+      {
+        "target": "apps/host-desktop/package-lock.json",
+        "package": "picomatch",
+        "version": "4.0.5",
+        "id": "CVE-2026-112366",
+        "severity": "HIGH",
+        "fixed": null
+      }
+    ]
+  },
+  "desktopNpmAudit": {
+    "status": "FAIL",
+    "jobId": 134326295795,
+    "artifactId": 14365206345,
+    "zipSha256": "18e7d49490bf496bbefe6c02d13da3c1e5c1a1ce205f685eda5ab3754144ed22",
+    "affectedActualPackage": "picomatch4.0.5",
+    "advisory": "GHSA-fc5q-39xc-vjpf / CVE-2026-112366",
+    "transitiveNpmFindings": 4,
+    "latestPublished": "4.0.7",
+    "compatibleFixedPublishedVersion": null,
+    "preflightRun": 44164350477,
+    "disposition": "BLOCKED_EXTERNAL; retain strict gate. Do not accept npm suggested Vite downgrade or republish a fake fixed version."
+  },
+  "recoveryProofRetained": {
+    "runId": 43760009110,
+    "executionCommit": "e3fbbe6339d2eaecc6bd999daf2d9fe7fb6a1816",
+    "pass": 2,
+    "fail": 0,
+    "skip": 0,
+    "newKeys": 0,
+    "newSignatures": 0,
+    "refundKoinu": "98000000",
+    "nativeNewFundingGuardIsolated": false,
+    "executableDiffFromProof": [],
+    "routingTestChanged": "test_funding_reorg.py; existing integrated route matrix CI",
+    "decision": "No additional native execution: current D6 criteria do not explicitly mandate isolation of every refusal. Software isolates the funding guard; native proves global refusal/resumption. D6 completeness/independent acceptance remains BLOCKED."
+  },
+  "rbfProofRetained": {
+    "runIds": [
+      43326020199,
+      43484240757
+    ],
+    "executableDiffFromSuccessfulRetry": [],
+    "routingTestChanged": "test_rbf_routes.py; integrated route matrix already validated"
+  },
+  "tests": {
+    "A": [
+      "all unchanged DOGE native suites, claims/refunds, RBF, AuxPoW, VM recovery",
+      "Rust/GLib/financial source and all previous successful host tests: sources unchanged"
+    ],
+    "B": [
+      "MinIO image signature, SBOM, every-severity scan and both real S3 tests: PASS"
+    ],
+    "C": [
+      "two physical hosts and actual reboot",
+      "hardware signer displays/refusal/firmware",
+      "independent cryptographic and financial/profile/fee acceptance",
+      "SBF/runtime/CPI/account/rollback if adopted",
+      "external D9 audit and findings closure"
+    ]
+  },
+  "phases": {
+    "D0": "PARTIAL: retained source-route PASS",
+    "D1": "PARTIAL: private Regtest PASS",
+    "D2": "BLOCKED",
+    "D3": "BLOCKED",
+    "D4": "BLOCKED",
+    "D5": "BLOCKED",
+    "D6": "BLOCKED",
+    "D7": "BLOCKED",
+    "D8": "BLOCKED",
+    "D9": "BLOCKED"
+  },
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false,
+  "all20DirectionsRemainDisabled": true,
+  "executedCommitCi": [
+    {
+      "id": 44164350846,
+      "name": "workspace-reliability",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44164350314,
+      "name": "Solana host recovery compatibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44164350399,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44164350313,
+      "name": "host-desktop",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44164350477,
+      "name": "host-windows-preflight",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 44164350392,
+      "name": "Asset Exchange G5 Foundation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44164350361,
+      "name": "artifact-storage-s3-integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44164350424,
+      "name": "Rust compatible backport workspace qualification",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44164350260,
+      "name": "host-desktop-dev-installers",
+      "status": "completed",
+      "conclusion": "cancelled"
+    }
+  ]
+}

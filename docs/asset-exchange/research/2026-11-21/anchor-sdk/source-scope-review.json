@@ -1,0 +1,288 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-11-21T09:56:17.159987+00:00",
+  "reviewKind": "internal source and scope review; no independent audit",
+  "result": "SOURCE_SCOPE_PASS_PENDING_REDUCED_PROFILE_RETEST",
+  "decision": "The prototype need not add the optional precompile extension; this does not remove a protection used by the reviewed GPUbnb instructions. Precompiles remain NOT_QUALIFIED.",
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "runtimeSourceSha256AtReview": "8a42c79f15a0440d6f74bc09ea5035e70e07c3beeb0d93e16148feffe3c32d13",
+  "runtimeLockSha256AtReview": "a49195e74e78d0932bf81427b0a27750d1c51937664b28a453822204856bce09",
+  "oldExtensionLockSha256PreviouslyVerified": "7a6207ff71f5b11e2c872d33080f4ec3067327a658be3b900af78fa4e4352bd8",
+  "publishedCrateArchivesAndAllFilesVerified": [
+    {
+      "name": "litesvm",
+      "version": "0.18.2",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/litesvm/litesvm-0.18.2.crate",
+      "archiveSha256": "22637a0a14832bbb20d7c397dfe2af3b5470a475b0645c0898a267ebfc706318",
+      "sourceFilesVerified": 57,
+      "officialRepository": "https://github.com/LiteSVM/litesvm",
+      "upstreamCommit": "c848c5617d1ae4d3f832fb0ca03e30c611a7ba52",
+      "pathInRepository": "crates/litesvm",
+      "sourceRootUrl": "https://github.com/LiteSVM/litesvm/tree/c848c5617d1ae4d3f832fb0ca03e30c611a7ba52/crates/litesvm"
+    },
+    {
+      "name": "solana-transaction",
+      "version": "4.3.0",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/solana-transaction/solana-transaction-4.3.0.crate",
+      "archiveSha256": "444a979f617ef7ed4e01aa228800df52d0af55f533e1840e8d48d468e607885f",
+      "sourceFilesVerified": 9,
+      "officialRepository": "https://github.com/anza-xyz/solana-sdk",
+      "upstreamCommit": "d8fbadd72ddf58add627fb1a2b930113782a2106",
+      "pathInRepository": "transaction",
+      "sourceRootUrl": "https://github.com/anza-xyz/solana-sdk/tree/d8fbadd72ddf58add627fb1a2b930113782a2106/transaction"
+    },
+    {
+      "name": "solana-signature",
+      "version": "3.5.2",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/solana-signature/solana-signature-3.5.2.crate",
+      "archiveSha256": "fe45ce95700ac8045e422344b88e273843d70185873cc1cc880ba06dd9fa9002",
+      "sourceFilesVerified": 7,
+      "officialRepository": "https://github.com/anza-xyz/solana-sdk",
+      "upstreamCommit": "91193e7f1d7fdd2b563a2ec0818006d3b30eb9f3",
+      "pathInRepository": "signature",
+      "sourceRootUrl": "https://github.com/anza-xyz/solana-sdk/tree/91193e7f1d7fdd2b563a2ec0818006d3b30eb9f3/signature"
+    },
+    {
+      "name": "solana-ed25519",
+      "version": "0.2.4",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/solana-ed25519/solana-ed25519-0.2.4.crate",
+      "archiveSha256": "ff4c7caf3fe3d70815869a5838ee45b4d2b009eaacea1790ef3cd9b3c89edbbd",
+      "sourceFilesVerified": 93,
+      "officialRepository": "https://github.com/anza-xyz/cryptography",
+      "upstreamCommit": "33f07b22cb2fba719645052fdfc31d23bc917596",
+      "pathInRepository": "curve25519/solana-ed25519",
+      "sourceRootUrl": "https://github.com/anza-xyz/cryptography/tree/33f07b22cb2fba719645052fdfc31d23bc917596/curve25519/solana-ed25519"
+    },
+    {
+      "name": "solana-keypair",
+      "version": "3.1.2",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/solana-keypair/solana-keypair-3.1.2.crate",
+      "archiveSha256": "263d614c12aa267a3278703175fd6440552ca61bc960b5a02a4482720c53438b",
+      "sourceFilesVerified": 7,
+      "officialRepository": "https://github.com/anza-xyz/solana-sdk",
+      "upstreamCommit": "de533879787698dd8facf96bd85166c5c790aa1d",
+      "pathInRepository": "keypair",
+      "sourceRootUrl": "https://github.com/anza-xyz/solana-sdk/tree/de533879787698dd8facf96bd85166c5c790aa1d/keypair"
+    },
+    {
+      "name": "agave-precompiles",
+      "version": "4.3.2",
+      "selectedInCurrentLock": false,
+      "archiveUrl": "https://static.crates.io/crates/agave-precompiles/agave-precompiles-4.3.2.crate",
+      "archiveSha256": "ed0ea00a3e8f2ebd1db44c011e208f6bcdee52f01b720e667b85a491779930c2",
+      "sourceFilesVerified": 11,
+      "officialRepository": "https://github.com/anza-xyz/agave",
+      "upstreamCommit": "a203300045b405f86c9c84308b2eae76af69ac3b",
+      "pathInRepository": "precompiles",
+      "sourceRootUrl": "https://github.com/anza-xyz/agave/tree/a203300045b405f86c9c84308b2eae76af69ac3b/precompiles"
+    },
+    {
+      "name": "solana-builtins",
+      "version": "4.3.2",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/solana-builtins/solana-builtins-4.3.2.crate",
+      "archiveSha256": "9eee096dc70609ccdd247ca587f57f466bba39cfc348dcee70bc457aa5ed6b44",
+      "sourceFilesVerified": 7,
+      "officialRepository": "https://github.com/anza-xyz/agave",
+      "upstreamCommit": "a203300045b405f86c9c84308b2eae76af69ac3b",
+      "pathInRepository": "builtins",
+      "sourceRootUrl": "https://github.com/anza-xyz/agave/tree/a203300045b405f86c9c84308b2eae76af69ac3b/builtins"
+    },
+    {
+      "name": "solana-system-program",
+      "version": "4.3.2",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/solana-system-program/solana-system-program-4.3.2.crate",
+      "archiveSha256": "5c93fc4ebe7aa9ec71ebea68c8cad95cff8ef332e8353a35a536a9e2e3774c93",
+      "sourceFilesVerified": 8,
+      "officialRepository": "https://github.com/anza-xyz/agave",
+      "upstreamCommit": "a203300045b405f86c9c84308b2eae76af69ac3b",
+      "pathInRepository": "programs/system",
+      "sourceRootUrl": "https://github.com/anza-xyz/agave/tree/a203300045b405f86c9c84308b2eae76af69ac3b/programs/system"
+    },
+    {
+      "name": "solana-rent",
+      "version": "4.4.0",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/solana-rent/solana-rent-4.4.0.crate",
+      "archiveSha256": "dc016b348926395ba01f8288cdf5da25fc30f5a0806028b32d5e5b3147b10bf9",
+      "sourceFilesVerified": 6,
+      "officialRepository": "https://github.com/anza-xyz/solana-sdk",
+      "upstreamCommit": "91123d4cf58736d1c8a7c247eafc5a0c222bd2d1",
+      "pathInRepository": "rent",
+      "sourceRootUrl": "https://github.com/anza-xyz/solana-sdk/tree/91123d4cf58736d1c8a7c247eafc5a0c222bd2d1/rent"
+    },
+    {
+      "name": "anchor-syn",
+      "version": "1.2.2",
+      "selectedInCurrentLock": true,
+      "archiveUrl": "https://static.crates.io/crates/anchor-syn/anchor-syn-1.2.2.crate",
+      "archiveSha256": "0df453f8c1b286cacb31735e79a80a5ca6d2b2ed113cc970f875d5d202e2dc60",
+      "sourceFilesVerified": 50,
+      "officialRepository": "https://github.com/otter-sec/anchor",
+      "upstreamCommit": "8d9d1488d9b8af41b266d7513eea2e668adf15a2",
+      "pathInRepository": "lang/syn",
+      "sourceRootUrl": "https://github.com/otter-sec/anchor/tree/8d9d1488d9b8af41b266d7513eea2e668adf15a2/lang/syn"
+    }
+  ],
+  "totalUpstreamSourceFilesVerified": 255,
+  "sourceReferences": [
+    {
+      "crate": "litesvm-0.18.2",
+      "path": "src/lib.rs",
+      "sha256": "1265e43d4894e7a6d4f62e3e4402f9430ada79922f0b53bc6814344d716b9c30",
+      "relevantLineRanges": [
+        [
+          510,
+          529
+        ],
+        [
+          1229,
+          1251
+        ],
+        [
+          1512,
+          1527
+        ],
+        [
+          1580,
+          1602
+        ],
+        [
+          1709,
+          1748
+        ]
+      ]
+    },
+    {
+      "crate": "litesvm-0.18.2",
+      "path": "Cargo.toml",
+      "sha256": "55ee87992408c76f8e63d34a597b7623125a0a2257effef9d2fbb65f6ca52c33",
+      "relevantLineRanges": [
+        [
+          35,
+          42
+        ],
+        [
+          173,
+          177
+        ],
+        [
+          372,
+          376
+        ]
+      ]
+    },
+    {
+      "crate": "litesvm-0.18.2",
+      "path": "src/precompiles.rs",
+      "sha256": "57ed3199c2da5601267a25e2492e1f23ddb3727b48fe17bdb19f8388c65571d2",
+      "relevantLineRanges": [
+        [
+          1,
+          25
+        ]
+      ]
+    },
+    {
+      "crate": "solana-transaction-4.3.0",
+      "path": "src/sanitized.rs",
+      "sha256": "9a633baf14f869f4624fcab052aeebe66dedb98e84856587c9c59fe29f478783",
+      "relevantLineRanges": [
+        [
+          280,
+          295
+        ]
+      ]
+    },
+    {
+      "crate": "solana-signature-3.5.2",
+      "path": "src/lib.rs",
+      "sha256": "a4d43906d0e775806e592da932e36f50e36daeac7b7e8100479535de6b5ea303",
+      "relevantLineRanges": [
+        [
+          84,
+          122
+        ]
+      ]
+    },
+    {
+      "crate": "solana-ed25519-0.2.4",
+      "path": "src/ed_sigs/verification_key.rs",
+      "sha256": "6e84532003e0606b316d1145b7d43e511d235abe8ac3421c6f98e30e0bc5eadb",
+      "relevantLineRanges": [
+        [
+          371,
+          425
+        ]
+      ]
+    },
+    {
+      "crate": "anchor-syn-1.2.2",
+      "path": "src/codegen/accounts/constraints.rs",
+      "sha256": "6f8b637b72b2e9b9addd6381b66acf4542dbea0a1b24bf2d9bee0e64fae3fc98",
+      "relevantLineRanges": [
+        [
+          1835,
+          1878
+        ]
+      ]
+    }
+  ],
+  "programInstructions": [
+    "initialize_config",
+    "update_config",
+    "set_paused",
+    "propose_admin",
+    "accept_admin",
+    "open",
+    "propose_settlement",
+    "dispute",
+    "finalize",
+    "resolve_dispute",
+    "refund_expired"
+  ],
+  "runtimeInstructionTypes": [
+    "AcceptAdmin",
+    "Dispute",
+    "Finalize",
+    "InitializeConfig",
+    "Open",
+    "ProposeAdmin",
+    "ProposeSettlement",
+    "RefundExpired",
+    "ResolveDispute",
+    "SetPaused",
+    "UpdateConfig"
+  ],
+  "runtimeCases": [
+    "funding_cpi_refund_and_repeated_instruction_after_close",
+    "full_partial_settlements_and_repeated_instruction_after_close",
+    "dispute_authority_pause_and_conservation",
+    "admin_transfer_config_and_authority_refusals",
+    "signature_and_blockhash_checks_fail_closed",
+    "identical_signed_transaction_replay_refused_without_fee"
+  ],
+  "evidence": {
+    "constructor": "LiteSVM::new -> into_basic always enables builtins, sysvars, signature verification and blockhash checks; only precompile account loading is conditional.",
+    "transactionVerification": "send_transaction -> sanitize_transaction(self.sigverify) -> SanitizedTransaction::verify -> Signature::verify -> solana_ed25519::VerificationKey::verify_dalek. This path does not use agave_precompiles or ed25519-dalek1.",
+    "signing": "solana-keypair3.1.2 uses ed25519-dalek2.2.0; separate from the optional instruction-precompile implementation.",
+    "programCpi": "The only explicit program invoke transfers through SystemProgram. The two typed SystemProgram accounts service init/open; Anchor init generation uses SystemProgram create_account. No program instruction invokes a signature precompile.",
+    "pda": "PDA derivation and the VM cryptographic syscalls remain available; omitting precompile program accounts is not omitting those syscalls.",
+    "negativeChecks": "SignatureFailure, BlockhashNotFound and identical-tx AlreadyProcessed are exercised, with zero balance/data effect in all eight party/config/escrow snapshots.",
+    "rent": "Config/Escrow data size138; expected balances use VM minimum_balance_for_rent_exemption independently from observed funded balances.",
+    "scopeChange": "Only the newly added, unused optional test extension may be omitted. All six GPUbnb cases and their assertions must remain unchanged apart from accurate scope labels.",
+    "noSecurityGateChanges": "No Trivy exclusions, advisory changes, severity reductions, fake package versions or lock omissions are authorized."
+  },
+  "requiredNextChecks": [
+    "Regenerate runtime lock and prove agave-precompiles/dalek1/curve3/Rand0.7 absent.",
+    "Run same six runtime cases against each existing exact ELF with signatures/blockhash checks, System CPI, Rent and snapshot assertions retained.",
+    "Scan the complete candidate repository and runtime lock strictly.",
+    "Record precompiles NOT_QUALIFIED; do not claim general Solana consensus or precompile validation."
+  ]
+}

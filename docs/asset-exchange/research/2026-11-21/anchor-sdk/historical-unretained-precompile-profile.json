@@ -1,0 +1,11 @@
+{
+  "Cargo.toml": "718713e55501e8900e8beddcaa3c948bcc97135e7a35582c82e5d245ba77f1bc",
+  "Cargo.lock": "7a6207ff71f5b11e2c872d33080f4ec3067327a658be3b900af78fa4e4352bd8",
+  "src/lib.rs": "53818116000283fd7bcb933d5326019329067effe773350ef4a023064a33e644",
+  "scope": "Historical optional-precompile profile; NOT retained",
+  "tests": {
+    "candidate_passed": 6,
+    "log_sha256": "04271ae0a1a2a463bd881d2eaad4378a6512484c879c719e64ed979c9de2e0f3"
+  },
+  "reason": "Unused optional agave precompile extension selects ed25519-dalek1/Rand0.7/curve3; separate VM transaction signature verification is modern and retained"
+}

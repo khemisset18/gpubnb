@@ -1,0 +1,89 @@
+name: Anchor SDK private compatibility
+
+on:
+  push:
+    branches: [qualification/doge-anchor-20261120]
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - programs/gpu_escrow/**
+      - vendor/security/**
+      - prototypes/anchor-sdk-migration/**
+      - .github/workflows/anchor-sdk-private-qualification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-wire-and-recovery:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_PROFILE_DEV_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preserve exact source bytes
+        shell: bash
+        run: |
+          git config --local core.autocrlf false
+          git restore --worktree -- .
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Reconstruct the host ABI and public recovery evidence
+        env:
+          GPUBNB_ANCHOR_TARGET_DIR: ${{ runner.temp }}/anchor-host-target
+        run: python prototypes/anchor-sdk-migration/qualify.py "${{ runner.temp }}/anchor-host-evidence" --mode host
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: anchor-host-${{ runner.os }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/anchor-host-evidence/*.json
+            ${{ runner.temp }}/anchor-host-evidence/*.log
+          if-no-files-found: error
+          retention-days: 30
+
+  private-sbf-baseline-and-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_PROFILE_DEV_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Build exact SBF programs and execute synthetic transactions in memory
+        env:
+          GPUBNB_ANCHOR_TARGET_DIR: ${{ runner.temp }}/anchor-runtime-target
+        run: python prototypes/anchor-sdk-migration/qualify.py "${{ runner.temp }}/anchor-sbf-evidence" --mode sbf
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: anchor-private-sbf-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/anchor-sbf-evidence/*.json
+            ${{ runner.temp }}/anchor-sbf-evidence/*.log
+            ${{ runner.temp }}/anchor-sbf-evidence/baseline-sbf/gpu_escrow.so
+            ${{ runner.temp }}/anchor-sbf-evidence/candidate-sbf/gpu_escrow.so
+          if-no-files-found: error
+          retention-days: 30

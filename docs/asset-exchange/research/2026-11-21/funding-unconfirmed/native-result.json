@@ -1,0 +1,141 @@
+{
+  "activeBlocks": 1355,
+  "activeHeaders": 1355,
+  "artifact": 14591413354,
+  "artifactBytes": 187701,
+  "artifactUrl": "https://github.com/khemisset18/gpubnb/actions/runs/44652078768/artifacts/14591413354",
+  "artifactZipSha256": "2bf772edc65124f50c09724b64ba27bc23448e2903ee592f293027c446b1e413",
+  "broadcastDuringRefusal": 0,
+  "broadcastsByStandaloneRecovery": 0,
+  "candidateRuntimeCommit": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+  "candidateRuntimeTree": "ecba7bcbae006f2850b3cfeae636a1a92284a60c",
+  "clientRpcCalls": 53,
+  "completeD0D9Qualification": "BLOCKED",
+  "cryptographicAttestationReverificationLocally": false,
+  "cryptographicAttestationVerification": "Successful native CI helper gh attestation verify preceded node start; retained statement, signer and subject identities rechecked locally.",
+  "d0d1RunIdentities": {
+    "d0-run.json": {
+      "commit": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a",
+      "run": 40866305437,
+      "sha256": "2fb722dd314e146cc15d7d134ff2de39952c79b6bda641c6e07c6d3d536077ee"
+    },
+    "d1-run.json": {
+      "commit": "1636df354d4fafd2cc2d9ab8595f4dca52582ad7",
+      "run": 40892872892,
+      "sha256": "19e1cb94039f0fbe5726f2277f1adada4b7036e0d8a71e6e1b5c7672e0f33211"
+    }
+  },
+  "daemonRpcCalls": 49,
+  "daemonRpcCallsByNode": {
+    "a": 37,
+    "b": 12
+  },
+  "directClientRpcCalls": 35,
+  "entriesVerified": 14,
+  "executionCommit": "3aea3b7f5cfb499ae9754f04e24223ce11d3ae02",
+  "executionTree": "2ea138b33c80d7cbb7532c06a049b6d568ce44c0",
+  "externalIndependentAudit": "NOT_PERFORMED_OUTSIDE_MISSION",
+  "fundingConfirmations": 0,
+  "fundingObservationSource": "a",
+  "generatedBlocks": 0,
+  "harnessCommit": "555419d73ff0430f862a7836ef11e129e273b980",
+  "harnessTree": "30f9e788a77232ee6d04650da28489f1688769f2",
+  "identicalRuntimeSourcesInCandidateHarnessExecution": {
+    "asset-exchange/qualification/dogecoin/d2/htlc_codec.py": "e418e1ee51cffc37090f99dd4e35b13f9578feaa7831a6a1356aaa098db0db5e",
+    "asset-exchange/qualification/dogecoin/d2/offline_candidate.py": "b4a814f8e15b30bc41ae3175d1d3ff16ab982a90e1678a182b23498aba1277d2",
+    "asset-exchange/qualification/dogecoin/d2/spend_preparation.py": "d2d27ddea6b5a1a122b41f66f3d8acc1e44f5d2df5bafb65e67153f64205be35",
+    "asset-exchange/qualification/dogecoin/d2/test_signer.py": "f7894d1a87fa9375df8398a601ab8dfe7d587bb8e371f71fb86bec30d8abc9b5",
+    "asset-exchange/recovery/dogecoin/recovery_core.py": "ab6221fb209ac05316a37d9b17beb26ad45317b125dd0c1866abf3d3240a1c8b",
+    "asset-exchange/recovery/dogecoin/transaction.py": "c791a4f92c63cb45b0fb5faad4c207a066e1be26fc010feebe8c01c3b79010fc",
+    "asset-exchange/wallet-agent/dogecoin/refund_ladder.py": "3f285381488a19c1cd5c57b3e35d558a7279a9f8e57a7337a934c462bf5f5e56"
+  },
+  "independentVmJobs": "SKIPPED, not PASS",
+  "internalChecksums": {
+    "cleanroom-proof-18332-funding-unconfirmed-observe.json": "891a1e9f274cfc957fc1c25664f781e0e9bf72d6fed80242c30c8fbeadf680ba",
+    "cleanroom-proof-18332-funding-unconfirmed-rebroadcast.json": "891a1e9f274cfc957fc1c25664f781e0e9bf72d6fed80242c30c8fbeadf680ba",
+    "cleanroom-refusal-18332-funding-unconfirmed-rebroadcast.json": "6d076e5d66a0b6cd13f961735fd13e4b440ce96ac62de1ad4bdda1137870ced6",
+    "daemon-a.log": "e6de28aba406b9f64bd3dbb6ec94ca3a20cb712baaa6da652ebf3b999ecc2185",
+    "daemon-b.log": "32240bac3ec0cd65753b35281dd05bb50dd17b32bbf0946497879be1b2758da6",
+    "multinode-report.json": "8044ad13e3fe691875e4796706e2b4fda821538ad0b75f7ce4a1cd814ad6b5ee",
+    "rpc-requests.json": "347ab5c24a8e8f3e3036a970ad7d5f2ef8bb68954c05b1c17865dd0bc0c6aaf6"
+  },
+  "job": 136009177982,
+  "keysCreated": 0,
+  "kind": "Internal verification of one new private native case, without repeating it",
+  "mainnet": false,
+  "nativeJobLogSha256": "65544e6e2efdd6ab2e245b76186e4dd21ef43f9d4a35185a383331debdf29fc8",
+  "nativeStableSynchronizedChainReads": 5,
+  "nativeTransactions": {
+    "7e6d8450309ab6b40eaa3525c269838bc3687c3b779484e1da22268e610023fd": {
+      "blockhash": null,
+      "confirmations": 0,
+      "outputKoinu": "98000000",
+      "rawSha256": "22cab13f529699966d13c1d03d8c3d105aae34cacbbf56e7a33c80e5edd20677"
+    },
+    "b6ae3d0eb1c183264c3cb58fbc8e3fdfca4e6a7582aef125ffe177d6d0596e84": {
+      "blockhash": null,
+      "confirmations": 0,
+      "outputKoinu": "99000000",
+      "rawSha256": "48fc043ae73d2088a46d386d25023c962b7fdb98d55a1030fc88c0ab1c8c61dc"
+    }
+  },
+  "newFundingGuardIsolatedNatively": true,
+  "newNativeExecutionDuringVerification": false,
+  "oldFundingReorgCasesRepeated": false,
+  "packageReproducedTwiceSha256": "690a26f739217fb19701b5dc5ee3c6abac747b28e3ebaf7014c29897806c3f73",
+  "pairedWatcherStages": 0,
+  "preexistingPublicTransactionAdmissions": 2,
+  "protectedSourcesIdenticalBetweenHarnessExecution": true,
+  "publicBlocksReused": 1355,
+  "readinessAttemptsNotReachingServer": 4,
+  "realFunds": false,
+  "refundConfirmations": 0,
+  "resourceLimits": {
+    "maxGeneratedBlocks": 2,
+    "maxRpc": 400,
+    "maxStandaloneInvocations": 8
+  },
+  "result": "PASS_BOUNDED_NATIVE_UNCONFIRMED_FUNDING_REFUSAL",
+  "retainedVerifiedAttestations": {
+    "provenance.json": {
+      "predicateType": "https://slsa.dev/provenance/v1",
+      "sha256": "dabb36384181c3e8a0c0d9feea55cb0cc712fc233a78a3a62b84ce2580f741be",
+      "subjectArchiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+      "verifiedSignerCommit": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a"
+    },
+    "sbom.json": {
+      "predicateType": "https://spdx.dev/Document/v2.3",
+      "sha256": "eb7101ff74202e85f00dc2e8f7ef7674d085c4ad3e1215a7ce612f6462803d75",
+      "subjectArchiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+      "verifiedSignerCommit": "99724d5b66b9475dcb96f6c471c75ce01ed60f9a"
+    }
+  },
+  "run": 44652078768,
+  "runUrl": "https://github.com/khemisset18/gpubnb/actions/runs/44652078768",
+  "schemaVersion": 1,
+  "selectedCases": [
+    {
+      "expectationScope": "exchange-protocol/native-chain",
+      "fundingConfirmed": false,
+      "id": "unconfirmed-funding-refuses-rebroadcast",
+      "nativeParentAndRefundPending": true,
+      "nodeSynchronized": true,
+      "refusalBroadcasts": 0,
+      "standaloneRefusal": "funding is not confirmed on active chain; no broadcast",
+      "status": "PASS"
+    }
+  ],
+  "selectedFail": 0,
+  "selectedPass": 1,
+  "selectedSkip": 0,
+  "signaturesCreated": 0,
+  "standaloneInvocations": 2,
+  "standaloneRefusal": "funding is not confirmed on active chain; no broadcast",
+  "standaloneRpcCalls": 18,
+  "verifiedAt": "2026-11-21T09:54:17.506555+00:00",
+  "watcherLimitation": "This one-source funding guard case does not add paired watcher consensus or successful confirmed recovery. Those results retain their separate run identities.",
+  "watchersAdvanceOrSettle": false,
+  "wholeHarnessExecutionTreeDelta": [
+    ".github/workflows/workspace-reliability.yml"
+  ]
+}

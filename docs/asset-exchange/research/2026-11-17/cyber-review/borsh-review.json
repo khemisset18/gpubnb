@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "assessmentKind": "INTERNAL_BORSH_DEPENDENCY_SECURITY_REVIEW",
+  "checkedAtUtc": "2026-11-17T21:50:08.523676+00:00",
+  "referencePr": 376,
+  "referenceHead": "3a482ed02eb1374520aaeb4540dbf1c36e362d8a",
+  "package": "borsh",
+  "version": "0.10.4",
+  "advisory": "GHSA-fjx5-qpf4-xjf2 / RUSTSEC-2023-0033",
+  "sourceFixPresentAndAuthentic": true,
+  "officialSourceProof": {
+    "checkedAtUtc": "2026-11-17T21:48:29.491918+00:00",
+    "sourceUrl": "https://static.crates.io/crates/borsh/borsh-0.10.4.crate",
+    "crateSha256": "115e54d64eb62cdebad391c19efc9dce4981c690c85a33a12199d99bb9546fee",
+    "decoderSha256": "6d4cb52550aac787186890ba6a0118157f8433d341c79118892bce1959d75fb2",
+    "sourceVcs": {
+      "git": {
+        "sha1": "a1fe3631df2306b2991c1fa9142d7bfa17c2419e"
+      },
+      "path_in_vcs": "borsh"
+    },
+    "vectorZstRejectionBeforeAnyVecDeserialization": true,
+    "sourceFixPresent": true,
+    "existingActualAnchorRegressionsUnchanged": true,
+    "testsRepeated": false
+  },
+  "activeGraph": {
+    "cargoLockSha256": "af9bb9a1fef24b84a616f1c8b5017a99f4cb3aea57134fd8fdc393e336b7611d",
+    "metadataSource": "14365183776/active-metadata.json",
+    "candidateLockDeltaIsOnlyKnownProbe": true,
+    "target": {
+      "name": "borsh",
+      "version": "0.10.4",
+      "source": "registry+https://github.com/rust-lang/crates.io-index"
+    },
+    "directParents": [
+      "anchor-lang@0.31.1",
+      "solana-borsh@2.2.1",
+      "solana-program@2.3.0",
+      "solana-pubkey@2.4.0",
+      "solana-stake-interface@1.2.1"
+    ],
+    "sampleActivePaths": [
+      [
+        "gpu_escrow@0.2.0",
+        "anchor-lang@0.31.1",
+        "borsh@0.10.4"
+      ],
+      [
+        "gpu_escrow@0.2.0",
+        "anchor-lang@0.31.1",
+        "solana-program@2.3.0",
+        "solana-borsh@2.2.1",
+        "borsh@0.10.4"
+      ],
+      [
+        "gpu_escrow@0.2.0",
+        "anchor-lang@0.31.1",
+        "solana-program@2.3.0",
+        "borsh@0.10.4"
+      ],
+      [
+        "gpu_escrow@0.2.0",
+        "anchor-lang@0.31.1",
+        "solana-program@2.3.0",
+        "solana-pubkey@2.4.0",
+        "borsh@0.10.4"
+      ],
+      [
+        "gpu_escrow@0.2.0",
+        "anchor-lang@0.31.1",
+        "solana-program@2.3.0",
+        "solana-stake-interface@1.2.1",
+        "borsh@0.10.4"
+      ]
+    ],
+    "actualAnchorRegressionTestsSha256": "579075e7f7c609db126d29a1cead68b03962f3313b593d11de53471372c8a44f",
+    "testsRepeated": false
+  },
+  "latestPublishedBorsh": "1.8.1",
+  "latestPublishedCompatible010": "0.10.4",
+  "advisoryConflict": {
+    "githubApiAffected": "<=0.10.3",
+    "githubApiFirstPatched": "1.0.0-alpha.1",
+    "githubMachineEvents": [
+      {
+        "introduced": "0"
+      },
+      {
+        "fixed": "1.0.0-alpha.1"
+      }
+    ],
+    "githubLastKnownAffected": "<=0.10.3",
+    "rustsecPatched": [
+      "^0.10.4",
+      ">=1.0.0-alpha.1"
+    ],
+    "osvEvents": [
+      {
+        "introduced": "0.0.0-0"
+      },
+      {
+        "fixed": "0.10.4"
+      },
+      {
+        "introduced": "0.11.0-0"
+      },
+      {
+        "fixed": "1.0.0-alpha.1"
+      }
+    ]
+  },
+  "anchorPublishedChoices": [
+    {
+      "version": "0.31.2",
+      "url": "https://crates.io/api/v1/crates/anchor-lang/0.31.2/dependencies",
+      "sha256": "05ad6d7e37a49c3897e15babf134a8255c265abdb4a4f048d3495933580bf403",
+      "borsh": [
+        {
+          "req": "^0.10.3",
+          "features": []
+        }
+      ]
+    },
+    {
+      "version": "0.31.3",
+      "url": "https://crates.io/api/v1/crates/anchor-lang/0.31.3/dependencies",
+      "sha256": "170e26008e1e07c6301322ed608490fcf24c21978d51defb3d22d49dd75a5363",
+      "borsh": [
+        {
+          "req": "^0.10.3",
+          "features": []
+        }
+      ]
+    },
+    {
+      "version": "0.32.3",
+      "url": "https://crates.io/api/v1/crates/anchor-lang/0.32.3/dependencies",
+      "sha256": "58fa7d96d483e5623039bd3254b4d4804a63f6d0a1be46595a8d1994fb5e4fe8",
+      "borsh": [
+        {
+          "req": "^0.10.3",
+          "features": []
+        }
+      ]
+    },
+    {
+      "version": "1.2.2",
+      "url": "https://crates.io/api/v1/crates/anchor-lang/1.2.2/dependencies",
+      "sha256": "e835b37bb69708814b54e3ed4e44430f991fab588fefe0c5cc8abd4d7aa0066e",
+      "borsh": [
+        {
+          "req": "^1.5.7",
+          "features": []
+        }
+      ]
+    }
+  ],
+  "majorMigrationNotApplied": {
+    "availableAnchor": "1.2.2",
+    "borshRequirement": "^1.5.7",
+    "scope": "Solana SDK3/4 interface and runtime migration, not a compatible lock-only fix; financial/SBF qualification not provided",
+    "sameMinorAnd032StillRequireOldBorsh": true
+  },
+  "scannerEngine": {
+    "url": "https://api.github.com/repos/aquasecurity/trivy/releases/latest",
+    "sha256": "000b4a1d3aec5a50ffd0a3fb62c420b3d704f9ac7d24d22d172241a029d20c83",
+    "tag_name": "v0.76.2",
+    "published_at": "2026-11-05T12:50:25Z",
+    "draft": false,
+    "prerelease": false,
+    "html_url": "https://github.com/aquasecurity/trivy/releases/tag/v0.76.2",
+    "bodyMentionsBorsh": false
+  },
+  "scannerGateResult": "FAIL_RETAINED_NO_EXCEPTION",
+  "newScannerExecutionPerformed": false,
+  "unchangedAnchorRegressionSuiteRepeated": false,
+  "nativeDogeTestsRepeated": false,
+  "scannerControlsChanged": false,
+  "repositoryEdited": false,
+  "smallCompatiblePublishedResolutionAvailable": false,
+  "remainingCategory": "OFFICIAL_ADVISORY_DATA_CORRECTION_OR_COMPATIBLE_UPSTREAM_GRAPH_NOT_PUBLISHED",
+  "disposition": "Preserve real published source fix and existing passing regressions. Do not spoof version, override advisories, exclude the lockfile or perform an unqualified Anchor/Solana major migration.",
+  "sources": {
+    "github-advisory": {
+      "url": "https://api.github.com/advisories/GHSA-fjx5-qpf4-xjf2",
+      "sha256": "5e7492bdad7c17aa5a188e2f95fcb71683e27a5133b1368011965422ea3edecf"
+    },
+    "github-machine": {
+      "url": "https://raw.githubusercontent.com/github/advisory-database/main/advisories/github-reviewed/2023/04/GHSA-fjx5-qpf4-xjf2/GHSA-fjx5-qpf4-xjf2.json",
+      "sha256": "4c3aadc6d50891c8915216904db59d7f3cfaef21f0766ab802caf4a539312447"
+    },
+    "osv": {
+      "url": "https://api.osv.dev/v1/vulns/RUSTSEC-2023-0033",
+      "sha256": "9ceeec97fb9f90b132deba63205b7fa2a9c6d54e6855f52b40be5f3d6804e49e"
+    },
+    "borsh-registry": {
+      "url": "https://crates.io/api/v1/crates/borsh",
+      "sha256": "904114331e44307c8b3aeebeb92ffc2d4574ff8e1aa8b5674175fec22f601ab3"
+    },
+    "anchor-registry": {
+      "url": "https://crates.io/api/v1/crates/anchor-lang",
+      "sha256": "bff3a3f24dcdeb622c66a0d4264d25c07566e05c68a95b88d0b351c04e359637"
+    },
+    "anchor-current-deps": {
+      "url": "https://crates.io/api/v1/crates/anchor-lang/0.31.1/dependencies",
+      "sha256": "ad070726f41594b9b3c1ca0905ddc77a2745fa253cc1f006a259888a5f8435d9"
+    },
+    "borsh-upstream-fix": {
+      "url": "https://api.github.com/repos/near/borsh-rs/pulls/136",
+      "sha256": "8a140bd5d2682a217ee3664331142b885cee90b56130150ed9e1be628e7ad34d"
+    }
+  }
+}

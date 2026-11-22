@@ -1,0 +1,9 @@
+{
+  "historicalEvidenceReview": true,
+  "scope": "unconfirmed-funding-guard-only",
+  "qualificationStatus": "BLOCKED",
+  "settlementAllowed": false,
+  "canAdvance": false,
+  "newFundingGuardIsolatedNatively": true,
+  "oldFundingReorgCasesRepeated": false
+}

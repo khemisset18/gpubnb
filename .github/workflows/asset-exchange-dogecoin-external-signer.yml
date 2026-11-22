@@ -1,0 +1,101 @@
+name: DOGE external signer private qualification
+
+on:
+  push:
+    branches: [integration/doge-qualification-20261115]
+    paths:
+      - asset-exchange/wallet-agent/dogecoin/**
+      - asset-exchange/qualification/dogecoin/d8/**
+      - .github/workflows/asset-exchange-dogecoin-external-signer.yml
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: doge-external-signer-private-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-consensus-input-only:
+    if: >-
+      github.repository == 'khemisset18/gpubnb' && github.repository_id == '1305325878' && github.ref == 'refs/heads/integration/doge-qualification-20261115' && startsWith(github.event.head_commit.message, 'qualify(doge): external signer private native evidence')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require exact reviewed source and explicit zero-chain-effect authorization
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          assert event['repository']['id'] == 1305325878
+          assert event['repository']['owner']['id'] == 103233875
+          message = event['head_commit']['message']
+          match = re.fullmatch(r'qualify\(doge\): external signer private native evidence\n\nHarness-Commit: ([0-9a-f]{40})\nAuthorization: AUTHORIZE_D8_PRIVATE_BROKER_CONSENSUS_REGTEST\n?', message)
+          assert match, 'explicit private D8 authorization commit required'
+          harness = match[1]
+          execution = os.environ['GITHUB_SHA']
+          assert re.fullmatch('[0-9a-f]{40}', execution)
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          assert git('rev-list', '--parents', '-n', '1', 'HEAD').split() == [execution, harness]
+          assert git('rev-parse', harness + '^{tree}') == git('rev-parse', execution + '^{tree}')
+          allowed_wallet = {'README.md', 'external_transport.py', 'test_external_transport.py',
+              'external_signer.py', 'test_external_signer.py', 'external_cli.py', 'test_external_cli.py'}
+          changed = git('diff', '--name-only', '022a116b38a12b95cbf6fb89c4994ed6870a93bf', harness).splitlines()
+          for path in changed:
+              allowed = (path.startswith('docs/asset-exchange/')
+                  or path.startswith('asset-exchange/qualification/dogecoin/d8/')
+                  or path == '.github/workflows/asset-exchange-dogecoin-external-signer.yml'
+                  or (path.startswith('asset-exchange/wallet-agent/dogecoin/')
+                      and path.removeprefix('asset-exchange/wallet-agent/dogecoin/') in allowed_wallet))
+              assert allowed, 'unreviewed change outside the new signer qualification: ' + path
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('harness=' + harness + '\n')
+          print(json.dumps({'harnessCommit': harness, 'executionCommit': execution,
+              'identicalSourceTrees': True, 'rpcBudget': 0, 'blockBudget': 0, 'broadcastBudget': 0}))
+          PY
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Check new controller boundaries without loading native code
+        run: |
+          bash -n asset-exchange/qualification/dogecoin/d8/run-consensus.sh
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_*.py' -v
+      - name: Download existing source-qualified D0 archive and attestations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/doge-d8-d0-verified
+      - name: Verify three broker refunds and three mutations in the private namespace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_COMMIT: ${{ github.sha }}
+          HARNESS_COMMIT: ${{ steps.scope.outputs.harness }}
+          D0_EVIDENCE: ${{ runner.temp }}/doge-d8-d0-verified
+          D8_WORK: ${{ runner.temp }}/doge-d8-consensus
+        run: |
+          bash asset-exchange/qualification/dogecoin/d8/run-consensus.sh \
+            "$D0_EVIDENCE" "$D8_WORK" AUTHORIZE_D8_PRIVATE_BROKER_CONSENSUS_REGTEST \
+            "$EXECUTION_COMMIT" "$HARNESS_COMMIT"
+      - name: Preserve only public proof and source-verification receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: doge-d8-broker-consensus-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/doge-d8-consensus/verification/*.json
+            ${{ runner.temp }}/doge-d8-consensus/lab/evidence/*.json
+            ${{ runner.temp }}/doge-d8-consensus/lab/evidence/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30

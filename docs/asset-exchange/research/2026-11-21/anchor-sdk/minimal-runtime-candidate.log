@@ -1,0 +1,262 @@
+warning: unexpected `cfg` condition value: `anchor-debug`
+  --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a attribute macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `program` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+   = note: this warning originates in the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `no-log-ix-name`
+  --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:12:1
+   |
+12 | #[program]
+   | ^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+   = note: using a cfg inside a attribute macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `program` crate for guidance on how handle this unexpected cfg
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:176:10
+    |
+176 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:183:10
+    |
+183 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:189:10
+    |
+189 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:195:10
+    |
+195 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:206:10
+    |
+206 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:213:10
+    |
+213 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:219:10
+    |
+219 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:231:10
+    |
+231 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `anchor-debug`
+   --> /workspace/scratch/44921c6f8796/security-resolution/programs/gpu_escrow/src/lib.rs:244:10
+    |
+244 | #[derive(Accounts)]
+    |          ^^^^^^^^
+    |
+    = note: expected values for `feature` are: `cpi`, `default`, and `no-entrypoint`
+    = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+    = help: try referring to `Accounts` crate for guidance on how handle this unexpected cfg
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the derive macro `Accounts` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: `gpu_escrow` (lib) generated 11 warnings
+    Finished `test` profile [unoptimized] target(s) in 0.17s
+     Running unittests src/lib.rs (/workspace/scratch/44921c6f8796/evidence/security-resolution-20261120/runtime-target/debug/deps/gpubnb_anchor_sbf_qualification-a79a4d3c296d6ed2)
+
+running 6 tests
+SBF_ELF_SHA256=123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125 bytes=216408 sigverify=true precompiles=NOT_QUALIFIED
+SBF_ELF_SHA256=123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125 bytes=216408 sigverify=true precompiles=NOT_QUALIFIED
+SBF_ELF_SHA256=123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125 bytes=216408 sigverify=true precompiles=NOT_QUALIFIED
+SBF_ELF_SHA256=123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125 bytes=216408 sigverify=true precompiles=NOT_QUALIFIED
+SBF_ELF_SHA256=123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125 bytes=216408 sigverify=true precompiles=NOT_QUALIFIED
+SBF_ELF_SHA256=123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125 bytes=216408 sigverify=true precompiles=NOT_QUALIFIED
+SBF_SYSTEM_CPI_PASS minimum_invocations=1 compute_units=8934
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: InitializeConfig
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: tTHInBOnsltug+xG+alHsOePRSQKL5iZn2QIo5463vwnryXc2jOhqAAAAAKR+uxp2F4qF09rOKIUER4+HSZfAKme4nEuF4DlHJ9q9pqwe3ydKjmRg9kxhfE0a9Eok9cymxWzfwia7bI=
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 8934 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_SYSTEM_CPI_PASS minimum_invocations=2 compute_units=15740
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: Open
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: ySpgCHsJ1KRFKIvjiSpJt5VqDANj3eVPg8a40bNwYXi0ko0arm1RGgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICswdJtksMNBnCG6WfaMdLgPrBqhcMD8s8N7RQXk+BMFcAAAABkHB7w+8lvcmO11y3DWHIsQbcJI2O9h4dHbHKQEBCDwAAAAAA6AMAAGQAAAAAAAAA
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 15740 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_SYSTEM_CPI_PASS minimum_invocations=1 compute_units=8934
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: InitializeConfig
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: tTHInBOnsltC2mGyyB+NiI2qxCjxWKwJwBD9DCxgQ1mQzKU41IXvcAAAAAQkXIBgTmtxgYY3pAnmYGMHBFaMtt5tXuLgDzJi+MNlMPrQhHuGmovuyjnqMQ2YPVoLKMZPLjmpcyJDQWo=
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 8934 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_SYSTEM_CPI_PASS minimum_invocations=1 compute_units=8934
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: InitializeConfig
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: tTHInBOnslt52ikDQIIAJlTF+jkbwYXQYVLIu/GM0+kJGZuF3i5T+AAAAAaj897pEg5CaYUZLwNM6kvMG5IV5rZ6XR1t0ebvJMdA0+cp6spay/BebkUayJrBZ6Q0hpQQG9XNV+mXW6U=
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 8934 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_CASE_PASS=signature_and_blockhash_checks_fail_closed
+test tests::real_vm_rejects_unsigned_and_expired_blockhash_transactions_without_effects ... ok
+SBF_SYSTEM_CPI_PASS minimum_invocations=2 compute_units=14240
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: Open
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: ySpgCHsJ1KQex8NDI+IJgPfYK89NF2bQpqTu6LqXzQL2DOSElcWnQAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB1b5y7lAgmXkM8vqLb15gG9KLCZ0CrQQBHWpUeltk24QAAAAFbwACFyuN/09aMnQOJxkE1+GI+o5s7VHOFQYTn0BCDwAAAAAA6AMAAGQAAAAAAAAA
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 14240 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_SYSTEM_CPI_PASS minimum_invocations=1 compute_units=8934
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: InitializeConfig
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: tTHInBOnslvZG9uqqFdkWmKeH2MCs301VnL8n5gArxrVZiKxIt+s9QAAAAjH7Kc/ZbG9cwx49wSneuiy4hV910OMzhZdL4eHnjqtw75VTAE49Dm007HqVeflVbYE1DHus5748RcC3Ec=
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 8934 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_SYSTEM_CPI_PASS minimum_invocations=1 compute_units=8934
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: InitializeConfig
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: tTHInBOnslsYZ6hCsydP8Ee00VKz901juW8m+hDimz0FTrel+04aYgAAAAwp1nP6ueKmq61BMW0i/RKniLvN+LSPKitkELh1A8HZ4FFhXt0arCv5dbfvIdngKtZSeraqFLk9OQah3cA=
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 8934 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_SYSTEM_CPI_PASS minimum_invocations=1 compute_units=8934
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: InitializeConfig
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: tTHInBOnsltLGTtBiqBY8PFvr7WpqWkTCMXOg/WbAHOh6Ftj6KjINAAAAAqnuHPN+glN3UrO6sAcIjq+ZCT8Z62p0AwRD9l6C35wz4VQAlASZYdKvfpaJMV4fbDouf65wWAzmNDJyzE=
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 8934 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_CASE_PASS=identical_signed_transaction_replay_refused_without_fee
+test tests::real_vm_rejects_the_identical_signed_transaction_as_already_processed ... ok
+SBF_CASE_PASS=funding_cpi_refund_and_repeated_instruction_after_close
+test tests::real_sbf_funding_cpi_refund_and_refusals_preserve_all_accounts ... ok
+SBF_SYSTEM_CPI_PASS minimum_invocations=2 compute_units=15740
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: Open
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: ySpgCHsJ1KT52AKPsNy0RITROHiGcq7FAl6Y+8iHrH9p9TYZOspmUAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEm4ZOoVsF6q+8Zq9dV1WBiiBeKG+ijNfzKh7+qrSAqDwAAAAJf7UeaZh9lLMaRZV2AqKs4GWl7Hu37a6GZgR+Q0BCDwAAAAAA6AMAAGQAAAAAAAAA
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 15740 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_CASE_PASS=admin_transfer_config_and_authority_refusals
+test tests::real_sbf_admin_transfer_and_config_update_preserve_authority ... ok
+SBF_CASE_PASS=dispute_authority_pause_and_conservation
+test tests::real_sbf_dispute_authority_and_pause_fail_closed ... ok
+SBF_ELF_SHA256=123e187d9254a8ad60811a7dac2acb9b1f0a84d1e9a7edce47cd1c8a9125b125 bytes=216408 sigverify=true precompiles=NOT_QUALIFIED
+SBF_SYSTEM_CPI_PASS minimum_invocations=1 compute_units=8934
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: InitializeConfig
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: tTHInBOnslvGBVoZIbeYHsMCO+2C+E4aT34fCtn7ORBrNSJ37CDU+QAAAA8JoPHuVYprQuF+mLnugu03s0NXRhDZZJRp8Nsy7keK752fUuTlVHVcreGMeVqWGXS87OXmuPII9KJ3cgk=
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 8934 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_SYSTEM_CPI_PASS minimum_invocations=2 compute_units=15740
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m invoke [1]
+SBF_CPI_LOG=Program log: Instruction: Open
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program 11111111111111111111111111111111 invoke [2]
+SBF_CPI_LOG=Program 11111111111111111111111111111111 success
+SBF_CPI_LOG=Program data: ySpgCHsJ1KSqv65vLoMm6NI3tneOe4ELPABd3NirN72KFBXsGU8jjAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDWvk9vtRLQxOsu9uEN5ICX+xSqw2ZctmZ8C8Uke13CyIAAAAOqddQPRYJSzYJwA0JYYgnNKiYE8nmb5WBtyzfAkBCDwAAAAAA6AMAAGQAAAAAAAAA
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m consumed 15740 of 200000 compute units
+SBF_CPI_LOG=Program Fg6PaFpoGXkYsidMpWxTWqkZq26fPRmKZX54C9V8uB9m success
+SBF_CASE_PASS=full_partial_settlements_and_repeated_instruction_after_close
+test tests::real_sbf_full_and_partial_settlements_conserve_principal_and_rent ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+
+   Doc-tests gpubnb_anchor_sbf_qualification
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "qualification": "NOT_COMPLETE",
+  "scope": "Anchor published SDK migration; no financial source edits",
+  "sourceBaseline": "ac28d513abd8084842c14de7cdc92765164bbc8a",
+  "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+  "candidateCargoLockSha256": "b1135274f50de9e02fd4e193115fe88e75b9c53bb4f9d2457f871e38f8a16cd7",
+  "hostTests": {
+    "passed": 17,
+    "failed": 0,
+    "ignored": 0,
+    "finance": 6,
+    "goldenWire": 7,
+    "borshZst": 2,
+    "publicRecoveryTests": 2,
+    "publicRecoveryCases": 1636
+  },
+  "wireRecordsByteEqual": 38,
+  "sourceFiles": {
+    "programs/gpu_escrow/Cargo.toml": "64e6f5b0080dfcba80fd1b80b6bca07e43b87702397409677ce4d3d955c3f3c4",
+    "programs/gpu_escrow/tests/borsh_zst_regression.rs": "9478e44e103aef887c21a24911f116a8bc016fdf147c20009e18eeadf71a38c3",
+    "programs/gpu_escrow/tests/secp256k1_host_compatibility.rs": "9c6ca1c93bd986b26e3e539db23c7068e771e093d050bc86170cf031cb711d45",
+    "programs/gpu_escrow/tests/anchor_wire_compatibility.rs": "17452ee04dbb6f1120a898681c112991580c2696beef9eaaf5fc52cbd828636b"
+  },
+  "unresolved": {
+    "rootDependencyGate": "GLib0.18.5 remains; GTK migration qualified separately",
+    "privateRuntimeTooling": "Precompiles in LiteSVM0.18.2 pull ed25519-dalek1/Rand0.7; tooling not included in this checkpoint, no scanner exemption",
+    "externalAudit": "NOT_PERFORMED; internal work only"
+  },
+  "notExecuted": [
+    "Mainnet",
+    "financial deployment",
+    "user keys",
+    "merge main/dev"
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T21:50:21.729916+00:00",
+  "scope": "Rust/GTK/Anchor architecture evidence for the exact published DOGE candidate; no external certification",
+  "publishedHead": "17bb3e2e7774d97538305759e706de6f6a8da0d1",
+  "testedVirtualMerge": "898ea2c01b96e56e8c375faf6d4c3323a2895b67",
+  "publishedAndTestedTree": "4fb75f3aab95895b8d841e240932cad083687fc6",
+  "sourceTreesComparedEqual": true,
+  "publishedCommitUrl": "https://github.com/khemisset18/gpubnb/commit/17bb3e2e7774d97538305759e706de6f6a8da0d1",
+  "financialProfile": {
+    "anchorVersion": "1.2.2",
+    "borsh010ParentsRemaining": 0,
+    "financialGraphSha256": "6b616dcf73618ebd71e849ecdad3cb974e798ac1aa4a22bc9977b451ee3644e9",
+    "financialSourceSha256": "ffaa27c11cc7873282a85b05f2cfc0bcd8a6b8baba3154575596225b5faa8b41",
+    "integrityModuleSha256": "1f14c1631d7e9c7ca855a110e46dfa4ff7a038000d48795c08ded7063b6f5b9a",
+    "packages": 182,
+    "profile": "qualified-anchor-sdk-1.2.2",
+    "sourcePinsSha256": "f3190633aa0099c477b77d4413df4615c4161b95f7c9c18ba8aaefadcdf17be7",
+    "unchangedAgainstReviewedBaseline": true
+  },
+  "rustQualification": {
+    "run": "https://github.com/khemisset18/gpubnb/actions/runs/44952572232",
+    "result": "PASS",
+    "commands": [
+      {
+        "command": [
+          "cargo",
+          "metadata",
+          "--locked",
+          "--all-features",
+          "--format-version=1"
+        ],
+        "name": "active-metadata",
+        "result": "PASS"
+      },
+      {
+        "command": [
+          "cargo",
+          "metadata",
+          "--locked",
+          "--all-features",
+          "--format-version=1"
+        ],
+        "name": "probe-metadata",
+        "result": "PASS"
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--release",
+          "-p",
+          "gpubnb-gtk-migration-probe",
+          "--",
+          "--nocapture"
+        ],
+        "name": "security-regressions",
+        "result": "PASS"
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "gpu_escrow"
+        ],
+        "name": "anchor-host",
+        "result": "PASS"
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "gpubnb-host-desktop",
+          "--all-targets"
+        ],
+        "name": "desktop-host",
+        "result": "PASS"
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "-p",
+          "gpubnb-host-desktop",
+          "--features",
+          "desktop-runtime",
+          "--all-targets"
+        ],
+        "name": "tauri-native-compile",
+        "result": "PASS"
+      }
+    ],
+    "artifactId": 14726063633,
+    "archiveSha256": "475e574001e14309791e9ba69d295a8847fe954eb046a8e25224ab7e45b49c6d",
+    "localReceipt": "published-rust/SHA256-index.json"
+  },
+  "nativeGui": {
+    "run": "https://github.com/khemisset18/gpubnb/actions/runs/44891701749",
+    "componentHead": "c7f32c1a2922c217e02d1cb4d91f005af89acdf1",
+    "result": "PASS",
+    "origin": "tauri://localhost",
+    "binarySha256": "4bd0439e6c31b2cf17fdd8fa7e6694645d07f6f8d54d253bf8f3752195d8ee35",
+    "screenshotSha256": "c2aafdd69098021b5910c1e2059721c79af365efe7d98ca9642ce87690b043b8",
+    "artifactId": 14701654615,
+    "archiveSha256": "8b3cbe3cb51e7ac4badafd9414a73a283e281fc458bf68eef668a4f8a4b62902",
+    "localReceipt": "success/SHA256-index.json",
+    "desktopCompiledPackageAndFeatureGraphsEquivalent": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ]
+  },
+  "publishedInstallers": "https://github.com/khemisset18/gpubnb/actions/runs/44952572210",
+  "publishedAnchorRuntime": "https://github.com/khemisset18/gpubnb/actions/runs/44952572222",
+  "publishedGeneralCI": "https://github.com/khemisset18/gpubnb/actions/runs/44952572246",
+  "localStrictScanner": {
+    "result": "PASS",
+    "findings": 0,
+    "allSeveritiesAndDevDependencies": true,
+    "controlsModified": false,
+    "receiptInGit": "docs/asset-exchange/research/2026-11-21/combined/preflight.json"
+  },
+  "criterionInterpretation": {
+    "D7": "The normative grid requires pre-lock recovery and crash/restart at persistence/broadcast boundaries. Physical mains power cuts are supplementary, not an invented mandatory gate. No physical reboot/power-cut result is claimed.",
+    "D8": "Software policy/bytes/signature validation can pass for its exact scope. No device transport, firmware, physical display, pairing or disconnect compatibility is claimed. This concerns signers, not an additional GPU hardware criterion.",
+    "D9": "Internal provenance/source/runtime review is evidenced; independent external audit is NOT_PERFORMED and activation remains separate."
+  },
+  "noMergeMainOrDev": true,
+  "noDeployment": true,
+  "noRealFundsOrMainnet": true,
+  "noUserPrivateKeys": true
+}

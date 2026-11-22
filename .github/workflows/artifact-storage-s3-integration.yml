@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      MINIO_IMAGE: cgr.dev/chainguard/minio@sha256:db3f583fa49121942168bd6383a773b2cde3384c9a99bf7193560b9a0f3a28fd
-      MINIO_AMD64_IMAGE: cgr.dev/chainguard/minio@sha256:a697f71bfd66a04519dcab6c68991fc29da077969eac3af5e26983e81e44a16a
+      MINIO_IMAGE: cgr.dev/chainguard/minio@sha256:68aab277f9748c7c3eb85f178744adba1655c8e33a86987b22d2879ca507c332
+      MINIO_AMD64_IMAGE: cgr.dev/chainguard/minio@sha256:7cf811b382510dc44cda32f659a198a58a99fddf4209c86f4c0f968306219ca3
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -62,6 +62,7 @@ jobs:
       - name: Scan actual pinned fixture without severity exclusions
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.2
           scan-type: image
           image-ref: ${{ env.MINIO_AMD64_IMAGE }}
           scanners: vuln

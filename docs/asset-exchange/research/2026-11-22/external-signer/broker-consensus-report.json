@@ -1,0 +1,238 @@
+{
+  "adapterPackageSha256": "bf9a22de52f64f1bf067c0e4d9f70a513496d86e9e1b709207c615e19558f034",
+  "automaticSettlement": false,
+  "broadcasts": 0,
+  "cases": [
+    {
+      "error": 0,
+      "expectedResult": 1,
+      "flags": 517,
+      "id": "broker-refund-1000000",
+      "inputIndex": 0,
+      "result": 1,
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c1483045022100c65909aab3f426707abcaf69acfa15339cd1a6c5bd4e3c8551dbb8caadc094d402200b07bb8f3160249786130231c2d06fe48fdbbdfbdcb8114abcd58c06d886ae6301004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff01c0a1fc53020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "transactionSha256": "8761d2fec1ea7f56c4e7e18f67d834381600d18734995257fd7e766dac8f0068"
+    },
+    {
+      "error": 0,
+      "expectedResult": 0,
+      "flags": 517,
+      "id": "post-sign-output-mutation-1000000",
+      "inputIndex": 0,
+      "result": 0,
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c1483045022100c65909aab3f426707abcaf69acfa15339cd1a6c5bd4e3c8551dbb8caadc094d402200b07bb8f3160249786130231c2d06fe48fdbbdfbdcb8114abcd58c06d886ae6301004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff01c1a1fc53020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "transactionSha256": "e776e3cf5db89e63de025524b0f9260c59e1280ad19074224892d9a79b69c6a4"
+    },
+    {
+      "error": 0,
+      "expectedResult": 1,
+      "flags": 517,
+      "id": "broker-refund-10000000",
+      "inputIndex": 0,
+      "result": 1,
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c1483045022100c9e4935c4368ed1598c6221f1dc88455ebcef3e7135ff2c6d1a6d88444cdc6b40220372d448aafba59bc6ca4f00a77e8f857c83cdc42531ecc27060f1eda57222e9d01004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff01804d7353020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "transactionSha256": "17df5dcc994364c60282cdfa56e6c0f18d39fb40c38e316f02028887d96c7dcb"
+    },
+    {
+      "error": 0,
+      "expectedResult": 0,
+      "flags": 517,
+      "id": "post-sign-output-mutation-10000000",
+      "inputIndex": 0,
+      "result": 0,
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c1483045022100c9e4935c4368ed1598c6221f1dc88455ebcef3e7135ff2c6d1a6d88444cdc6b40220372d448aafba59bc6ca4f00a77e8f857c83cdc42531ecc27060f1eda57222e9d01004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff01814d7353020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "transactionSha256": "188a1dc687bc639b4635cbe6d7d7adb8e7e10880a1d187a457f9dd08d63ec718"
+    },
+    {
+      "error": 0,
+      "expectedResult": 1,
+      "flags": 517,
+      "id": "broker-refund-100000000",
+      "inputIndex": 0,
+      "result": 1,
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c047304402204d3034323f659df56eacb0a9b1c4916315a23e94382c3e7ed48e3db5a65c0c5702204e502c79c1de6afcfc4e5ee0f48e8d49040a80ebe54563354996c7e0c5b5319501004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff010003164e020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "transactionSha256": "96c7a1ed5d9d8d157b166e6546978978389703df31becb4da8c8663bee237c02"
+    },
+    {
+      "error": 0,
+      "expectedResult": 0,
+      "flags": 517,
+      "id": "post-sign-output-mutation-100000000",
+      "inputIndex": 0,
+      "result": 0,
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c047304402204d3034323f659df56eacb0a9b1c4916315a23e94382c3e7ed48e3db5a65c0c5702204e502c79c1de6afcfc4e5ee0f48e8d49040a80ebe54563354996c7e0c5b5319501004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff010103164e020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "transactionSha256": "136380556ff98585e4084018136b9b038d6bae4f6a9652e9748000476f215f16"
+    }
+  ],
+  "childReceipt": {
+    "networkNamespace": "net:[4026532752]",
+    "parentPid": 2349,
+    "physicalUserApproval": false,
+    "pid": 2356,
+    "requestDigest": "28d65a1081bdedd84c00969d0434532d1ed12291a69931608d8f2441d23e03a1",
+    "sessionId": "86c6518b4f7f88df604633e3f6b824ab",
+    "signaturesProduced": 3,
+    "softwareFixtureApproval": true
+  },
+  "contract": {
+    "outputHex": "a914f21ed39cf2b4dddddd3c37ab896d9daeecc6685d87",
+    "redeemHex": "6382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68"
+  },
+  "executionCommit": "68ca4f72db340053d0208424ddba0235a57052d1",
+  "experimentStatus": "PASS",
+  "fixtureKeysCreated": 2,
+  "fixtureSourcesSha256": {
+    "__main__.py": "7d94aa2ba9c3b821a67f97c9696df06ce2fcdbd378d310f50630a5fe9bc13bb1",
+    "external_signer.py": "2d6f221e82cfc9b51113e9814f8830ccdfef87cee1050c7ea1468420edc7ac15",
+    "external_transport.py": "66937395f664de1a7ecdce49de9b337946541e5cf5c2e6ee4ae37ddb10494cc1",
+    "fixture.json": "613564213c83717009f4b0cde7261240cd2a7703b527b7ab2ac9205c78a11d43",
+    "htlc_codec.py": "e418e1ee51cffc37090f99dd4e35b13f9578feaa7831a6a1356aaa098db0db5e",
+    "offline_candidate.py": "b4a814f8e15b30bc41ae3175d1d3ff16ab982a90e1678a182b23498aba1277d2",
+    "refund_ladder.py": "3f285381488a19c1cd5c57b3e35d558a7279a9f8e57a7337a934c462bf5f5e56",
+    "spend_preparation.py": "d2d27ddea6b5a1a122b41f66f3d8acc1e44f5d2df5bafb65e67153f64205be35",
+    "test_signer.py": "f7894d1a87fa9375df8398a601ab8dfe7d587bb8e371f71fb86bec30d8abc9b5",
+    "transaction.py": "c791a4f92c63cb45b0fb5faad4c207a066e1be26fc010feebe8c01c3b79010fc"
+  },
+  "funding": {
+    "transactionHex": "01000000010101010101010101010101010101010101010101010101010101010101010101000000000151feffffff0100e40b540200000017a914f21ed39cf2b4dddddd3c37ab896d9daeecc6685d8700000000",
+    "txid": "4c91f2f53e35ad813403e2c7296505daebc50110b4fff85cae7955da4fe5f49c",
+    "valueKoinu": "10000000000",
+    "vout": 0
+  },
+  "fundingObservedOnChain": false,
+  "generatedBlocks": 0,
+  "hardwareQualified": false,
+  "harnessCommit": "ad2c374a6b5129fc7fb422ec3eb7d578ee92715c",
+  "heightSource": "CONSTANT_TEST_FIXTURE_NOT_CHAIN_OBSERVATION",
+  "keysRemoved": true,
+  "manifest": {
+    "authorization": "AUTHORIZE_D8_PRIVATE_BROKER_CONSENSUS_REGTEST",
+    "automaticSettlement": false,
+    "cAbiVersion": 1,
+    "d0ArchiveSha256": "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+    "feeStepsKoinu": [
+      "1000000",
+      "10000000",
+      "100000000"
+    ],
+    "flags": 517,
+    "hardwareQualified": false,
+    "inputIndex": 0,
+    "libraryMember": "dogecoin-1.14.9/lib/libdogecoinconsensus.so.0.0.0",
+    "librarySha256": "3c27dd2f3018a3bd659648129a94ba5f211e84b8ec6d308f7f0db001b5e7902b",
+    "maxAddressSpaceMiB": 1024,
+    "maxBroadcastFixtures": 0,
+    "maxCabiVerifications": 6,
+    "maxCpuSeconds": 90,
+    "maxFixtureKeys": 2,
+    "maxGeneratedBlocks": 0,
+    "maxNewSignatures": 3,
+    "maxRpc": 0,
+    "maxSignerChildren": 1,
+    "maxSingleFileMiB": 32,
+    "maxWallSeconds": 120,
+    "network": "regtest",
+    "nodes": 0,
+    "notEstablished": [
+      "UTXO existence/value/confirmation",
+      "transaction finality against a chain tip",
+      "mempool standardness, fee policy or admission",
+      "native consensus activation height",
+      "hardware, firmware provenance or physical user approval",
+      "full D0-D9 qualification"
+    ],
+    "phase": "D8_SOFTWARE_BROKER_CONSENSUS",
+    "physicalDisplayTested": false,
+    "qualificationStatus": "BLOCKED",
+    "rpcAllowlist": [],
+    "schemaVersion": 1,
+    "scope": "CONSENSUS_SCRIPT_INPUT_ONLY",
+    "sourceCommit": "e0a1c157791544e818c901bd9341896965afbf9d"
+  },
+  "mempoolChecked": false,
+  "namespaceAfter": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "namespaceBefore": [
+    {
+      "address": "00:00:00:00:00:00",
+      "broadcast": "00:00:00:00:00:00",
+      "flags": [
+        "LOOPBACK",
+        "UP",
+        "LOWER_UP"
+      ],
+      "group": "default",
+      "ifindex": 1,
+      "ifname": "lo",
+      "link_type": "loopback",
+      "linkmode": "DEFAULT",
+      "mtu": 65536,
+      "operstate": "UNKNOWN",
+      "qdisc": "noqueue",
+      "txqlen": 1000
+    }
+  ],
+  "networkNamespace": "net:[4026532752]",
+  "newSignatures": 3,
+  "nodesStarted": 0,
+  "pairingDigest": "741cbbe44863cf5fada17dd3dd234a7a39198372d8833c987d40c339b7f1d449",
+  "physicalDisplayTested": false,
+  "qualificationStatus": "BLOCKED",
+  "refunds": [
+    {
+      "destinationHex": "76a914111111111111111111111111111111111111111188ac",
+      "feeKoinu": "1000000",
+      "lockTime": 1355,
+      "outputValueKoinu": "9999000000",
+      "sequence": 4294967294,
+      "sha256": "8761d2fec1ea7f56c4e7e18f67d834381600d18734995257fd7e766dac8f0068",
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c1483045022100c65909aab3f426707abcaf69acfa15339cd1a6c5bd4e3c8551dbb8caadc094d402200b07bb8f3160249786130231c2d06fe48fdbbdfbdcb8114abcd58c06d886ae6301004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff01c0a1fc53020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "txid": "a20b92b83bf6588dbab35be242e2d44ae54bca5fa224dcdeed816606d63fde32"
+    },
+    {
+      "destinationHex": "76a914111111111111111111111111111111111111111188ac",
+      "feeKoinu": "10000000",
+      "lockTime": 1355,
+      "outputValueKoinu": "9990000000",
+      "sequence": 4294967294,
+      "sha256": "17df5dcc994364c60282cdfa56e6c0f18d39fb40c38e316f02028887d96c7dcb",
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c1483045022100c9e4935c4368ed1598c6221f1dc88455ebcef3e7135ff2c6d1a6d88444cdc6b40220372d448aafba59bc6ca4f00a77e8f857c83cdc42531ecc27060f1eda57222e9d01004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff01804d7353020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "txid": "7647550b60ca681c67a529b12cf47bc2985988580c849fe16b3f3277024ebb74"
+    },
+    {
+      "destinationHex": "76a914111111111111111111111111111111111111111188ac",
+      "feeKoinu": "100000000",
+      "lockTime": 1355,
+      "outputValueKoinu": "9900000000",
+      "sequence": 4294967294,
+      "sha256": "96c7a1ed5d9d8d157b166e6546978978389703df31becb4da8c8663bee237c02",
+      "transactionHex": "01000000019cf4e54fda5579ae5cf8ffb41001c5ebda056529c7e2033481ad353ef5f2914c00000000c047304402204d3034323f659df56eacb0a9b1c4916315a23e94382c3e7ed48e3db5a65c0c5702204e502c79c1de6afcfc4e5ee0f48e8d49040a80ebe54563354996c7e0c5b5319501004c756382012088a820505b300e384a3f2a9c4d77dd789d72d49c7d7556a64f67b7754e92f5dcb1ca6588210311834e23ce206ecf67ce9869a72032972388efb7f3845725b11cbf0507e180f6ac67024b05b1752102b10c2ef5d10fdd0da23b3734b78196d9119077b089d911350ae4dffb38bb4f9aac68feffffff010003164e020000001976a914111111111111111111111111111111111111111188ac4b050000",
+      "txid": "b27e74e4a111eab00b6f741579af4a6ff4e8994c7095988c1c43f5e1eb7fda99"
+    }
+  ],
+  "requestDigest": "28d65a1081bdedd84c00969d0434532d1ed12291a69931608d8f2441d23e03a1",
+  "rpcCalls": 0,
+  "scope": "CONSENSUS_SCRIPT_INPUT_ONLY",
+  "signerChildren": 1,
+  "syntheticHeight": 1353,
+  "termsDigest": "ea154f5a66e89a533e36dcbaf6495f2d251f3ce5daf3d3217ef2afdd8ab7e97e",
+  "transactionFinalityVerified": false
+}
