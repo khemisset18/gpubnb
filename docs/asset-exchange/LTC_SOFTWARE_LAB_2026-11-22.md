@@ -264,3 +264,28 @@ Aucun script HTLC Litecoin ni dépense/redeem/refund native testée,
 aucun RPC, nœud, wallet, matériel, signature ou diffusion.
 L'exclusion native de MWEB reste bloquée, et les qualifications
 L1–L9 complètes restent non acquises.
+
+## Complément L3 — présence statique des primitives dans Litecoin Core
+
+L'opérateur a exécuté un contrôle Python, en lecture seule, de la
+source `src/script/interpreter.cpp` du commit amont figé
+`ec1b6489a900d09cf5991e220dce089c77a232a2`. Le journal affiche :
+
+```text
+L3 : CLTV SOURCE OK
+L3 : CSV SOURCE OK
+L3 : SegWit v0 SOURCE OK
+L3 : Verification witness SOURCE OK
+L3 : Calcul sighash SOURCE OK
+L3 : CONTROLE STATIQUE TERMINE
+```
+
+Cette vérification prouve uniquement la **présence des cinq marqueurs**
+textuels dans le fichier source demandé. Elle ne teste pas leur
+activation par flags, les refus natifs aux bornes CLTV/CSV, la
+validation de signatures, les scripts/witness stacks, le consensus, le
+sighash concret d'un HTLC, ni l'intégration GPUbnb.
+
+**L3 état : SOURCE_MARKERS_PASS / NATIVE_SCRIPT_QUALIFICATION_BLOCKED**.
+Le dernier bilan logiciel exécuté sur WSL2 reste **61/61 PASS**.
+Toujours aucun wallet, nœud, signature, diffusion ou fonds réels.
