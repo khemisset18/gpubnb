@@ -15,6 +15,8 @@ on:
       - "asset-exchange/qualification/dogecoin/d8/test_d8_prephysical_gate.py"
       - "asset-exchange/qualification/dogecoin/d8/physical_request_preflight.py"
       - "asset-exchange/qualification/dogecoin/d8/test_physical_request_preflight.py"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_native_consensus.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_native_consensus.py"
       - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
   pull_request:
     paths:
@@ -23,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   ledger-doge-legacy-emulator:
@@ -82,6 +85,8 @@ jobs:
           assert data["chainHeightSourceAuthenticated"] is False
           assert data["broadcasts"] == data["realFundsUsed"] == 0
           PY
+      - name: Test signed synthetic Ledger refund native bridge before loading Dogecoin
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_native_consensus.py' -v
       - name: Fetch exact public Ledger Legacy DOGE application with submodules
         shell: bash
         run: |
@@ -240,6 +245,51 @@ jobs:
             "$RUNNER_TEMP/doge-ledger-synthetic-signature-result.json" \
             "$RUNNER_TEMP/doge-ledger-htlc-refund-probe.json" \
             "$RUNNER_TEMP/doge-ledger-d8-prephysical-gate.json"
+      - name: Download previously source-qualified D0 Dogecoin 1.14.9 only
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/d8-ledger-qualified-d0
+      - name: Verify frozen D0 and D1 execution identity plus source attestation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh \
+            "$RUNNER_TEMP/d8-ledger-qualified-d0" "$RUNNER_TEMP/d8-ledger-d0-verification"
+      - name: Use pinned native Dogecoin C ABI on exact Ledger synthetic HTLC refund in private Linux namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          PARENT_NS="$(readlink /proc/self/ns/net)"
+          test -n "$PARENT_NS"
+          sudo unshare --net -- /bin/bash -c '
+            set -euo pipefail
+            ip link set lo up
+            exec /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 "$@"
+          ' d8-ledger-native /usr/bin/python3 -B \
+            "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_native_consensus.py" \
+            --authorization AUTHORIZE_D8_LEDGER_SYNTHETIC_NATIVE_CONSENSUS_NO_CHAIN \
+            --ledger-report "$RUNNER_TEMP/doge-ledger-htlc-refund-probe.json" \
+            --d0-evidence "$RUNNER_TEMP/d8-ledger-qualified-d0" \
+            --work "$RUNNER_TEMP/d8-ledger-native-work" \
+            --output "$RUNNER_TEMP/doge-ledger-native-consensus-result.json"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/doge-ledger-native-consensus-result.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          report = json.loads((root / "doge-ledger-native-consensus-result.json").read_text())
+          assert report["experimentStatus"] == "PASS"
+          assert report["qualificationStatus"] == "BLOCKED"
+          assert report["nativePositive"] == 1 and report["nativeNegative"] == 11
+          assert len(report["cases"]) == 12 and report["nativeFlags"] == 517
+          assert not report["dogecoinRegtestSignerQualified"]
+          assert not report["hardwareQualified"]
+          assert report["rpcCalls"] == report["transactionsBroadcast"] == report["realDogeUsed"] == report["nodes"] == 0
+          PY
       - name: Preserve public emulator evidence even on build failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -254,6 +304,8 @@ jobs:
             ${{ runner.temp }}/doge-ledger-synthetic-signature-result.json
             ${{ runner.temp }}/doge-ledger-htlc-refund-probe.json
             ${{ runner.temp }}/doge-ledger-d8-prephysical-gate.json
+            ${{ runner.temp }}/doge-ledger-native-consensus-result.json
+            ${{ runner.temp }}/d8-ledger-d0-verification/*.json
             ${{ runner.temp }}/doge-d8-example-prephysical-review.json
           if-no-files-found: warn
           retention-days: 14
