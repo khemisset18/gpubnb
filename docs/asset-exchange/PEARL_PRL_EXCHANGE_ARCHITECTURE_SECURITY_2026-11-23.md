@@ -30,7 +30,7 @@ La présence de code n'est PAS une preuve de déploiement, d'authentification r�
 
 Le fichier asset-exchange/qualification/pearl/test_prl_exchange_gate.mjs contient **10 tests Node.js** de politique : ticker, statut/permissions PRL, non-régression BTC, refus des variantes de réseau et de famille, rejet dans les deux sens de l'offre, absence d'appel au vérificateur ou dépôt et invariance des données.
 
-Les **94 tests Python PRL précédents sont confirmés sur Ubuntu WSL2** au commit 9c685cc. Les **10 nouveaux tests Node.js sont ajoutés mais PAS ENCORE exécutés sur le poste de l'opérateur**.
+Sur Ubuntu WSL2, la suite Python **94/94 PASS**, la suite Node spécifique PRL **10/10 PASS** et les tests Node de non-régression du registre Exchange **5/5 PASS** sont confirmés sur le commit `60a39344ac662b7811725ea89f77192f206f64b6` (total **109/109**). Les commandes ont été exécutées en isolement réseau. Node portable `v24.22.3` a passé le SHA-256 attendu, sans vérification indépendante de l'identité du signataire.
 
 Commande sans réseau, depuis le dépôt Exchange PRL isolé :
 
