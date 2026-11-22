@@ -1433,10 +1433,14 @@ mod tests {
         assert_eq!(&wire[16..20], &25u32.to_le_bytes());
         assert_eq!(&wire[20..24], &[0u8; 4]);
         assert_eq!(&wire[24..32], &0x1122_3344_5566_7788u64.to_le_bytes());
-        assert!(encode_audio_capture_request(AudioCaptureRequest {
-            read_timeout_ms: 0,
-            ..request
-        }).is_ok(), "zero is the explicit non-blocking WASAPI poll mode");
+        assert!(
+            encode_audio_capture_request(AudioCaptureRequest {
+                read_timeout_ms: 0,
+                ..request
+            })
+            .is_ok(),
+            "zero is the explicit non-blocking WASAPI poll mode"
+        );
 
         for invalid in [
             AudioCaptureRequest {
@@ -1447,8 +1451,14 @@ mod tests {
                 target_process_id: 0,
                 ..request
             },
-            AudioCaptureRequest { read_timeout_ms: 1, ..request },
-            AudioCaptureRequest { read_timeout_ms: 9, ..request },
+            AudioCaptureRequest {
+                read_timeout_ms: 1,
+                ..request
+            },
+            AudioCaptureRequest {
+                read_timeout_ms: 9,
+                ..request
+            },
             AudioCaptureRequest {
                 read_timeout_ms: 151,
                 ..request

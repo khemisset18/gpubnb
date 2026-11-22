@@ -201,10 +201,7 @@ impl WorkerMediaPipe {
         maximum_size: usize,
         timeout_ms: u32,
     ) -> Result<Vec<u8>, PlatformError> {
-        if maximum_size == 0
-            || maximum_size > WORKER_MEDIA_MESSAGE_MAX
-            || timeout_ms == 0
-        {
+        if maximum_size == 0 || maximum_size > WORKER_MEDIA_MESSAGE_MAX || timeout_ms == 0 {
             return Err(PlatformError::PipeProtocolFailed);
         }
         #[cfg(target_os = "windows")]

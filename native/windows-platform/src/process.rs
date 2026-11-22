@@ -183,7 +183,9 @@ struct OwnedTokenHandle(Handle);
 impl Drop for OwnedTokenHandle {
     fn drop(&mut self) {
         // SAFETY: this wrapper uniquely owns the process token handle.
-        unsafe { let _ = CloseHandle(self.0); }
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
     }
 }
 
@@ -369,10 +371,10 @@ pub fn verify_renter_application_identity(
 
 fn process_token_user_sid(token: Handle) -> Result<String, PlatformError> {
     let mut required = 0u32;
-    let first = unsafe {
-        GetTokenInformation(token, TOKEN_USER_CLASS, ptr::null_mut(), 0, &mut required)
-    };
-    if first != 0 || required < size_of::<TokenUser>() as u32
+    let first =
+        unsafe { GetTokenInformation(token, TOKEN_USER_CLASS, ptr::null_mut(), 0, &mut required) };
+    if first != 0
+        || required < size_of::<TokenUser>() as u32
         || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
     {
         return Err(PlatformError::RenterTokenQueryFailed);
@@ -415,7 +417,9 @@ fn process_token_user_sid(token: Handle) -> Result<String, PlatformError> {
         String::from_utf16(unsafe { std::slice::from_raw_parts(sid_text, units) })
             .map_err(|_| PlatformError::RenterTokenQueryFailed)
     };
-    unsafe { let _ = LocalFree(sid_text.cast::<c_void>() as Handle); }
+    unsafe {
+        let _ = LocalFree(sid_text.cast::<c_void>() as Handle);
+    }
     result
 }
 
