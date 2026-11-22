@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS_LOCAL_REPRODUCIBLE_SOURCE_SCOPE",
+  "sourceCommit": "68ca4f72db340053d0208424ddba0235a57052d1",
+  "sourceTree": "afcf418adda6bcad73131598e9fe39116dac38ee",
+  "sourceDateEpoch": 1795365887,
+  "files": {
+    "SHA256SUMS": {
+      "sha256": "d4203731cef1d438f5c80f916d90046ac31985ba71929bdb085d1c76990a4b57",
+      "bytes": 219
+    },
+    "gpu.k.p2p-asset-exchange-source-v1.spdx.json": {
+      "sha256": "7386e28d9b2cb6eb726246465b5fc1533db3dc09836943c1339a638ca2826ae9",
+      "bytes": 553641
+    },
+    "gpu.k.p2p-asset-exchange-source-v1.tar.gz": {
+      "sha256": "74a4ede56545db7746a995809222dce2228d514e772ee92f1fa310593d20b5f7",
+      "bytes": 2172112
+    }
+  },
+  "spdxFileCount": 770,
+  "scope": [
+    ".github/workflows/asset-exchange-*.yml",
+    ".github/workflows/workspace-reliability.yml",
+    "asset-exchange/**",
+    "docs/asset-exchange/**"
+  ],
+  "twoBuildsByteIdentical": true,
+  "newGithubAttestation": "NOT_PERFORMED",
+  "externalIndependentAudit": "NOT_PERFORMED_OUTSIDE_MISSION"
+}

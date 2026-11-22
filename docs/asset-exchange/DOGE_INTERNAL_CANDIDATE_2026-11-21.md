@@ -1,5 +1,10 @@
 # DOGE — candidat interne consolidé du 21 novembre 2026
 
+> Mise à jour du 22 novembre : le transport externe, l'appairage et le journal
+> logiciel sont désormais implémentés et testés. Voir le
+> [nouveau candidat et ses preuves](DOGE_EXTERNAL_SIGNER_INTERNAL_2026-11-22.md).
+> Le présent document conserve l'état historique du 21 ; D8 matériel reste bloqué.
+
 **DOGE — VALIDATION TECHNIQUE INTERNE : BLOCKED.**
 Le candidat logiciel et ses contrôles de sécurité passent. La qualification
 complète reste bloquée par D2/D8 : le profil final exige une compatibilité de

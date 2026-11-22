@@ -1,5 +1,10 @@
 # DOGE D7–D8: process-crash evidence and physical test procedure
 
+> Mise à jour du 22 novembre : l'ancien manque de transport/appairage logiciel
+> est résolu par le [nouveau broker et ses preuves](DOGE_EXTERNAL_SIGNER_INTERNAL_2026-11-22.md).
+> Les états NOT_IMPLEMENTED ci-dessous décrivent l'instantané du 20 ; le driver
+> matériel et les essais physiques H8.* restent non réalisés.
+
 > Clarification du 21 novembre : les H7.* sont des essais supplémentaires préparés.
 > La grille D7 exige les frontières crash/restart, pas une coupure secteur physique.
 > L'absence de coupure secteur ne constitue donc pas un nouveau gate obligatoire.
