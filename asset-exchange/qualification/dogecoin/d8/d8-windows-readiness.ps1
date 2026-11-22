@@ -114,4 +114,8 @@ if (-not [string]::IsNullOrWhiteSpace($OutputFile)) {
         $stream.Dispose()
     }
 }
+# A missing WSL2 distro is a *reported readiness state*, not a failing native
+# executable test. Reset the diagnostic's native exit code after inspection;
+# PowerShell exceptions and file-write errors still fail closed.
+$global:LASTEXITCODE = 0
 Write-Output $json
