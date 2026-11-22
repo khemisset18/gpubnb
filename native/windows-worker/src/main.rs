@@ -27,6 +27,10 @@ use gpubnb_windows_platform::pipe::{
     connect_worker_pipe_client,
 };
 #[cfg(target_os = "windows")]
+use gpubnb_windows_platform::process::{
+    RenterApplicationProcess, launch_qualified_gaming_application,
+};
+#[cfg(target_os = "windows")]
 use gpubnb_windows_platform::session::{
     current_process_session_id, ensure_current_renter_input_desktop,
 };
@@ -533,6 +537,9 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
         let mut console_mode = None;
         let mut media_state = MediaState::Empty;
         let mut media_session: Option<ActiveMediaSession> = None;
+        // Declare Steam before any future audio-capture RAII state: locals drop
+        // in reverse order, so later audio state closes before Steam on STOP.
+        let mut gaming_application: Option<RenterApplicationProcess> = None;
         loop {
             // This worker is persistent for the lifetime of the native desktop
             // session. Idleness is not a protocol failure: wait indefinitely for
@@ -601,6 +608,16 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("capture_gpu_luid_mismatch", 21));
                     }
 
+                    if matches!(args.workspace, WorkspaceKind::Gaming)
+                        && gaming_application.is_none()
+                    {
+                        ensure_current_renter_input_desktop(windows_session_id)
+                            .map_err(|_| WorkerError::new("renter_desktop_not_active", 21))?;
+                        let application = launch_qualified_gaming_application(windows_session_id)
+                            .map_err(|_| WorkerError::new("gaming_application_launch_failed", 21))?;
+                        gaming_application = Some(application);
+                    }
+
                     let mut session =
                         match open_worker_media(args, windows_session_id, spec, console) {
                             Ok(session) => session,
@@ -649,6 +666,14 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     }
                     let spec =
                         display_spec.ok_or_else(|| WorkerError::new("display_not_prepared", 21))?;
+                    if matches!(args.workspace, WorkspaceKind::Gaming)
+                        && gaming_application
+                            .as_ref()
+                            .and_then(|application| application.ensure_running().ok())
+                            .is_none()
+                    {
+                        return Err(WorkerError::new("gaming_application_exited", 21));
+                    }
                     let session = media_session
                         .as_mut()
                         .ok_or_else(|| WorkerError::new("media_session_missing", 21))?;
