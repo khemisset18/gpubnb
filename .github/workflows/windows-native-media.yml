@@ -98,7 +98,10 @@ jobs:
             "GPUbnbMediaOpen",
             "GPUbnbMediaReadFrame",
             "GPUbnbMediaGetLastDiagnostic",
-            "GPUbnbMediaClose"
+            "GPUbnbMediaClose",
+            "GPUbnbAudioOpenForRenterProcess",
+            "GPUbnbAudioRead",
+            "GPUbnbAudioClose"
           )) {
             $pattern = "(?m)^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+" + [regex]::Escape($symbol) + "(?:\s+=\s+" + [regex]::Escape($symbol) + ")?\s*$"
             if ($exports -notmatch $pattern) {

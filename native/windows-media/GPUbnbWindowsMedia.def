@@ -7,3 +7,6 @@ EXPORTS
     GPUbnbMediaClose
     GPUbnbConsoleMediaOpen
     GPUbnbConsoleMediaReadFrame
+    GPUbnbAudioOpenForRenterProcess
+    GPUbnbAudioRead
+    GPUbnbAudioClose

@@ -5,6 +5,7 @@
 
 #define GPUBNB_WINDOWS_MEDIA_ABI_VERSION 2u
 #define GPUBNB_WINDOWS_MEDIA_DIAGNOSTIC_VERSION 1u
+#define GPUBNB_WINDOWS_AUDIO_ABI_VERSION 1u
 // Explicitly separate ABI; an IddCx/nonced request must never silently select
 // an existing console monitor. This ABI is not wired to rental readiness.
 #define GPUBNB_CONSOLE_MEDIA_ABI_VERSION 3u
@@ -149,6 +150,77 @@ static_assert(sizeof(GPUbnbMediaFrameResult) == 64, "GPUbnb media frame ABI drif
 static_assert(sizeof(GPUbnbMediaDiagnostic) == 64, "GPUbnb media diagnostic ABI drift");
 static_assert(sizeof(GPUbnbConsoleProbeRequest) == 80, "GPUbnb console request ABI drift");
 static_assert(sizeof(GPUbnbConsoleMediaFrameResult) == 64, "GPUbnb console frame ABI drift");
+
+enum GPUbnbAudioSampleFormat : uint16_t
+{
+    GPUBNB_AUDIO_SAMPLE_IEEE_FLOAT32 = 1,
+    GPUBNB_AUDIO_SAMPLE_PCM_UINT8 = 2,
+    GPUBNB_AUDIO_SAMPLE_PCM_INT16 = 3,
+    GPUBNB_AUDIO_SAMPLE_PCM_INT24 = 4,
+    GPUBNB_AUDIO_SAMPLE_PCM_INT32 = 5,
+};
+
+enum GPUbnbAudioPacketFlags : uint32_t
+{
+    GPUBNB_AUDIO_PACKET_SILENT = 1u << 0,
+    GPUBNB_AUDIO_PACKET_DISCONTINUITY = 1u << 1,
+};
+
+constexpr uint32_t GPUBNB_AUDIO_PACKET_MAX_BYTES = 512u * 1024u;
+
+#pragma pack(push, 1)
+struct GPUbnbAudioCaptureRequest
+{
+    uint32_t Size;
+    uint32_t Version;
+    uint32_t WindowsSessionId;
+    uint32_t TargetProcessId;
+    uint32_t BufferDurationMs;
+    uint32_t Reserved;
+};
+
+// Payload is the selected renter game process tree's WASAPI mix format. It does
+// not capture the whole Windows session or any unrelated process audio. This
+// API returns raw PCM; it does not claim compressed transport readiness.
+struct GPUbnbAudioPacketResult
+{
+    uint32_t Size;
+    uint32_t Version;
+    uint32_t WindowsSessionId;
+    uint32_t TargetProcessId;
+    uint32_t SampleRate;
+    uint16_t Channels;
+    uint16_t SampleFormat;
+    uint32_t Frames;
+    uint32_t PayloadBytes;
+    uint64_t DevicePositionFrames;
+    uint64_t QpcPosition100ns;
+    uint32_t Flags;
+    uint32_t Reserved[3];
+};
+#pragma pack(pop)
+
+static_assert(sizeof(GPUbnbAudioCaptureRequest) == 24, "GPUbnb audio request ABI drift");
+static_assert(sizeof(GPUbnbAudioPacketResult) == 64, "GPUbnb audio packet ABI drift");
+
+struct GPUbnbAudioCapture;
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
+    const GPUbnbAudioCaptureRequest* request,
+    GPUbnbAudioCapture** capture);
+
+extern "C" __declspec(dllexport)
+HRESULT __stdcall GPUbnbAudioRead(
+    GPUbnbAudioCapture* capture,
+    uint8_t* payload,
+    uint32_t payloadCapacity,
+    GPUbnbAudioPacketResult* result);
+
+extern "C" __declspec(dllexport)
+// Open, read, and close must run on the same worker thread. Process loopback
+// is intentionally scoped to one game process tree, never the owner's mix.
+HRESULT __stdcall GPUbnbAudioClose(GPUbnbAudioCapture* capture);
 
 struct GPUbnbMediaSession;
 
