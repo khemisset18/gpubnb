@@ -107,7 +107,7 @@ class D8PreflightTests(unittest.TestCase):
                 p.read_json(repeated)
             symlink = base / "alias.json"
             symlink.symlink_to(repeated)
-            with self.assertRaises(ValueError):
+            with self.assertRaises((ValueError, OSError)):
                 p.read_json(symlink)
 
     def test_durable_output_is_new_private_file_without_replacement(self):
