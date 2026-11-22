@@ -341,3 +341,60 @@ sans `sudo`, sans `apt` global, sans `npm install`, sans changer
 le PATH permanent ni les autres worktrees. Les tests Node
 seront lancés en isolement réseau uniquement après la
 vérification du binaire. Pas de route API démarrée.
+
+## Attestation opérateur — Node.js 24.22.3 et 109/109 tests PASS sur WSL2
+
+Le compte rendu transmis par l'opérateur après installation **portable** de
+Node.js dans `$HOME/gpubnb-exchange-tools` confirme les résultats ci-dessous,
+sur la branche d'architecture PRL et le commit **`60a39344ac662b7811725ea89f77192f206f64b6`** :
+
+```text
+=== PRL : 94 TESTS PYTHON ===
+Ran 94 tests in 0.060s
+OK
+=== VERIFICATION SHA256 ===
+/home/hicham/gpubnb-exchange-tools/node-v24.22.3-linux-x64.tar.xz: OK
+=== VERSION NODE ===
+v24.22.3
+=== 10 TESTS ARCHITECTURE PRL ===
+ℹ tests 10
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+=== NON-REGRESSION REGISTRE EXCHANGE ===
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+=== ETAT FINAL GIT ===
+60a3934
+## experiment/pearl-prl-architecture-hardening-20261123...origin/experiment/pearl-prl-architecture-hardening-20261123
+```
+
+**Bilan démontré sur le PC : 94 tests Python PRL + 10 tests Node.js
+spécifiques à l'architecture Pearl + 5 tests Node.js de non-régression
+du registre Asset Exchange = 109/109 tests PASS.** Les exécutions des
+tests Python et Node.js ont eu lieu via `unshare --user --map-root-user
+--net`. La vérification SHA-256 du binaire Node correspond à l'empreinte
+attendue dans la commande opérateur ; elle ne constitue PAS en elle-même
+une attestation indépendante du signataire du binaire.
+
+Les tests Node.js confirment les contrôles ciblés du
+`test_prl_exchange_gate.mjs` : symbole PRL dans le catalogue Exchange,
+`identityReady=false`, `newOffersEnabled=false`, refus fail-closed
+des propositions Pearl en give/want (mainnet/regtest/simnet/testnet
+et fausses familles TOKEN/NFT), absence d'appel au vérificateur de
+signature ou au repository pendant ces refus et non-régression
+du catalogue BTC dans les scénarios testés.
+
+**Cela ne qualifie ni l'acceptation d'éventuelles offres PRL historiques
+en base, ni le déploiement API, ni les signatures, ni la chaîne,
+ni la récupération ni les règlements financiers.** L'identité PRL reste
+non vérifiée et toutes les capacités de publication/transaction
+automatiques concernant PRL restent désactivées.
+Aucune modification aux fichiers ou profils de minage n'a été effectuée.
+
+**Checkpoint : PRL_EXCHANGE_OFFLINE_109_PASS /
+REAL_PRL_OFFERS_AND_SETTLEMENT_BLOCKED.**
