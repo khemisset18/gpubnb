@@ -34,6 +34,17 @@ class LedgerHtlcProbeTests(unittest.TestCase):
         self.assertNotEqual(digest, h.spend_digest(funding, redeem, different))
         with self.assertRaises(ValueError):
             h.spend_digest(funding, redeem, outputs, sequence=0xffffffff)
+        self.assertNotEqual(digest, h.spend_digest(funding, redeem, outputs,
+            sequence=h.SEQUENCE-1, negative_only=True))
+        self.assertNotEqual(digest, h.spend_digest(funding, redeem, outputs,
+            sighash_type=2, negative_only=True))
+        with self.assertRaises(ValueError):
+            h.spend_digest(funding, redeem, outputs, sighash_type=2)
+        changed = funding[:7] + bytes([funding[7] ^ 1]) + funding[8:]
+        self.assertNotEqual(digest, h.spend_digest(changed, redeem, outputs))
+        destination = h.tx.p2pkh_script(bytes([3] * 20))
+        self.assertNotEqual(digest, h.spend_digest(funding, redeem,
+            b"\x01" + h.tx.output(h.tx.PAYMENT_KOINU, destination)))
 
     def test_refund_scriptsig_only_branch_false_with_canonical_redeem(self):
         key = b"\x02" + h.tx.G[0].to_bytes(32, "big")
