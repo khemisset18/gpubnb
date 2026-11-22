@@ -107,13 +107,13 @@ jobs:
           set -euo pipefail
           docker pull ghcr.io/ledgerhq/speculos:latest
           docker image inspect ghcr.io/ledgerhq/speculos:latest --format '{{json .RepoDigests}}'
-          docker run -d --rm --network none --name doge-speculos \
+          docker run -d --network none --name doge-speculos \
             -v "$APP_ROOT:/speculos/apps:ro" \
             -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py:/speculos/ledger_emulator_probe.py:ro" \
             -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py:/speculos/ledger_tx_sign_probe.py:ro" \
             ghcr.io/ledgerhq/speculos:latest \
             --model nanosp --display headless --api-port 5000 apps/doge-test.elf
-          trap 'docker logs doge-speculos 2>&1 | tail -n 60 || true; docker rm -f doge-speculos >/dev/null 2>&1 || true' EXIT
+          trap 'docker inspect doge-speculos --format "{{json .State}}" || true; docker logs doge-speculos 2>&1 | tail -n 85 || true; docker rm -f doge-speculos >/dev/null 2>&1 || true' EXIT
           ready=0
           for i in $(seq 1 40); do
             if docker exec doge-speculos python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:5000/",timeout=2).read()' >/dev/null 2>&1; then
