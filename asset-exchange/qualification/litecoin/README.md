@@ -121,3 +121,24 @@ Ce module **ne génère pas de transactions, ne signe rien, ne fait
 aucun appel réseau ni RPC et ne prouve aucune standardness ou consensus
 natif**. L'exécution et la validité d'un refund Litecoin restent
 bloquées jusqu'aux essais natifs. Ne pas intégrer au runtime financier.
+
+## L3 — modèle hypothétique de finalité de remboursement (sans transaction)
+
+`refund_height_model.py` utilise uniquement des **entiers et des
+valeurs publiques fictives** pour modéliser partiellement les
+comparaisons `CheckLockTime` et `IsFinalTx` observées dans Litecoin
+Core v0.21.5.8. Il montre par exemple qu'à hauteur cible 450,
+la hauteur hypothétique 450 est encore insuffisante pour le test
+de finalité, tandis que 451 satisfait ces comparaisons restreintes.
+
+**ATTENTION : il ne connaît ni la chaîne ni son état, ne peut pas
+déterminer une hauteur réelle, ne vérifie aucun script/witness/sighash,
+n'interagit avec aucun nœud et ne produit aucune transaction.**
+Le résultat `SIMULATED_SCALAR_CONDITIONS_MET_NO_CHAIN_PROOF`
+ne donne **jamais** une autorisation : `canRefund=false`,
+`canSign=false`, `canBroadcast=false`, `qualified=false`.
+
+`test_refund_height_model.py` ajoute **23 tests locaux PASS**,
+à confirmer sur l'Ubuntu WSL2 de l'opérateur. Le nouveau total
+attendu est **110 tests distincts** (87 attestés sur WSL2 + 23 nouveaux).
+Ne pas confondre comparaison simulée et acceptation par consensus.
