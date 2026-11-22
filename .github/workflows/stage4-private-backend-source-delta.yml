@@ -31,6 +31,9 @@ jobs:
       # A changed API source is EXPECTED here; this read-only report does not
       # attest that Render runs the candidate. Recheck live deployment identity
       # before any physical test, and never confuse source drift with parity.
+      # The candidate also changes apps/web. Keep web-source parity fail-closed:
+      # a local UI change is not proof that the private Render image runs it.
+      # The report now prints the changed paths before the parity check fails.
       - name: Record candidate API drift from observed Render source (read-only)
         env:
           REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -153,6 +153,10 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(expected, result.stderr)
+                self.assertIn('"changedPaths"', result.stdout)
+                if changed_path.startswith("apps/web/"):
+                    self.assertIn('"webAssetsIdenticalAtSource": false', result.stdout)
+                    self.assertIn(changed_path, result.stdout)
                 self._git("reset", "--hard", self.base)
 
     def test_cli_rejects_contradictory_expectations(self) -> None:
