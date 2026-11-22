@@ -55,12 +55,11 @@ const qualificationBookingStatuses: BookingStatus[] = [
 const WINDOWS_NATIVE_QUALIFICATION_SECONDS = 30 * 60;
 
 /**
- * Private Cloud Desktop qualification stays closed until renter-scoped audio
- * is proven end to end by the Windows helper, gateway and browser. The
- * current transport only proves H.264 video and keyboard/mouse; a silent
- * desktop is not a complete Workspace and must not create a booking/session.
+ * Private Cloud Desktop qualification stays closed until the process-scoped
+ * PCM path is proven on Windows and real PC1/PC2 hardware. The software path
+ * exists; isolation, device behavior and STOP are unqualified.
  */
-const WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON = 'windows_native_browser_audio_unimplemented' as const;
+const WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASON = 'windows_native_audio_not_qualified' as const;
 
 function windowsNativePrivateMediaReady(): boolean {
   return false;

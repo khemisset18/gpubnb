@@ -77,7 +77,7 @@ export function safeNativeDesktopErrorCode(error) {
   return SAFE_NATIVE_DESKTOP_ERROR_CODES.has(message) ? message : 'windows_native_client_failed';
 }
 
-import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-gamepad-pointer-lock-1';
+import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-av-audio-1';
 import { Stage4VideoContinuity } from './windows-native-continuity.js?v=20261016-1';
 
 const NATIVE_RECONNECT_DELAYS_MS = Object.freeze([250, 500, 1000, 2000, 5000]);
@@ -119,6 +119,8 @@ export function mountWindowsNativeDesktop({
   const stopSessionButton = documentObject.querySelector('#nativeDesktopStopSession');
   const fullscreenButton = documentObject.querySelector('#nativeDesktopFullscreen');
   const pointerLockButton = documentObject.querySelector('#nativeDesktopPointerLock');
+  const audioEnableButton = documentObject.querySelector('#nativeDesktopAudioEnable');
+  const audioVolume = documentObject.querySelector('#nativeDesktopAudioVolume');
   const proofIndicator = documentObject.querySelector('#nativeDesktopContinuity');
   const gamingWorkspace = documentObject.body?.dataset?.workspaceKind === 'gaming';
   if (!canvas || !status || !closeButton) {
@@ -184,6 +186,13 @@ export function mountWindowsNativeDesktop({
   };
   fullscreenButton?.addEventListener('click', requestFullscreen);
   pointerLockButton?.addEventListener('click', togglePointerLock);
+  const enableAudio = () => { void currentClient?.enableAudio?.(); };
+  const changeAudioVolume = () => {
+    const volume = Number(audioVolume?.value);
+    if (Number.isFinite(volume)) currentClient?.setAudioVolume?.(volume);
+  };
+  audioEnableButton?.addEventListener('click', enableAudio);
+  audioVolume?.addEventListener('input', changeAudioVolume);
   documentObject.addEventListener?.('fullscreenchange', updateFullscreenButton);
   documentObject.addEventListener?.('pointerlockchange', updatePointerLockButton);
   updateFullscreenButton();
@@ -269,6 +278,22 @@ export function mountWindowsNativeDesktop({
       canvas,
       onState: (state) => {
         if (client !== currentClient) return;
+
+        if (state?.audioState === 'enabled') {
+          if (audioEnableButton) {
+            audioEnableButton.textContent = 'Son activé';
+            audioEnableButton.setAttribute?.('aria-pressed', 'true');
+          }
+        } else if (state?.audioState === 'waiting-for-gesture' || state?.audioState === 'blocked') {
+          if (audioEnableButton) {
+            audioEnableButton.textContent = 'Activer le son';
+            audioEnableButton.setAttribute?.('aria-pressed', 'false');
+          }
+        } else if (state?.audioState === 'closed' && audioEnableButton) {
+          audioEnableButton.textContent = 'Son arrêté';
+          audioEnableButton.setAttribute?.('aria-pressed', 'false');
+        }
+        if (state?.audioState) return;
 
         if (state?.state === 'closed') {
           // Record only WebSocket protocol metadata to diagnose the FIRST
@@ -380,6 +405,8 @@ export function mountWindowsNativeDesktop({
     documentObject.removeEventListener?.('pointerlockchange', updatePointerLockButton);
     fullscreenButton?.removeEventListener?.('click', requestFullscreen);
     pointerLockButton?.removeEventListener?.('click', togglePointerLock);
+    audioEnableButton?.removeEventListener?.('click', enableAudio);
+    audioVolume?.removeEventListener?.('input', changeAudioVolume);
     stopSessionButton?.removeEventListener?.('click', requestSessionStop);
     setStatus(statusMessage);
   };

@@ -229,6 +229,31 @@ pub enum MediaProbeError {
     Diagnostic(MediaFailureDiagnostic),
 }
 
+/// Returns the Windows QPC clock converted to 100 ns units, the same time base
+/// reported by WASAPI process-loopback packets. The caller samples this directly
+/// after video capture/encoding so the browser can align both media tracks.
+pub fn current_qpc_position_100ns() -> Result<u64, MediaProbeError> {
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::current_qpc_position_100ns()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(MediaProbeError::WindowsRequired)
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn qpc_to_100ns(counter: i64, frequency: i64) -> Option<u64> {
+    if counter <= 0 || frequency <= 0 {
+        return None;
+    }
+    let scaled = (counter as u128)
+        .checked_mul(10_000_000)?
+        .checked_div(frequency as u128)?;
+    u64::try_from(scaled).ok().filter(|value| *value > 0)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AudioCaptureRequest {
     pub windows_session_id: u32,
@@ -355,7 +380,7 @@ fn encode_audio_capture_request(
 ) -> Result<[u8; AUDIO_CAPTURE_REQUEST_SIZE], MediaProbeError> {
     if request.windows_session_id == 0
         || request.target_process_id == 0
-        || !(10..=150).contains(&request.read_timeout_ms)
+        || (request.read_timeout_ms != 0 && !(10..=150).contains(&request.read_timeout_ms))
         || request.target_process_creation_time_100ns == 0
     {
         return Err(MediaProbeError::InvalidRequest);
@@ -762,6 +787,20 @@ mod windows_impl {
         fn LoadLibraryExW(file_name: *const u16, file: isize, flags: u32) -> Hmodule;
         fn GetProcAddress(module: Hmodule, name: *const c_char) -> *mut c_void;
         fn FreeLibrary(module: Hmodule) -> i32;
+        fn QueryPerformanceCounter(counter: *mut i64) -> i32;
+        fn QueryPerformanceFrequency(frequency: *mut i64) -> i32;
+    }
+
+    pub(super) fn current_qpc_position_100ns() -> Result<u64, MediaProbeError> {
+        let mut counter = 0i64;
+        let mut frequency = 0i64;
+        // SAFETY: both out pointers refer to initialized writable i64 values.
+        if unsafe { QueryPerformanceCounter(&mut counter) } == 0
+            || unsafe { QueryPerformanceFrequency(&mut frequency) } == 0
+        {
+            return Err(MediaProbeError::ProbeFailed);
+        }
+        qpc_to_100ns(counter, frequency).ok_or(MediaProbeError::InvalidResult)
     }
 
     pub(super) struct PersistentSession {
@@ -1394,6 +1433,10 @@ mod tests {
         assert_eq!(&wire[16..20], &25u32.to_le_bytes());
         assert_eq!(&wire[20..24], &[0u8; 4]);
         assert_eq!(&wire[24..32], &0x1122_3344_5566_7788u64.to_le_bytes());
+        assert!(encode_audio_capture_request(AudioCaptureRequest {
+            read_timeout_ms: 0,
+            ..request
+        }).is_ok(), "zero is the explicit non-blocking WASAPI poll mode");
 
         for invalid in [
             AudioCaptureRequest {
@@ -1404,10 +1447,8 @@ mod tests {
                 target_process_id: 0,
                 ..request
             },
-            AudioCaptureRequest {
-                read_timeout_ms: 9,
-                ..request
-            },
+            AudioCaptureRequest { read_timeout_ms: 1, ..request },
+            AudioCaptureRequest { read_timeout_ms: 9, ..request },
             AudioCaptureRequest {
                 read_timeout_ms: 151,
                 ..request
@@ -1422,6 +1463,15 @@ mod tests {
                 Err(MediaProbeError::InvalidRequest)
             );
         }
+    }
+
+    #[test]
+    fn qpc_conversion_uses_100ns_and_rejects_invalid_clock_values() {
+        assert_eq!(qpc_to_100ns(1_000, 10_000_000), Some(1_000));
+        assert_eq!(qpc_to_100ns(2_500, 2_500), Some(10_000_000));
+        assert_eq!(qpc_to_100ns(0, 10_000_000), None);
+        assert_eq!(qpc_to_100ns(1, 0), None);
+        assert_eq!(qpc_to_100ns(-1, 10_000_000), None);
     }
 
     #[test]

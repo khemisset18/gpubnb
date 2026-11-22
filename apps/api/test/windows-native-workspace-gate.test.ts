@@ -115,7 +115,7 @@ test('4GB GTX 1650 meets the Gaming capacity floor but owner opt-in stays blocke
     entryLevelWindows, manifest, 'gaming', gpuUuid,
   );
   assert.equal(ownerResult.candidate, false);
-  assert.ok(ownerResult.missing.some(reason => reason.includes('Audio navigateur ou manette')));
+  assert.ok(ownerResult.missing.some(reason => reason.includes('Audio non qualifié')));
 });
 
 test('non-Linux operating systems cannot inherit the Linux desktop backend', async () => {

@@ -36,10 +36,10 @@ not been verified for the requested revision.
 
 | Workspace | Current code status | Remaining proof before a real renter test |
 | --- | --- | --- |
-| Cloud Desktop | **Disabled** | Implement and qualify end-to-end renter-scoped audio; verify isolation, exact GPU capture, Windows STOP cleanup and browser video/input on a dedicated Host. |
+| Cloud Desktop | **Disabled** | Qualify the new bounded PCM/Web Audio path on a dedicated Host; verify isolation, exact GPU capture, STOP cleanup and browser video/input. Audio software plumbing exists but has no Windows or hardware proof. |
 | Creator / Blender | **Disabled** | Verify the signed Host package, Blender launch, GPU rendering, session boundary, network restrictions, audio expectations and STOP cleanup on a dedicated Host. |
 | CAD / FreeCAD | **Disabled** | Verify the signed Host package, FreeCAD launch, precise input, GPU rendering, session boundary, network restrictions and STOP cleanup on a dedicated Host. |
-| Gaming / Steam | **Disabled** | Implement and verify browser audio and Gamepad API input end-to-end, measure latency, and resolve game-content and GPU-driver commercial licensing. |
+| Gaming / Steam | **Disabled** | Add an authorized game selector/launch contract, qualify audio/video/input and STOP on real hardware, provide native XInput if required, measure latency, and resolve game-content and GPU-driver commercial licensing. The current controller bridge maps browser Gamepad events to keyboard/mouse only. |
 
 The four choice buttons identify the requested profile; they do not imply that
 its applications or media path are installed or operational. No profile may

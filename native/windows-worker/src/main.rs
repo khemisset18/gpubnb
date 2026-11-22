@@ -16,8 +16,9 @@ use gpubnb_windows_platform::input::{
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::media::{
-    ConsoleMediaProbeRequest, ConsoleMediaSession, EncodedMediaFrame, MediaProbeRequest,
-    MediaSession, open_console_media_session, open_media_session,
+    AudioCaptureRequest, AudioCaptureSession, AudioPacket, ConsoleMediaProbeRequest,
+    ConsoleMediaSession, EncodedMediaFrame, MediaProbeRequest, MediaSession,
+    current_qpc_position_100ns, open_console_media_session, open_media_session,
 };
 #[cfg(any(target_os = "windows", test))]
 use gpubnb_windows_platform::media::{MediaFailureDiagnostic, MediaProbeError};
@@ -28,7 +29,7 @@ use gpubnb_windows_platform::pipe::{
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::process::{
-    RenterApplicationProcess, launch_qualified_gaming_application,
+    RenterApplicationIdentity, RenterApplicationProcess, launch_qualified_gaming_application,
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_platform::session::{
@@ -38,7 +39,8 @@ use gpubnb_windows_stream_helper::lifecycle::WorkspaceKind;
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::media_protocol::{
     MEDIA_CODEC_H264, MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION, MEDIA_FRAME_FLAG_KEYFRAME,
-    MEDIA_TRANSPORT_PROTOCOL_VERSION, WorkerMediaFrameHeader, encode_worker_media_frame_header,
+    MEDIA_TRANSPORT_PROTOCOL_VERSION, WorkerAudioBatchFence, WorkerMediaFrameHeader,
+    encode_worker_audio_batch, encode_worker_media_frame_header,
 };
 #[cfg(target_os = "windows")]
 use gpubnb_windows_stream_helper::worker_protocol::{
@@ -421,6 +423,28 @@ fn ensure_console_media_transfer_allowed(
 }
 
 #[cfg(target_os = "windows")]
+fn open_gaming_audio_capture(
+    windows_session_id: u32,
+    target: RenterApplicationIdentity,
+) -> Result<AudioCaptureSession, WorkerError> {
+    if target.windows_session_id != windows_session_id
+        || target.process_id == 0
+        || target.creation_time_100ns == 0
+    {
+        return Err(WorkerError::new("gaming_audio_target_identity_invalid", 21));
+    }
+    AudioCaptureSession::open(AudioCaptureRequest {
+        windows_session_id,
+        target_process_id: target.process_id,
+        // Poll without stalling the 60 Hz video loop. WASAPI packets remain
+        // timestamped and bounded; a missing packet means silence/next frame.
+        read_timeout_ms: 0,
+        target_process_creation_time_100ns: target.creation_time_100ns,
+    })
+    .map_err(|_| WorkerError::new("gaming_audio_capture_open_failed", 21))
+}
+
+#[cfg(target_os = "windows")]
 fn send_encoded_media_frame(
     control: &WorkerPipeClient,
     media_pipe: &WorkerMediaPipeClient,
@@ -428,12 +452,52 @@ fn send_encoded_media_frame(
     windows_session_id: u32,
     spec: WorkerDisplaySpec,
     fence: MediaSendFence,
+    audio_capture: Option<&mut AudioCaptureSession>,
+    audio_target: Option<RenterApplicationIdentity>,
     media: &EncodedMediaFrame,
 ) -> Result<(), WorkerError> {
     let MediaSendFence {
         command_sequence,
         console_mode,
     } = fence;
+    let mut qpc_position_100ns = 0;
+    let audio_batch = match (audio_capture, audio_target) {
+        (Some(capture), Some(target)) if matches!(args.workspace, WorkspaceKind::Gaming) => {
+            let mut packets: Vec<AudioPacket> = Vec::with_capacity(2);
+            for _ in 0..4 {
+                match capture.read_packet() {
+                    Ok(Some(packet)) => packets.push(packet),
+                    Ok(None) => break,
+                    Err(_) => return Err(WorkerError::new("gaming_audio_capture_read_failed", 21)),
+                }
+            }
+            // Sample after collecting WASAPI packets so every packet position
+            // is at or before this video frame's shared A/V clock fence.
+            qpc_position_100ns = current_qpc_position_100ns()
+                .map_err(|_| WorkerError::new("media_qpc_clock_unavailable", 21))?;
+            Some(
+                encode_worker_audio_batch(
+                    WorkerAudioBatchFence {
+                        generation: args.generation,
+                        command_sequence,
+                        windows_session_id,
+                        video_frame_sequence: media.frame_sequence,
+                        video_qpc_position_100ns: qpc_position_100ns,
+                        target_process_id: target.process_id,
+                        target_process_creation_time_100ns: target.creation_time_100ns,
+                    },
+                    &packets,
+                )
+                .map_err(|_| WorkerError::new("gaming_audio_packet_invalid", 21))?,
+            )
+        }
+        (None, None) if !matches!(args.workspace, WorkspaceKind::Gaming) => None,
+        _ => return Err(WorkerError::new("gaming_audio_capture_missing", 21)),
+    };
+    if qpc_position_100ns == 0 {
+        qpc_position_100ns = current_qpc_position_100ns()
+            .map_err(|_| WorkerError::new("media_qpc_clock_unavailable", 21))?;
+    }
     let encoded_bytes = u32::try_from(media.bytes.len())
         .map_err(|_| WorkerError::new("media_frame_too_large", 21))?;
     let proof_value = WorkerMediaProof {
@@ -479,6 +543,7 @@ fn send_encoded_media_frame(
         refresh_hz: media.refresh_hz,
         payload_bytes: encoded_bytes,
         proof_flags: media.proof_flags,
+        qpc_position_100ns,
     })
     .map_err(|_| WorkerError::new("media_header_encode_failed", 21))?;
 
@@ -498,6 +563,12 @@ fn send_encoded_media_frame(
     media_pipe
         .send_message(&media.bytes)
         .map_err(|_| WorkerError::new("media_payload_send_failed", 21))?;
+    if let Some(audio_batch) = audio_batch {
+        ensure_console_media_transfer_allowed(console_mode, windows_session_id)?;
+        media_pipe
+            .send_message(&audio_batch)
+            .map_err(|_| WorkerError::new("gaming_audio_transport_failed", 21))?;
+    }
     Ok(())
 }
 
@@ -537,9 +608,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
         let mut console_mode = None;
         let mut media_state = MediaState::Empty;
         let mut media_session: Option<ActiveMediaSession> = None;
-        // Declare Steam before any future audio-capture RAII state: locals drop
-        // in reverse order, so later audio state closes before Steam on STOP.
+        // Declare Steam before its audio capture so local drop order closes the
+        // WASAPI process-loopback client before terminating the target process.
         let mut gaming_application: Option<RenterApplicationProcess> = None;
+        let mut audio_capture: Option<AudioCaptureSession> = None;
         loop {
             // This worker is persistent for the lifetime of the native desktop
             // session. Idleness is not a protocol failure: wait indefinitely for
@@ -567,7 +639,14 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
             }
 
             match command {
-                WorkerCommand::Stop => return Ok(()),
+                WorkerCommand::Stop => {
+                    if let Some(capture) = audio_capture.take() {
+                        capture
+                            .close()
+                            .map_err(|_| WorkerError::new("gaming_audio_stop_failed", 21))?;
+                    }
+                    return Ok(());
+                }
                 WorkerCommand::PrepareDisplay | WorkerCommand::PrepareConsoleDisplay => {
                     let next_state = media_state.prepare()?;
                     let frame = client
@@ -619,6 +698,18 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         })?;
                         gaming_application = Some(application);
                     }
+                    if matches!(args.workspace, WorkspaceKind::Gaming) && audio_capture.is_none() {
+                        let application = gaming_application
+                            .as_ref()
+                            .ok_or_else(|| WorkerError::new("gaming_application_missing", 21))?;
+                        application
+                            .ensure_running()
+                            .map_err(|_| WorkerError::new("gaming_application_exited", 21))?;
+                        audio_capture = Some(open_gaming_audio_capture(
+                            windows_session_id,
+                            application.identity(),
+                        )?);
+                    }
 
                     let mut session =
                         match open_worker_media(args, windows_session_id, spec, console) {
@@ -657,6 +748,8 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                             command_sequence,
                             console_mode: console,
                         },
+                        audio_capture.as_mut(),
+                        gaming_application.as_ref().map(RenterApplicationProcess::identity),
                         &media,
                     )?;
                     media_session = Some(session);
@@ -693,6 +786,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                                     command_sequence,
                                     console_mode: console_mode.unwrap_or(false),
                                 },
+                                audio_capture.as_mut(),
+                                gaming_application
+                                    .as_ref()
+                                    .map(RenterApplicationProcess::identity),
                                 &media,
                             )?;
                         }
@@ -717,6 +814,11 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                     }
                 }
                 WorkerCommand::SuspendMedia => {
+                    if let Some(capture) = audio_capture.take() {
+                        capture
+                            .close()
+                            .map_err(|_| WorkerError::new("gaming_audio_suspend_failed", 21))?;
+                    }
                     media_state = media_state.suspend()?;
                     media_session.take();
                 }
@@ -763,6 +865,19 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                         return Err(WorkerError::new("resume_gpu_luid_mismatch", 21));
                     }
 
+                    if matches!(args.workspace, WorkspaceKind::Gaming) {
+                        let application = gaming_application
+                            .as_ref()
+                            .ok_or_else(|| WorkerError::new("gaming_application_missing", 21))?;
+                        application
+                            .ensure_running()
+                            .map_err(|_| WorkerError::new("gaming_application_exited", 21))?;
+                        audio_capture = Some(open_gaming_audio_capture(
+                            windows_session_id,
+                            application.identity(),
+                        )?);
+                    }
+
                     let mut session =
                         match open_worker_media(args, windows_session_id, spec, console) {
                             Ok(session) => session,
@@ -798,6 +913,10 @@ fn execute(args: &WorkerArgs) -> Result<(), WorkerError> {
                             command_sequence,
                             console_mode: console,
                         },
+                        audio_capture.as_mut(),
+                        gaming_application
+                            .as_ref()
+                            .map(RenterApplicationProcess::identity),
                         &media,
                     )
                     .map_err(|_| WorkerError::new("resume_media_transport_failed", 21))?;

@@ -13,9 +13,9 @@ use crate::graphics_proof::{
 };
 use crate::lifecycle::WorkspaceKind;
 use crate::media_protocol::{
-    BoundMediaFrame, MEDIA_FRAME_HEADER_SIZE, bind_worker_media_payload,
-    decode_worker_media_frame_header, validate_worker_console_media_frame_header,
-    validate_worker_media_frame_header,
+    AudioTargetProcessIdentity, BoundMediaFrame, MEDIA_FRAME_HEADER_SIZE, WORKER_AUDIO_BATCH_MAX_BYTES,
+    bind_worker_media_payload, decode_worker_audio_batch, decode_worker_media_frame_header,
+    validate_worker_console_media_frame_header, validate_worker_media_frame_header,
 };
 use crate::worker_protocol::{
     WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE, WORKER_MEDIA_POLL_FRAME_SIZE, WORKER_PROTOCOL_VERSION,
@@ -38,7 +38,8 @@ use gpubnb_windows_platform::pipe::{
     current_process_user_sid,
 };
 use gpubnb_windows_platform::process::{
-    RenterWorkerLaunchSpec, RenterWorkerProcess, launch_qualified_renter_worker,
+    RenterApplicationIdentity, RenterWorkerLaunchSpec, RenterWorkerProcess,
+    launch_qualified_renter_worker, verify_renter_application_identity,
 };
 use gpubnb_windows_platform::secret::MediaCapabilityToken;
 use gpubnb_windows_platform::session::{
@@ -194,6 +195,8 @@ pub struct QualifiedGraphicsRuntime {
     next_sequence: u64,
     last_frame_sequence: u64,
     pending_media_frame: Option<BoundMediaFrame>,
+    audio_expected: bool,
+    audio_target_identity: Option<AudioTargetProcessIdentity>,
     pressed_browser_input: PressedBrowserInput,
     media_state: RuntimeMediaState,
     last_failure: Option<ServiceRuntimeError>,
@@ -361,6 +364,8 @@ impl QualifiedGraphicsRuntime {
                 backend: self.backend,
                 display_spec: self.display_spec,
                 gpu_uuid: &self.gpu_uuid,
+                audio_expected: self.audio_expected,
+                expected_audio_target_identity: self.audio_target_identity,
             },
         ) {
             Ok(Some(frame)) => frame,
@@ -528,6 +533,8 @@ impl QualifiedGraphicsRuntime {
                 backend: self.backend,
                 display_spec: self.display_spec,
                 gpu_uuid: &self.gpu_uuid,
+                audio_expected: self.audio_expected,
+                expected_audio_target_identity: self.audio_target_identity,
             },
         ) {
             Ok(frame) => frame,
@@ -619,6 +626,8 @@ struct MediaFrameFence<'a> {
     backend: RuntimeDisplayBackend,
     display_spec: WorkerDisplaySpec,
     gpu_uuid: &'a str,
+    audio_expected: bool,
+    expected_audio_target_identity: Option<AudioTargetProcessIdentity>,
 }
 
 fn receive_bound_media_frame(
@@ -687,6 +696,8 @@ fn receive_bound_media_frame_after_proof(
         backend,
         display_spec,
         gpu_uuid,
+        audio_expected,
+        expected_audio_target_identity,
     } = fence;
     if proof_frame.len() == WORKER_MEDIA_DIAGNOSTIC_FRAME_SIZE {
         let diagnostic = decode_worker_media_diagnostic(proof_frame)
@@ -758,8 +769,38 @@ fn receive_bound_media_frame_after_proof(
     let payload = media_pipe
         .read_message_exact(header.payload_bytes as usize, PIPE_TIMEOUT_MS)
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
-    let frame = bind_worker_media_payload(header, payload)
+    let mut frame = bind_worker_media_payload(header, payload)
         .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+    if audio_expected {
+        let audio_wire = media_pipe
+            .read_message_bounded(WORKER_AUDIO_BATCH_MAX_BYTES, PIPE_TIMEOUT_MS)
+            .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+        let (audio_fence, packets) = decode_worker_audio_batch(&audio_wire, header)
+            .map_err(|_| ServiceRuntimeError::MediaTransport)?;
+        let target_identity = AudioTargetProcessIdentity {
+            process_id: audio_fence.target_process_id,
+            creation_time_100ns: audio_fence.target_process_creation_time_100ns,
+        };
+        if let Some(expected) = expected_audio_target_identity {
+            if expected != target_identity {
+                return Err(ServiceRuntimeError::MediaTransport);
+            }
+        } else {
+            verify_renter_application_identity(
+                RenterApplicationIdentity {
+                    process_id: target_identity.process_id,
+                    windows_session_id,
+                    creation_time_100ns: target_identity.creation_time_100ns,
+                },
+                renter_user_sid,
+            )
+            .map_err(|_| ServiceRuntimeError::RenterSession)?;
+        }
+        frame.audio_packets = packets;
+        frame.audio_target_identity = Some(target_identity);
+    } else if expected_audio_target_identity.is_some() {
+        return Err(ServiceRuntimeError::MediaTransport);
+    }
 
     // The media DLL revalidates UUID -> LUID for every capture; repeat the check
     // in the privileged service before accepting the bytes into the data plane.
@@ -1081,6 +1122,8 @@ fn start_graphics_runtime(
                 backend,
                 display_spec,
                 gpu_uuid: config.gpu_uuid,
+                audio_expected: matches!(config.workspace, WorkspaceKind::Gaming),
+                expected_audio_target_identity: None,
             },
         )?;
         if !initial_media_frame.is_keyframe() {
@@ -1120,6 +1163,8 @@ fn start_graphics_runtime(
         renter_isolation,
         display_spec,
         gpu_uuid: config.gpu_uuid.to_owned(),
+        audio_expected: matches!(config.workspace, WorkspaceKind::Gaming),
+        audio_target_identity: initial_media_frame.audio_target_identity,
         next_sequence: 3,
         last_frame_sequence: initial_media_frame.header.frame_sequence,
         pending_media_frame: Some(initial_media_frame),

@@ -1,7 +1,9 @@
 'use strict';
 
-export const BROWSER_MEDIA_PROTOCOL_VERSION = 1;
-export const BROWSER_MEDIA_HEADER_SIZE = 44;
+import { BrowserAVClock } from './windows-native-audio.js';
+
+export const BROWSER_MEDIA_PROTOCOL_VERSION = 2;
+export const BROWSER_MEDIA_HEADER_SIZE = 52;
 export const BROWSER_MEDIA_FRAME_MAX_BYTES = 8 * 1024 * 1024;
 export const BROWSER_MEDIA_CHUNK_MAX_BYTES = 1024 * 1024;
 export const BROWSER_MEDIA_CODEC_H264 = 1;
@@ -36,6 +38,7 @@ export function parseWindowsNativeMediaPacket(value) {
   const flags = view.getUint8(7);
   const streamEpoch = view.getBigUint64(8, true);
   const frameSequence = view.getBigUint64(16, true);
+  const qpcPosition100ns = view.getBigUint64(44, true);
   const width = view.getUint32(24, true);
   const height = view.getUint32(28, true);
   const frameBytes = view.getUint32(32, true);
@@ -47,6 +50,7 @@ export function parseWindowsNativeMediaPacket(value) {
   if ((flags & ~BROWSER_MEDIA_FLAG_KEYFRAME) !== 0) fail('windows_native_media_flags');
   if (streamEpoch === 0n) fail('windows_native_media_epoch');
   if (frameSequence === 0n) fail('windows_native_media_sequence');
+  if (qpcPosition100ns === 0n) fail('windows_native_media_timestamp');
   if (width < 640 || width > 7680 || height < 480 || height > 4320) {
     fail('windows_native_media_dimensions');
   }
@@ -71,6 +75,7 @@ export function parseWindowsNativeMediaPacket(value) {
     flags,
     streamEpoch,
     frameSequence,
+    qpcPosition100ns,
     width,
     height,
     frameBytes,
@@ -139,7 +144,8 @@ export class WindowsNativeMediaReassembler {
         chunk.width !== this.pending.width ||
         chunk.height !== this.pending.height ||
         chunk.frameBytes !== this.pending.frameBytes ||
-        chunk.flags !== this.pending.flags
+        chunk.flags !== this.pending.flags ||
+        chunk.qpcPosition100ns !== this.pending.qpcPosition100ns
       ) {
         this.#reject('windows_native_media_frame_mismatch');
       }
@@ -157,6 +163,9 @@ export class WindowsNativeMediaReassembler {
           if (chunk.frameSequence !== this.lastCompleted.frameSequence + 1n) {
             this.#reject('windows_native_media_frame_order');
           }
+          if (chunk.qpcPosition100ns <= this.lastCompleted.qpcPosition100ns) {
+            this.#reject('windows_native_media_timestamp');
+          }
         } else {
           this.requireKeyframe = true;
         }
@@ -169,6 +178,7 @@ export class WindowsNativeMediaReassembler {
       this.pending = {
         streamEpoch: chunk.streamEpoch,
         frameSequence: chunk.frameSequence,
+        qpcPosition100ns: chunk.qpcPosition100ns,
         width: chunk.width,
         height: chunk.height,
         frameBytes: chunk.frameBytes,
@@ -192,12 +202,14 @@ export class WindowsNativeMediaReassembler {
     this.lastCompleted = {
       streamEpoch: completed.streamEpoch,
       frameSequence: completed.frameSequence,
+      qpcPosition100ns: completed.qpcPosition100ns,
     };
     this.requireKeyframe = false;
 
     return {
       streamEpoch: completed.streamEpoch,
       frameSequence: completed.frameSequence,
+      qpcPosition100ns: completed.qpcPosition100ns,
       width: completed.width,
       height: completed.height,
       keyframe: (completed.flags & BROWSER_MEDIA_FLAG_KEYFRAME) !== 0,
@@ -230,7 +242,6 @@ export class BoundedWebCodecsH264Consumer {
     this.chunkFactory = chunkFactory;
     this.maxDecodeQueue = maxDecodeQueue;
     this.reassembler = new WindowsNativeMediaReassembler({ timeoutMs });
-    this.nextTimestamp = 0;
   }
 
   reset() {
@@ -247,12 +258,16 @@ export class BoundedWebCodecsH264Consumer {
       fail('windows_native_decode_queue_full');
     }
 
+    const timestamp = Number(frame.qpcPosition100ns / 10n);
+    if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
+      this.reassembler.reset();
+      fail('windows_native_media_timestamp');
+    }
     const chunk = this.chunkFactory({
       type: frame.keyframe ? 'key' : 'delta',
-      timestamp: this.nextTimestamp,
+      timestamp,
       data: frame.bytes,
     });
-    this.nextTimestamp += 1;
     this.decoder.decode(chunk);
     return true;
   }
@@ -369,6 +384,7 @@ export class WindowsNativeWebCodecsSession {
     },
     maxDecodeQueue = 4,
     timeoutMs = BROWSER_MEDIA_REASSEMBLY_TIMEOUT_MS,
+    clock = new BrowserAVClock(),
   }) {
     if (typeof output !== 'function') fail('windows_native_decoder_output_required');
     if (typeof onError !== 'function') fail('windows_native_decoder_error_callback');
@@ -376,6 +392,9 @@ export class WindowsNativeWebCodecsSession {
       fail('windows_native_decoder_factory');
     }
     if (typeof chunkFactory !== 'function') fail('windows_native_chunk_factory_required');
+    if (!clock || typeof clock.observeVideo !== 'function' || typeof clock.performanceTimeFor !== 'function') {
+      fail('windows_native_av_clock_config');
+    }
     if (!Number.isSafeInteger(maxDecodeQueue) || maxDecodeQueue <= 0 || maxDecodeQueue > 32) {
       fail('windows_native_decode_queue_invalid');
     }
@@ -385,6 +404,7 @@ export class WindowsNativeWebCodecsSession {
     this.decoderFactory = decoderFactory;
     this.configProbe = configProbe;
     this.chunkFactory = chunkFactory;
+    this.clock = clock;
     this.maxDecodeQueue = maxDecodeQueue;
     this.reassembler = new WindowsNativeMediaReassembler({ timeoutMs });
     this.decoder = null;
@@ -465,6 +485,7 @@ export class WindowsNativeWebCodecsSession {
   async push(value, nowMs) {
     const frame = this.reassembler.push(value, nowMs);
     if (!frame) return false;
+    this.clock.observeVideo(frame.qpcPosition100ns);
 
     if (this.streamEpoch !== frame.streamEpoch) {
       await this.#configureForFrame(frame);
@@ -480,11 +501,16 @@ export class WindowsNativeWebCodecsSession {
       fail('windows_native_decode_queue_full');
     }
 
-    const timestamp = this.nextTimestamp;
-    this.nextTimestamp += 1;
+    const timestamp = Number(frame.qpcPosition100ns / 10n);
+    if (!Number.isSafeInteger(timestamp) || timestamp <= 0 || this.pendingMetadata.has(timestamp)) {
+      this.reassembler.reset();
+      fail('windows_native_media_timestamp');
+    }
     const metadata = {
       streamEpoch: frame.streamEpoch,
       frameSequence: frame.frameSequence,
+      qpcPosition100ns: frame.qpcPosition100ns,
+      presentationTimeMs: this.clock.performanceTimeFor(frame.qpcPosition100ns),
       width: frame.width,
       height: frame.height,
       keyframe: frame.keyframe,

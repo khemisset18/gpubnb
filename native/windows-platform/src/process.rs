@@ -22,6 +22,11 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 258;
 const INFINITE_THREAD_RESUME_FAILURE: u32 = u32::MAX;
+const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+const PROCESS_SYNCHRONIZE: u32 = 0x0010_0000;
+const TOKEN_QUERY: u32 = 0x0008;
+const TOKEN_USER_CLASS: u32 = 1;
+const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 
 const QUALIFIED_STEAM_APPLICATIONS: [&str; 2] = [
     r"C:\Program Files (x86)\Steam\steam.exe",
@@ -77,6 +82,7 @@ unsafe extern "system" {
 
 #[link(name = "kernel32")]
 unsafe extern "system" {
+    fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> Handle;
     fn CreateProcessW(
         application_name: *const u16,
         command_line: *mut u16,
@@ -109,6 +115,21 @@ unsafe extern "system" {
     fn ProcessIdToSessionId(process_id: u32, session_id: *mut u32) -> i32;
     fn IsProcessInJob(process: Handle, job: Handle, result: *mut i32) -> i32;
     fn CloseHandle(object: Handle) -> i32;
+    fn GetLastError() -> u32;
+    fn LocalFree(memory: Handle) -> Handle;
+}
+
+#[link(name = "advapi32")]
+unsafe extern "system" {
+    fn OpenProcessToken(process: Handle, desired_access: u32, token: *mut Handle) -> i32;
+    fn GetTokenInformation(
+        token: Handle,
+        information_class: u32,
+        information: *mut c_void,
+        information_length: u32,
+        return_length: *mut u32,
+    ) -> i32;
+    fn ConvertSidToStringSidW(sid: *mut c_void, string_sid: *mut *mut u16) -> i32;
 }
 
 #[repr(C)]
@@ -116,6 +137,17 @@ unsafe extern "system" {
 struct FileTime {
     low: u32,
     high: u32,
+}
+
+#[repr(C)]
+struct SidAndAttributes {
+    sid: *mut c_void,
+    attributes: u32,
+}
+
+#[repr(C)]
+struct TokenUser {
+    user: SidAndAttributes,
 }
 
 impl FileTime {
@@ -143,6 +175,15 @@ impl Drop for OwnedThreadHandle {
         unsafe {
             let _ = CloseHandle(self.0);
         }
+    }
+}
+
+struct OwnedTokenHandle(Handle);
+
+impl Drop for OwnedTokenHandle {
+    fn drop(&mut self) {
+        // SAFETY: this wrapper uniquely owns the process token handle.
+        unsafe { let _ = CloseHandle(self.0); }
     }
 }
 
@@ -231,6 +272,151 @@ pub struct RenterApplicationIdentity {
 pub struct RenterApplicationProcess {
     process: Option<OwnedProcessHandle>,
     identity: RenterApplicationIdentity,
+}
+
+/// Independently verifies the exact Steam root process announced by the
+/// trusted worker before the service accepts any process-loopback game audio.
+pub fn verify_renter_application_identity(
+    identity: RenterApplicationIdentity,
+    expected_user_sid: &str,
+) -> Result<(), PlatformError> {
+    if identity.process_id == 0
+        || identity.windows_session_id == 0
+        || identity.creation_time_100ns == 0
+        || expected_user_sid.is_empty()
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+
+    let process = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            identity.process_id,
+        )
+    };
+    if process == 0 {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+    let process = OwnedProcessHandle(process);
+
+    if unsafe { WaitForSingleObject(process.0, 0) } != WAIT_TIMEOUT {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+    let mut session_id = 0u32;
+    if unsafe { ProcessIdToSessionId(identity.process_id, &mut session_id) } == 0
+        || session_id != identity.windows_session_id
+    {
+        return Err(PlatformError::RenterTokenSessionMismatch);
+    }
+    let mut creation_time = FileTime::default();
+    let mut exit_time = FileTime::default();
+    let mut kernel_time = FileTime::default();
+    let mut user_time = FileTime::default();
+    if unsafe {
+        GetProcessTimes(
+            process.0,
+            &mut creation_time,
+            &mut exit_time,
+            &mut kernel_time,
+            &mut user_time,
+        )
+    } == 0
+        || creation_time.as_u64() != identity.creation_time_100ns
+    {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+
+    let mut token_handle = 0;
+    if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut token_handle) } == 0
+        || token_handle == 0
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let token = OwnedTokenHandle(token_handle);
+    let actual_sid = process_token_user_sid(token.0)?;
+    if !actual_sid.eq_ignore_ascii_case(expected_user_sid) {
+        return Err(PlatformError::RenterTokenUserMismatch);
+    }
+
+    let mut verified_image = None;
+    let mut found_candidate = false;
+    for candidate in QUALIFIED_STEAM_APPLICATIONS {
+        let path = Path::new(candidate);
+        let opened = match open_application_for_verification(path) {
+            Ok(opened) => opened,
+            Err(_) if !path.exists() => continue,
+            Err(error) => return Err(error),
+        };
+        found_candidate = true;
+        opened.verify_authenticode()?;
+        if verify_process_image(process.0, &opened).is_ok() {
+            verified_image = Some(());
+            break;
+        }
+    }
+    if !found_candidate {
+        return Err(PlatformError::OpenFailed);
+    }
+    if verified_image.is_none() {
+        return Err(PlatformError::ProcessImageIdentityMismatch);
+    }
+    if unsafe { WaitForSingleObject(process.0, 0) } != WAIT_TIMEOUT {
+        return Err(PlatformError::ProcessWaitFailed);
+    }
+    Ok(())
+}
+
+fn process_token_user_sid(token: Handle) -> Result<String, PlatformError> {
+    let mut required = 0u32;
+    let first = unsafe {
+        GetTokenInformation(token, TOKEN_USER_CLASS, ptr::null_mut(), 0, &mut required)
+    };
+    if first != 0 || required < size_of::<TokenUser>() as u32
+        || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let word = size_of::<usize>();
+    let words = (required as usize)
+        .checked_add(word - 1)
+        .ok_or(PlatformError::RenterTokenQueryFailed)?
+        / word;
+    let mut storage = vec![0usize; words];
+    let mut returned = required;
+    if unsafe {
+        GetTokenInformation(
+            token,
+            TOKEN_USER_CLASS,
+            storage.as_mut_ptr().cast::<c_void>(),
+            required,
+            &mut returned,
+        )
+    } == 0
+        || returned as usize > storage.len() * word
+    {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let user = unsafe { &*storage.as_ptr().cast::<TokenUser>() };
+    if user.user.sid.is_null() {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let mut sid_text = ptr::null_mut();
+    if unsafe { ConvertSidToStringSidW(user.user.sid, &mut sid_text) } == 0 || sid_text.is_null() {
+        return Err(PlatformError::RenterTokenQueryFailed);
+    }
+    let mut units = 0usize;
+    while units < 184 && unsafe { *sid_text.add(units) } != 0 {
+        units += 1;
+    }
+    let result = if units == 0 || units >= 184 {
+        Err(PlatformError::RenterTokenQueryFailed)
+    } else {
+        String::from_utf16(unsafe { std::slice::from_raw_parts(sid_text, units) })
+            .map_err(|_| PlatformError::RenterTokenQueryFailed)
+    };
+    unsafe { let _ = LocalFree(sid_text.cast::<c_void>() as Handle); }
+    result
 }
 
 impl RenterApplicationProcess {

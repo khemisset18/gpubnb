@@ -111,6 +111,34 @@ test('gateway websocket URL is same-origin, credential-free and never downgrades
   }
 });
 
+test('a browser audio activation failure leaves the authorized video transport alive', async () => {
+  const socket = new FakeSocket();
+  const states = [];
+  const errors = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    onState: (state) => states.push(state),
+    onError: (error) => errors.push(error.message),
+    webSocketFactory: () => socket,
+    mediaFactory: () => ({ async push() {}, close() {} }),
+    audioFactory: () => ({
+      push() {},
+      close() {},
+      setStreamEpoch() {},
+      setVolume() {},
+      async resume() { throw new Error('browser device detail must stay private'); },
+    }),
+  });
+  client.start('/native/session/abc', 'https://example.test/page');
+  socket.readyState = 1;
+
+  assert.equal(await client.enableAudio(), false);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(socket.closed, []);
+  assert.deepEqual(states.at(-1), { audioState: 'blocked' });
+  client.close();
+});
+
 test('input is impossible until a real decoded frame is rendered and then stays epoch-fenced', async () => {
   const socket = new FakeSocket();
   const canvas = fakeCanvas();
@@ -771,4 +799,81 @@ test('pointer lock uses bounded relative movement and releases input when the lo
   ]);
   unbind();
   assert.equal(keyboard.listeners.has('pointerlockchange'), false);
+});
+
+test('audio websocket packets are epoch-fenced after video and closed with the viewer', async () => {
+  const socket = new FakeSocket();
+  const canvas = fakeCanvas();
+  const audioCalls = [];
+  let currentEpoch = null;
+  let mediaOptions;
+  let mediaClosed = 0;
+  let audioClosed = 0;
+  const client = new WindowsNativeDesktopClient({
+    canvas,
+    webSocketFactory: () => socket,
+    mediaFactory: (options) => {
+      mediaOptions = options;
+      return {
+        streamEpoch: null,
+        async push() {
+          this.streamEpoch = 77n;
+          options.output({
+            displayWidth: 1920,
+            displayHeight: 1080,
+            close() {},
+          }, {
+            streamEpoch: 77n,
+            frameSequence: 1n,
+            width: 1920,
+            height: 1080,
+            keyframe: true,
+          });
+        },
+        close() { mediaClosed += 1; },
+      };
+    },
+    audioFactory: () => ({
+      push(packet) {
+        audioCalls.push({ kind: 'packet', epoch: currentEpoch, magic: [...packet.subarray(0, 4)] });
+      },
+      setStreamEpoch(epoch) {
+        currentEpoch = epoch;
+        audioCalls.push({ kind: 'epoch', epoch });
+      },
+      setVolume() {},
+      async resume() { return true; },
+      close() { audioClosed += 1; },
+    }),
+  });
+  client.start('/native/session/audio', 'https://example.test/page');
+  socket.readyState = 1;
+  socket.emit('message', { data: new Uint8Array([1, 2, 3]).buffer });
+  await client.mediaQueue;
+
+  const audio = new Uint8Array(68);
+  audio.set([0x47, 0x42, 0x4e, 0x41]);
+  const header = new DataView(audio.buffer);
+  header.setUint16(4, 1, true);
+  header.setUint16(6, 3, true);
+  header.setBigUint64(8, 77n, true);
+  header.setBigUint64(16, 1n, true);
+  header.setBigUint64(24, 1_100_000n, true);
+  header.setBigUint64(32, 1_200_000n, true);
+  header.setUint32(40, 48_000, true);
+  header.setUint16(44, 1, true);
+  header.setUint32(48, 2, true);
+  header.setUint32(56, 4, true);
+  socket.emit('message', { data: audio.buffer });
+  await client.mediaQueue;
+
+  assert.equal(audioCalls.at(-1).kind, 'packet');
+  assert.equal(audioCalls.at(-1).epoch, 77n);
+  assert.deepEqual(audioCalls.at(-1).magic, [0x47, 0x42, 0x4e, 0x41]);
+  assert.ok(audioCalls.slice(0, -1).every((call) => call.kind === 'epoch' && call.epoch === 77n));
+  assert.equal(typeof mediaOptions.output, 'function');
+
+  client.close();
+  assert.equal(mediaClosed, 1);
+  assert.equal(audioClosed, 1);
 });

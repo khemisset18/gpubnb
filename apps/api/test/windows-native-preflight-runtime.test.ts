@@ -53,24 +53,24 @@ for(const mode of ['bypass-disabled','real-escrow'])test(`direct POST cannot byp
   assert.equal(state.reads,0);
 }));
 
-test('physically eligible preflight remains read-only but refuses incomplete browser audio',async()=>fixture(async({app,state,headers})=>{
+test('physically eligible preflight remains read-only but refuses unqualified browser audio',async()=>fixture(async({app,state,headers})=>{
   state.candidates=[host()];
   const response=await app.inject({method:'GET',url:'/qualification/windows-native/preflight',headers});
   assert.equal(response.statusCode,200);assert.equal(response.json().privateNoPaymentMode,true);
   assert.equal(response.json().allowed,false);assert.equal(response.json().hostReady,true);
-  assert.equal(response.json().code,'windows_native_browser_audio_unimplemented');
+  assert.equal(response.json().code,'windows_native_audio_not_qualified');
   assert.equal(response.headers['cache-control'],'no-store');assert.equal(state.reads,2);
 }));
 
-test('direct booking and qualification-session requests cannot bypass the missing-audio gate',async()=>fixture(async({app,state,headers})=>{
+test('direct booking and qualification-session requests cannot bypass the audio qualification gate',async()=>fixture(async({app,state,headers})=>{
   state.candidates=[host()];
   const preflight=await app.inject({method:'GET',url:'/qualification/windows-native/preflight',headers});
   assert.equal(preflight.json().allowed,false);
   const readsBefore=state.reads;
   const refused=await app.inject({method:'POST',url:'/qualification/windows-native/booking',headers});
-  assert.equal(refused.statusCode,409);assert.equal(refused.json().error,'windows_native_browser_audio_unimplemented');
+  assert.equal(refused.statusCode,409);assert.equal(refused.json().error,'windows_native_audio_not_qualified');
   const session=await app.inject({method:'POST',url:'/bookings/forged-booking/workspace/cloud-desktop?qualification=windows-native',headers});
-  assert.equal(session.statusCode,409);assert.equal(session.json().error,'windows_native_browser_audio_unimplemented');
+  assert.equal(session.statusCode,409);assert.equal(session.json().error,'windows_native_audio_not_qualified');
   assert.equal(state.reads,readsBefore,'unsupported requests must be rejected before booking or allocation lookups');
   assert.equal(state.redisWrites,0,'unsupported requests must not create access or session grants');
 }));
@@ -85,8 +85,8 @@ test('legacy private qualification sessions cannot become openable or receive an
     machineWorkspace:{workspace:{slug:'cloud-desktop',name:'Cloud Desktop'}},events:[{id:'qualification-event'}]};
   const status=await app.inject({method:'GET',url:'/bookings/legacy-booking/workspace/cloud-desktop/status',headers});
   assert.equal(status.statusCode,200);assert.equal(status.json().status,'BLOCKED');assert.equal(status.json().canOpen,false);
-  assert.equal(status.json().blockedReason,'WINDOWS_NATIVE_BROWSER_AUDIO_UNIMPLEMENTED');
+  assert.equal(status.json().blockedReason,'WINDOWS_NATIVE_AUDIO_NOT_QUALIFIED');
   const access=await app.inject({method:'POST',url:'/bookings/legacy-booking/workspace/cloud-desktop/access',headers});
-  assert.equal(access.statusCode,409);assert.equal(access.json().error,'windows_native_browser_audio_unimplemented');
+  assert.equal(access.statusCode,409);assert.equal(access.json().error,'windows_native_audio_not_qualified');
   assert.equal(state.redisWrites,0);
 }));

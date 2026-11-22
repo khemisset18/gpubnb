@@ -96,9 +96,9 @@ export function windowsNativeWorkspaceCandidate(
 }
 
 /** Owner-side static analysis for native Windows workspace consent.
- * Cloud Desktop and Gaming remain unavailable until the browser/gateway has
- * renter-scoped audio and controller paths; a screen-only helper result must
- * not let those profiles appear enabled or ready.
+ * Audio is wired but still unqualified on hardware; Gaming also lacks native
+ * XInput. A software path or synthetic proof must not mark either profile
+ * ready or permit owner opt-in.
  */
 export function windowsNativeWorkspaceOwnerAnalysis(
   machine: WindowsNativeHostCapabilities,
@@ -108,9 +108,9 @@ export function windowsNativeWorkspaceOwnerAnalysis(
 ): WindowsNativeCandidate {
   const candidate = windowsNativeWorkspaceCandidate(machine, manifest, expectedGpuUuid);
   const missingCapability = slug === 'cloud-desktop'
-    ? 'Audio navigateur WASAPI/Opus non implémenté'
+    ? 'Audio navigateur WASAPI non qualifié sur matériel réel'
     : slug === 'gaming'
-      ? 'Audio navigateur ou manette non implémentés'
+      ? 'Audio non qualifié ou manette XInput native absente'
       : null;
   if (!missingCapability) return candidate;
   return {

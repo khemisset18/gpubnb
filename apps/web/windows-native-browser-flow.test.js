@@ -238,7 +238,7 @@ test('host guidance and mandatory profile completion retain their previous purpo
 
 const privateReplies={
   '/auth/me':{user:{id:'renter-1'}},
-  '/qualification/windows-native/preflight':{privateNoPaymentMode:true,allowed:false,code:'windows_native_browser_audio_unimplemented'},
+  '/qualification/windows-native/preflight':{privateNoPaymentMode:true,allowed:false,code:'windows_native_audio_not_qualified'},
 };
 async function privateRun(override=()=>null){
   const box=browser({route:'/stage3-windows-native.html',fetcher:path=>{
@@ -249,7 +249,7 @@ async function privateRun(override=()=>null){
   box.nodes.get('#stage3-check').events.get('click')();await settle();
   box.nodes.get('#stage3-start').events.get('click')();await settle();return box;
 }
-test('private Cloud Desktop remains closed when browser audio is not implemented',async()=>{
+test('private Cloud Desktop remains closed until renter audio is qualified on the Host',async()=>{
   const box=await privateRun();
   assert.deepEqual(box.calls.map(c=>c.path),['/auth/me','/qualification/windows-native/preflight']);
   assert.equal(box.nodes.get('#stage3-start').disabled,true);
@@ -267,7 +267,7 @@ for(const phase of ['/qualification/windows-native/preflight'])for(const status 
   assert.equal(box.location.href,'/stage3-windows-native.html');assert.equal(box.calls.at(-1).path,phase);
   assert.match(box.nodes.get('#stage3-status').textContent,/private_access_denied/);
 });
-test('stale positive PC1 preflight cannot launch a Workspace lacking browser audio',async()=>{
+test('stale positive PC1 preflight cannot bypass the audio qualification gate',async()=>{
   const box=await privateRun(path=>path==='/qualification/windows-native/preflight'
     ?response(200,{privateNoPaymentMode:true,allowed:true,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'}):null);
   assert.equal(box.location.href,'/stage3-windows-native.html');

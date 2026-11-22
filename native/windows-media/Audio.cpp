@@ -28,7 +28,6 @@ using Microsoft::WRL::RuntimeClassFlags;
 
 namespace
 {
-constexpr uint32_t kMinAudioReadTimeoutMs = 10;
 constexpr uint32_t kMaxAudioReadTimeoutMs = 150;
 constexpr DWORD kAudioActivationTimeoutMs = 5000;
 constexpr uint32_t kMinSampleRate = 8000;
@@ -303,7 +302,7 @@ HRESULT __stdcall GPUbnbAudioOpenForRenterProcess(
         request->TargetProcessId == 0 ||
         request->Reserved != 0 ||
         request->TargetProcessCreationTime100ns == 0 ||
-        request->ReadTimeoutMs < kMinAudioReadTimeoutMs ||
+        (request->ReadTimeoutMs != 0 && request->ReadTimeoutMs < 10) ||
         request->ReadTimeoutMs > kMaxAudioReadTimeoutMs)
     {
         return E_INVALIDARG;
