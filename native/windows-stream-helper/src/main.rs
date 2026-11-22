@@ -407,7 +407,7 @@ fn execute(command: &Command) -> Result<String, CliError> {
         } => {
             #[cfg(not(target_os = "windows"))]
             {
-                let _ = (session_id, workspace, gpu_uuid);
+                let _ = (session_id, workspace, gpu_uuid, application);
                 Err(CliError::new("windows_required", 20))
             }
             #[cfg(target_os = "windows")]
@@ -435,7 +435,7 @@ fn execute(command: &Command) -> Result<String, CliError> {
         } => {
             #[cfg(not(target_os = "windows"))]
             {
-                let _ = (session_id, workspace, gpu_uuid);
+                let _ = (session_id, workspace, gpu_uuid, application);
                 Err(CliError::new("windows_required", 20))
             }
             #[cfg(target_os = "windows")]
