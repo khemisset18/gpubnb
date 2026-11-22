@@ -91,7 +91,7 @@ function freezeRecord(input) {
 const marketplace = ({
   registryId, canonicalName, symbol, category, identity = null,
   riskLevel = "WATCH", issuerControlled = false, privacySensitive = false,
-  researchFamily, notes = []
+  researchFamily, notes = [], newOffersEnabled = true
 }) => freezeRecord({
   registryId, canonicalName, symbol, category,
   supportStatus: "MARKETPLACE_ONLY",
@@ -102,7 +102,7 @@ const marketplace = ({
   privacySensitive,
   capabilities: {
     marketplaceEnabled: true,
-    newOffersEnabled: true,
+    newOffersEnabled,
     newTradesEnabled: false,
     ownershipProofSupported: false,
     lockSupported: false,
@@ -281,8 +281,8 @@ const RECORDS = Object.freeze([
     notes: ["IDENTITY_PENDING_VERIFICATION", "NOT_EVM"]
   }),
   marketplace({
-    registryId: "pearl-mainnet-native", canonicalName: "Pearl", symbol: "PEARL", category: "EXPERIMENTAL_NATIVE",
-    researchFamily: "PEARL_R_AND_D", riskLevel: "RESTRICTED",
+    registryId: "pearl-mainnet-native", canonicalName: "Pearl", symbol: "PRL", category: "EXPERIMENTAL_NATIVE",
+    researchFamily: "PEARL_R_AND_D", riskLevel: "RESTRICTED", newOffersEnabled: false,
     notes: ["IDENTITY_PENDING_VERIFICATION", "MARKETPLACE_ONLY"]
   }),
   marketplace({
