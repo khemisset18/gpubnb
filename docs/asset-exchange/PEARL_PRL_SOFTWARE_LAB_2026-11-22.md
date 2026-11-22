@@ -97,3 +97,32 @@ operator's WSL2 computer. No PRL full-node, RPC, miner, hardware,
 wallet, signing, network broadcast or real funds was used.
 
 **P0–P9 remain not qualified for real financial settlement.**
+
+## Confirmation opérateur — 47/47 tests sur Ubuntu WSL2
+
+Le compte rendu collé depuis l'Ubuntu WSL2 de l'opérateur confirme
+l'exécution des **47 méthodes de test** du seul dossier PRL :
+
+```text
+=== PEARL PRL : TESTS HORS LIGNE ===
+Ran 47 tests in 0.019s
+OK
+=== COMMIT ET ETAT GIT PRL ===
+a4f66fa
+## experiment/pearl-prl-offline-preflight-20261122...origin/experiment/pearl-prl-offline-preflight-20261122
+```
+
+La commande a utilisé `PYTHONDONTWRITEBYTECODE=1` et
+`unshare --user --map-root-user --net`. Répartition :
+**21 contrôles de format d'adresse Bech32m PRL** et
+**26 validations d'enveloppe d'offre PRL/DOGE synthétique**.
+Le commit exact ayant servi à cloner ce worktree :
+`a4f66faf45de253c7ed1067fbc041b4c6792301a`.
+Le worktree est sur sa branche de suivi (et non en HEAD détachée)
+et le journal n'indique aucune modification locale.
+
+**État vérifié : PRL_OFFLINE_47_PASS / HARDWARE_NODE_AND_SETTLEMENT_BLOCKED.**
+Les tests n'autorisent toujours ni offre publiée, ni vraie transaction,
+ni clé, signature, financement, échange, nœud, RPC ou broadcast.
+L'indépendance réelle regtest/simnet reste non démontrée par HRP
+(`rprl` partagé). P0/P1/P3–P9 restent non qualifiés ou différés.
