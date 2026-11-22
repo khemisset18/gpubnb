@@ -170,26 +170,16 @@ Commande depuis le worktree LTC séparé :
 Ne jamais importer ces exemples dans un wallet ni les utiliser pour
 financer ou signer une transaction.
 
-## L6 — inventaire public fictif : pas un outil de récupération
+## Actualisation WSL2 — 110/110, prochaine étape 140 tests
 
-Le fichier `public_recovery_inventory.py` construit et vérifie
-uniquement un **inventaire JSON public de démonstration**, à partir
-du précontrôle existant et des octets HTLC candidats. Il conserve
-les identifiants source/genesis, empreinte canonique de requête,
-script et hash P2WSH, hauteur, destination, outpoint et montants
-fictifs, avec permissions toutes à `false`.
+Le journal de l'opérateur confirme les **110 tests PASS** sur
+Ubuntu WSL2 au commit `d1d6ec1` avec un worktree propre.
 
-`test_public_recovery_inventory.py` contient **29 nouvelles méthodes
-de refus et de cohérence**, publiées mais **non encore exécutées
-sur WSL2 au moment de leur ajout**. Total prévu : **139 tests**
-(110 déjà attestés + 29 nouveaux). Exécution standard depuis
-le worktree isolé :
+Le spécimen public L6 (non récupérable) ajoute **30 méthodes**.
+Le total attendu après mise à jour du worktree est **140 méthodes**.
+Les 30 méthodes du spécimen ne sont **pas encore attestées sur WSL2**.
 
-    PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
-
-Le SHA-256 de l'inventaire est un identifiant de contenu, **pas une
-authentification** sans référence vérifiée par un canal indépendant.
-Des données sources malveillantes mais cohérentes peuvent passer.
-Ni récupérabilité réelle, ni PSBT, ni signatures, ni preuve de chaîne,
-ni remboursement natif, ni droit financier. Ne pas employer cet
-inventaire comme bundle indépendant de récupération. L6 reste BLOQUÉ.
+Un inventaire L6 redondant de 29 tests, ajouté temporairement, a
+été retiré pour éviter de dupliquer le contrôle du spécimen public.
+La seule validation L6 recherchée à ce stade est la cohérence des
+preuves publiques fictives ; aucune garantie de récupération native.
