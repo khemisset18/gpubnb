@@ -34,6 +34,10 @@ constexpr DWORD kAudioActivationTimeoutMs = 5000;
 constexpr uint32_t kMinSampleRate = 8000;
 constexpr uint32_t kMaxSampleRate = 192000;
 constexpr uint16_t kMaxChannels = 8;
+constexpr DWORD kKnownAudioBufferFlags =
+    AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY |
+    AUDCLNT_BUFFERFLAGS_SILENT |
+    AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR;
 
 class AudioActivationHandler final
     : public RuntimeClass<RuntimeClassFlags<ClassicCom>, FtmBase, IActivateAudioInterfaceCompletionHandler>
@@ -472,6 +476,11 @@ HRESULT __stdcall GPUbnbAudioRead(
         hr = capture->audioCapture->GetBuffer(
             &data, &frames, &bufferFlags, &devicePosition, &qpcPosition);
         if (FAILED(hr)) return hr;
+        if ((bufferFlags & ~kKnownAudioBufferFlags) != 0)
+        {
+            const HRESULT releaseHr = capture->audioCapture->ReleaseBuffer(frames);
+            return FAILED(releaseHr) ? releaseHr : E_UNEXPECTED;
+        }
 
         const uint64_t packetBytes64 =
             static_cast<uint64_t>(frames) * capture->mixFormat->nBlockAlign;

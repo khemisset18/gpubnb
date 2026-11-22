@@ -1414,6 +1414,7 @@ mod tests {
         assert!(CPP_AUDIO_SOURCE.contains("capture->readTimeoutMs"));
         assert!(CPP_AUDIO_SOURCE.contains("WaitForMultipleObjects("));
         assert!(CPP_AUDIO_SOURCE.contains("AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR"));
+        assert!(CPP_AUDIO_SOURCE.contains("bufferFlags & ~kKnownAudioBufferFlags"));
         assert!(CPP_AUDIO_SOURCE.contains(
             "AUDCLNT_STREAMFLAGS_NOPERSIST,\n        0,\n        0,"
         ));
