@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "kind": "SYNTHETIC_PUBLIC_NONEXECUTABLE",
+  "domain": "GPUbnb:LTC:OFFLINE_LAB_REVIEW:v1",
+  "chainId": "litecoin",
+  "network": "regtest",
+  "asset": "LTC",
+  "protocolVersion": "LTC_BASECHAIN_TRANSPARENT_V1",
+  "review": {
+    "inputLitoshi": "100000000",
+    "feeLitoshi": "100000",
+    "refundLitoshi": "99900000",
+    "maximumFeeLitoshi": "1000000",
+    "minimumRefundLitoshi": "99000000",
+    "refundLockHeight": 450,
+    "sequence": 4294967294,
+    "sighash": "ALL",
+    "refundDestinationScriptHex": "00141111111111111111111111111111111111111111",
+    "fundingTxid": "2222222222222222222222222222222222222222222222222222222222222222",
+    "fundingVout": 0
+  },
+  "privacy": {
+    "mwebInput": false,
+    "mwebOutput": false,
+    "mwebChange": false,
+    "mwebPegIn": false,
+    "mwebPegOut": false,
+    "mwebRecovery": false
+  },
+  "permissions": {
+    "canSign": false,
+    "canBroadcast": false,
+    "canFund": false,
+    "hardwareQualified": false,
+    "automaticSettlementSupported": false,
+    "realFundsUsed": false
+  }
+}
