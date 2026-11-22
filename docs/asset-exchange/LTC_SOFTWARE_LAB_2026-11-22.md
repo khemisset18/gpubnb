@@ -102,3 +102,31 @@ La prochaine preuve L0 devra vérifier la signature PGP avec l'empreinte
 de clé complète officiellement publiée, contrôler l'intégrité de
 l'archive si téléchargée et enregistrer les identités sans modifier
 les seuils de confiance ni activer LTC.
+
+## Complément L0 — signature du manifeste PGP validée sur WSL2
+
+Suite à l'exécution de l'opérateur, le manifeste
+`https://download.litecoin.org/litecoin-0.21.5.8/SHA256SUMS.asc`
+a été téléchargé et vérifié avec GnuPG dans un trousseau temporaire,
+et la clé `davidburkett38-key.pgp` a été contrôlée contre l'empreinte
+attendue, caractère pour caractère :
+
+`D35621D53A1CC6A3456758D03620E9D387E55666`
+
+Le journal présente :
+- `Good signature from "David Burkett <davidburkett38@gmail.com>"` ;
+- `[GNUPG:] VALIDSIG D35621D53A1CC6A3456758D03620E9D387E55666 ...` ;
+- `L0 : SIGNATURE PGP VERIFIEE`.
+
+L'avertissement `This key is not certified with a trusted signature`
+est attendu dans le trousseau éphémère : il ne nie pas la validation
+cryptographique, mais ne prouve pas à lui seul l'identité du titulaire
+de la clé. L'empreinte complète a été comparée à une valeur de référence
+fixée avant l'import de la clé.
+
+**État mis à jour : L0 SIGNED_MANIFEST_VERIFIED / BLOCKED pour la clôture
+L0 complète.** L'archive Linux elle-même n'a pas encore été téléchargée
+ni comparée bit à bit au SHA-256 contenu dans le manifeste signé. Pas de
+vérification indépendante de la provenance de la clé par un second canal
+documentée. L1–L9 restent non qualifiés ou différés. Aucun exécutable LTC,
+nœud, signature de transaction, broadcast ou fonds réels impliqué.
