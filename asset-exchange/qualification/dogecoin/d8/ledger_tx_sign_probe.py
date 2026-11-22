@@ -268,10 +268,13 @@ def probe():
     send_ok(0x44, 0, 0, bytes.fromhex("01000000") + b"\x01")
     print("DOGE_TX_DIAG: first 0x44 accepted", file=sys.stderr, flush=True)
     print("DOGE_TX_DIAG: before 0x44 trusted-input chunk", file=sys.stderr, flush=True)
+    # Match the official legacy btchip.startUntrustedTransaction framing:
+    # one APDU carries trusted input + script length; the NEXT APDU carries
+    # the final script bytes AND the 4-byte sequence TOGETHER.
     send_ok(0x44, 0x80, 0, b"\x01" + bytes([len(trusted)]) + trusted +
-            bytes([len(signer_script)]) + signer_script)
-    print("DOGE_TX_DIAG: trusted-input chunk accepted, before 0x44 sequence", file=sys.stderr, flush=True)
-    send_ok(0x44, 0x80, 0, SEQUENCE)
+            bytes([len(signer_script)]))
+    print("DOGE_TX_DIAG: trusted-input chunk accepted, before combined script+sequence", file=sys.stderr, flush=True)
+    send_ok(0x44, 0x80, 0, signer_script + SEQUENCE)
     print("DOGE_TX_DIAG: all 0x44 chunks accepted", file=sys.stderr, flush=True)
     print("DOGE_TX_DIAG: streaming complete, attempting synthetic screen review", file=sys.stderr, flush=True)
     review = review_synthetic_finalize(paid_outputs)

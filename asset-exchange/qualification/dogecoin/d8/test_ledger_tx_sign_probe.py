@@ -48,6 +48,20 @@ class FixtureTests(unittest.TestCase):
         changed = b"\x01" + p.output(p.PAYMENT_KOINU-1, p.p2pkh_script(p.DUMMY_DESTINATION_HASH))
         self.assertNotEqual(p.make_digest(funding, script, outputs), p.make_digest(funding, script, changed))
 
+    def test_ledger_script_and_sequence_must_end_in_same_apdu(self):
+        # Guard against the previous harness bug: ledger transaction parser
+        # requires the last script chunk and its sequence in the same APDU.
+        trusted = bytes([0x32]) + bytes(55)
+        script = p.p2pkh_script(bytes([8]*20))
+        header = b"\x01" + bytes([len(trusted)]) + trusted + bytes([len(script)])
+        final = script + p.SEQUENCE
+        self.assertEqual(len(script), 25)
+        self.assertEqual(len(final), 29)
+        self.assertEqual(header[-1], 25)
+        self.assertTrue(final.endswith(p.SEQUENCE))
+        self.assertLessEqual(len(header), 255)
+        self.assertNotIn(script, header)
+
     def test_apdu_whitelist_and_payload_bound(self):
         for ins in (0x40,0x4e,0xff,0x47):
             with self.assertRaises(ValueError):
