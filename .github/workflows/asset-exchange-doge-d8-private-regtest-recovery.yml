@@ -1,0 +1,139 @@
+name: DOGE D8 zero-cost private Regtest funded recovery experiment
+
+# This is a private, real-block, software-only Dogecoin Regtest experiment.
+# Not a hardware signer qualification and never a mainnet exercise.
+on:
+  push:
+    branches:
+      - experiment/doge-d8-ledger-emulator-free-20261122
+    paths:
+      - .github/workflows/asset-exchange-doge-d8-private-regtest-recovery.yml
+      - asset-exchange/qualification/dogecoin/d2/**
+      - asset-exchange/qualification/dogecoin/d8/frozen_experimental_d2_profile_v1.json
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: doge-d8-private-regtest-funded-recovery-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  private-regtest-funded-recovery:
+    if: >-
+      github.repository == 'khemisset18/gpubnb' &&
+      github.repository_id == '1305325878' &&
+      github.ref == 'refs/heads/experiment/doge-d8-ledger-emulator-free-20261122'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Checkout experimental branch without Git credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require source-unchanged reviewed D2 harness and fixed private budgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object asset-exchange/qualification/dogecoin/d2/run-native-spends.sh)" = c0d30e82ba8eff23491fb5b35258480cba27bd9c
+          test "$(git hash-object asset-exchange/qualification/dogecoin/d2/native_spends.py)" = de619b9030e1df1143efdd190ef0cbe838a2295b
+          git diff --exit-code 5bc136a0246fa74a68b60d49e9ffc43a0ce618e1 HEAD -- \
+            asset-exchange/qualification/dogecoin/d0/ \
+            asset-exchange/qualification/dogecoin/d1/ \
+            asset-exchange/qualification/dogecoin/d2/
+          bash -n asset-exchange/qualification/dogecoin/d2/run-native-spends.sh
+          python3 asset-exchange/qualification/dogecoin/d2/native_spends.py --manifest \
+            > "$RUNNER_TEMP/doge-private-regtest-manifest.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          r = json.loads((pathlib.Path(os.environ["RUNNER_TEMP"]) /
+                          "doge-private-regtest-manifest.json").read_text())
+          assert r["authorization"] == "AUTHORIZE_D2_PRIVATE_SIGNED_REGTEST"
+          assert r["network"] == "regtest" and r["walletEnabled"] is False
+          assert r["externalNetwork"] is False
+          assert r["nodes"] == 1 and r["maxRpc"] == 180
+          assert r["maxGeneratedBlocks"] == 1360
+          assert r["maxBroadcastFixtures"] == 32
+          assert r["qualificationStatus"] == "BLOCKED"
+          PY
+      - name: Run all unchanged D2 policy/transaction tests offline
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d2 -p 'test_*.py' -v
+      - name: Retrieve frozen attested D0 Dogecoin Core 1.14.9 archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/doge-d8-private-d0
+      - name: Verify D0 and D1 identities, Sigstore provenance, isolate and run private funded Regtest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash asset-exchange/qualification/dogecoin/d2/run-native-spends.sh \
+            "$RUNNER_TEMP/doge-d8-private-d0" \
+            "$RUNNER_TEMP/doge-d8-private-funded-regtest" \
+            AUTHORIZE_D2_PRIVATE_SIGNED_REGTEST
+      - name: Classify exact funded-refund evidence without claiming hardware qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path(os.environ["RUNNER_TEMP"]) / "doge-d8-private-funded-regtest" / "regtest-run" / "evidence"
+          r = json.loads((p / "native-spends-report.json").read_text())
+          assert r["experimentStatus"] == "PASS"
+          assert r["qualificationStatus"] == "BLOCKED"
+          assert r["realFundsUsed"] is False and r["mainnetUsed"] is False
+          assert r["keysRemoved"] is True
+          assert r["preLockRecovery"]["readbackVerified"] is True
+          assert r["preLockRecovery"]["fileAndDirectoryFsynced"] is True
+          assert r["fundingUtxo"]["confirmations"] >= 1
+          assert r["recoveredRefundUtxo"]["confirmations"] >= 1
+          assert r["refundRetry"]["sameBytes"] is True
+          assert r["refundRetry"]["sameTxid"] is True
+          assert r["refundRetry"]["newSignatureCreated"] is False
+          assert r["refundRestored"]["confirmations"] >= 1
+          assert r["generatedBlocks"] <= 1360
+          assert r["finalPeers"] == []
+          c = {item["id"]: item for item in r["cases"]}
+          for name in ["early_refund", "equal_candidate_height_nonfinal", "valid_claim",
+                       "valid_refund_after_crash", "immature_coinbase", "wrong_signature",
+                       "final_sequence", "hard_dust", "wrong_redeem"]:
+              assert name in c, "missing required native experiment case: " + name
+          result = {
+            "classification": "PRIVATE_FUNDED_DOGE_REGTEST_SOFTWARE_EXPERIMENT_PASS_D8_HARDWARE_BLOCKED",
+            "chainExperimentSucceeded": True,
+            "provenFundedAndConfirmedRefund": True,
+            "refundRestoredAfterReorg": True,
+            "durablePreFundingRecovery": True,
+            "preLockAndFinalityNegativeCasesIncluded": True,
+            "operatorDevicePresent": False,
+            "realHardwareSignatureQualified": False,
+            "physicalH8_1_to_H8_5Complete": False,
+            "D2Qualification": "BLOCKED",
+            "D8Qualification": "BLOCKED",
+            "D9IndependentAudit": "NOT_DONE",
+            "mainnetDOGEUsed": 0,
+            "externalPeers": 0
+          }
+          target = pathlib.Path(os.environ["RUNNER_TEMP"]) / "doge-d8-funded-recovery-classification.json"
+          target.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+          print(json.dumps(result, sort_keys=True))
+          PY
+      - name: Save nonsecret scoped evidence even when verification fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: doge-d8-private-funded-regtest-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/doge-private-regtest-manifest.json
+            ${{ runner.temp }}/doge-d8-funded-recovery-classification.json
+            ${{ runner.temp }}/doge-d8-private-funded-regtest/verification/*.json
+            ${{ runner.temp }}/doge-d8-private-funded-regtest/regtest-run/evidence/*.json
+            ${{ runner.temp }}/doge-d8-private-funded-regtest/regtest-run/evidence/SHA256SUMS
+          if-no-files-found: warn
+          retention-days: 30

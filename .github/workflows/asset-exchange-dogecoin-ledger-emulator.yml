@@ -1,0 +1,315 @@
+name: DOGE D8 free Ledger emulator diagnostic
+
+on:
+  push:
+    branches: [experiment/doge-d8-ledger-emulator-free-20261122]
+    paths:
+      - ".github/workflows/asset-exchange-dogecoin-ledger-emulator.yml"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_emulator_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_tx_sign_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_htlc_refund_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_htlc_refund_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/d8_prephysical_gate.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_d8_prephysical_gate.py"
+      - "asset-exchange/qualification/dogecoin/d8/physical_request_preflight.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_physical_request_preflight.py"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_native_consensus.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_native_consensus.py"
+      - "asset-exchange/qualification/dogecoin/d8/frozen_experimental_d2_profile_v1.json"
+      - "asset-exchange/qualification/dogecoin/d8/test_frozen_experimental_d2_profile.py"
+      - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
+  pull_request:
+    paths:
+      - ".github/workflows/asset-exchange-dogecoin-ledger-emulator.yml"
+      - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ledger-doge-legacy-emulator:
+    if: github.repository == 'khemisset18/gpubnb'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      LEDGER_APP_SHA: "79f3036daec38347747fb498470bed3cfb103440"
+    steps:
+      - name: Checkout experiment source without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Test public-only APDU verifier
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_emulator_probe.py' -v
+      - name: Check offline transaction fixture and independent ECDSA verifier
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_tx_sign_probe.py' -v
+      - name: Unit-test synthetic D2-style P2SH HTLC refund fixture
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_htlc_refund_probe.py' -v
+      - name: Verify hard-blocked D8 classification and mutation negatives
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_d8_prephysical_gate.py' -v
+      - name: Check strict offline D8 public request validation and 17 mutations
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_physical_request_preflight.py' -v
+      - name: End-to-end offline H8 public request preflight (fake D2 fixture only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, "asset-exchange/qualification/dogecoin/d8")
+          from test_physical_request_preflight import public_only_fixture
+          request = public_only_fixture()
+          target = pathlib.Path(os.environ["RUNNER_TEMP"])
+          (target / "doge-d8-example-request.json").write_text(
+              json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
+          (target / "doge-d8-example-terms-digest").write_text(request["termsDigest"])
+          (target / "doge-d8-example-request-digest").write_text(request["requestDigest"])
+          PY
+          # Digests above are generated from the same PUBLIC synthetic fixture:
+          # test only, never independent user authorization.
+          python3 asset-exchange/qualification/dogecoin/d8/physical_request_preflight.py \
+            "$RUNNER_TEMP/doge-d8-example-request.json" \
+            "$(cat "$RUNNER_TEMP/doge-d8-example-terms-digest")" \
+            "$(cat "$RUNNER_TEMP/doge-d8-example-request-digest")" \
+            1353 \
+            "$RUNNER_TEMP/doge-d8-example-prephysical-review.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          data = json.loads((pathlib.Path(os.environ["RUNNER_TEMP"]) /
+                             "doge-d8-example-prephysical-review.json").read_text())
+          assert data["status"] == "SOFTWARE_REQUEST_PREFLIGHT_PASS_HARDWARE_BLOCKED"
+          assert data["refusalChecksCompleted"] == 17
+          assert data["canSign"] is False and data["hardwareQualified"] is False
+          assert data["independentReceiptOriginAuthenticated"] is False
+          assert data["chainHeightSourceAuthenticated"] is False
+          assert data["broadcasts"] == data["realFundsUsed"] == 0
+          PY
+      - name: Assert exact experimental D2 profile invariants remain frozen
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_frozen_experimental_d2_profile.py' -v
+      - name: Test signed synthetic Ledger refund native bridge before loading Dogecoin
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_native_consensus.py' -v
+      - name: Fetch exact public Ledger Legacy DOGE application with submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_ROOT="$RUNNER_TEMP/ledger-doge-legacy"
+          echo "APP_ROOT=$APP_ROOT" >> "$GITHUB_ENV"
+          git clone --filter=blob:none https://github.com/LedgerHQ/app-bitcoin-legacy.git "$APP_ROOT"
+          cd "$APP_ROOT"
+          git checkout --detach "$LEDGER_APP_SHA"
+          test "$(git rev-parse HEAD)" = "$LEDGER_APP_SHA"
+          # Historic upstream .gitmodules points to an inaccessible *-dev SSH URL.
+          # Use the public Ledger mirror ONLY for the identical pinned gitlink SHA.
+          git config -f .gitmodules submodule.lib-app-bitcoin.url https://github.com/LedgerHQ/lib-app-bitcoin.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          test "$(git -C lib-app-bitcoin rev-parse HEAD)" = "2664e6e10e2df7b8ec35aec87c30503f4661682b"
+          git -C lib-app-bitcoin remote get-url origin
+          git status --porcelain
+      - name: Confirm Dogecoin source identity without claiming a Regtest profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["APP_ROOT"])
+          makefile = (root / "Makefile").read_text()
+          start = makefile.index("else ifeq ($(COIN),dogecoin)")
+          end = makefile.index("else ifeq ($(COIN),dash)", start)
+          block = makefile[start:end]
+          required = (
+              "COIN_P2PKH_VERSION=30", "COIN_P2SH_VERSION=22",
+              "COIN_KIND=COIN_KIND_DOGE", 'APPNAME ="Dogecoin"',
+          )
+          for marker in required:
+              assert marker in block, f"Upstream DOGE definition changed: {marker}"
+          assert "regtest" not in block.lower()
+          result = {
+              "device_family": "Ledger Legacy DOGE (source only)",
+              "source_repo": "LedgerHQ/app-bitcoin-legacy",
+              "pinned_commit": os.environ["LEDGER_APP_SHA"],
+              "doge_mainnet_p2pkh_p2sh_source_defined": True,
+              "doge_regtest_full_htlc_cltv_approval_and_display_qualified": False,
+              "H8_1_to_H8_5_complete": False,
+              "D8_status": "BLOCKED",
+              "no_real_funds": True,
+              "no_mainnet_network_use": True,
+          }
+          pathlib.Path(os.environ["RUNNER_TEMP"], "doge-ledger-source-check.json").write_text(
+              json.dumps(result, indent=2) + "\n"
+          )
+          print(json.dumps(result))
+          PY
+      - name: Build actual Ledger DOGE firmware app with official toolchain, no network inside build
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite@sha256:45ec491f28489aa0337eea8d50e9962a700ed41054081ee1b639bc1b128e6a32
+          docker image inspect ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite@sha256:45ec491f28489aa0337eea8d50e9962a700ed41054081ee1b639bc1b128e6a32 --format '{{json .RepoDigests}}'
+          docker run --rm --network none --entrypoint /bin/bash \
+            -v "$APP_ROOT:/app" -w /app \
+            ghcr.io/ledgerhq/ledger-app-builder/ledger-app-builder-lite@sha256:45ec491f28489aa0337eea8d50e9962a700ed41054081ee1b639bc1b128e6a32 \
+            -lc 'set -euo pipefail; test -d "$NANOSP_SDK"; make -j2 BOLOS_SDK="$NANOSP_SDK" COIN=dogecoin'
+          APP_ELF="$(find "$APP_ROOT" -type f -name 'app.elf' | head -n 1)"
+          test -n "$APP_ELF"
+          cp "$APP_ELF" "$APP_ROOT/doge-test.elf"
+          sha256sum "$APP_ROOT/doge-test.elf" | tee "$RUNNER_TEMP/doge-ledger-elf.sha256"
+          file "$APP_ROOT/doge-test.elf" | grep ELF
+      - name: Start real Ledger Dogecoin app under isolated Speculos and capture emulator display
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull ghcr.io/ledgerhq/speculos@sha256:56c7ec84c903147dac28e68706d3241218a3d9beb9562dd4a8c02947b2a24f47
+          docker image inspect ghcr.io/ledgerhq/speculos@sha256:56c7ec84c903147dac28e68706d3241218a3d9beb9562dd4a8c02947b2a24f47 --format '{{json .RepoDigests}}'
+          docker run -d --network none --name doge-speculos \
+            -v "$APP_ROOT:/speculos/apps:ro" \
+            -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py:/speculos/ledger_emulator_probe.py:ro" \
+            -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py:/speculos/ledger_tx_sign_probe.py:ro" \
+            -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_htlc_refund_probe.py:/speculos/ledger_htlc_refund_probe.py:ro" \
+            ghcr.io/ledgerhq/speculos@sha256:56c7ec84c903147dac28e68706d3241218a3d9beb9562dd4a8c02947b2a24f47 \
+            --model nanosp --display headless --api-port 5000 apps/doge-test.elf
+          trap 'docker inspect doge-speculos --format "{{json .State}}" || true; docker logs doge-speculos 2>&1 | tail -n 85 || true; docker rm -f doge-speculos >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for i in $(seq 1 40); do
+            if docker exec doge-speculos python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:5000/",timeout=2).read()' >/dev/null 2>&1; then
+              ready=1; break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          docker exec doge-speculos python3 -c 'import sys,urllib.request; sys.stdout.buffer.write(urllib.request.urlopen("http://127.0.0.1:5000/screenshot",timeout=4).read())' \
+            > "$RUNNER_TEMP/doge-ledger-emulator.png"
+          # Only fixed, non-signing APDUs; host external network remains disabled.
+          docker exec doge-speculos python3 /speculos/ledger_emulator_probe.py > "$RUNNER_TEMP/doge-ledger-apdu-report.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          apdu = json.loads((root / "doge-ledger-apdu-report.json").read_text())
+          assert apdu["scope"] == "NON_SIGNING_APDU_EMULATOR_IDENTITY_ONLY"
+          assert apdu["D8_hardware_status"] == "BLOCKED"
+          img = (root / "doge-ledger-emulator.png").read_bytes()
+          assert img.startswith(b"\x89PNG\r\n\x1a\n"), "Speculos screenshot is not PNG"
+          report = json.loads((root / "doge-ledger-source-check.json").read_text())
+          report.update({
+              "firmware_elf_built": True,
+              "speculos_doge_app_booted": True,
+              "emulated_screen_captured": True,
+              "doge_regtest_contract_signature_executed": False,
+              "real_physical_screen_tested": False,
+              "hardware_D8_qualified": False,
+              "non_signing_apdu_identity_passed": True,
+              "apdu_report": apdu,
+              "scope": "EMULATOR_BOOT_AND_NON_SIGNING_APDU_ONLY",
+          })
+          (root / "doge-ledger-emulator-report.json").write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report))
+          PY
+          # Reuse the SAME already-running isolated Speculos process. Starting
+          # a second emulator exhausted or killed the original runner process.
+          # Fixture is synthetic, no DOGE chain, RPC or user keys.
+          docker exec doge-speculos python3 /speculos/ledger_tx_sign_probe.py \
+            | tee "$RUNNER_TEMP/doge-ledger-synthetic-signature-result.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          result = json.loads((root / "doge-ledger-synthetic-signature-result.json").read_text())
+          assert result["signature_on_synthetic_transaction_verified"] is True
+          assert result["mutated_transaction_signature_rejected"] is True
+          assert result["D8"] == "BLOCKED"
+          assert result["real_DOGE_used"] == 0 and result["broadcasts"] == 0
+          PY
+          # New HTLC-shaped synthetic fixture. This is NOT private Regtest
+          # signing qualification because the emulator remains a mainnet DOGE app.
+          docker exec doge-speculos python3 /speculos/ledger_htlc_refund_probe.py \
+            | tee "$RUNNER_TEMP/doge-ledger-htlc-refund-probe.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          result = json.loads((root / "doge-ledger-htlc-refund-probe.json").read_text())
+          assert result["signature_on_synthetic_htlc_refund_digest_verified"] is True
+          for field in ["mutated_refund_value_rejected", "mutated_refund_lock_rejected",
+                        "mutated_redeem_rejected"]:
+              assert result[field] is True
+          assert result["D8_status"] == "BLOCKED"
+          assert result["independent_on_device_htlc_terms_displayed"] is False
+          assert result["dogecoin_regtest_network_authenticated"] is False
+          assert result["real_doge_used"] == 0 and result["broadcasts"] == 0
+          for field in ["mutated_destination_signature_invalid",
+                        "mutated_funding_outpoint_signature_invalid",
+                        "mutated_sequence_signature_invalid",
+                        "mutated_sighash_trailer_signature_invalid"]:
+              assert result[field] is True
+          PY
+          python3 asset-exchange/qualification/dogecoin/d8/d8_prephysical_gate.py \
+            "$RUNNER_TEMP/doge-ledger-source-check.json" \
+            "$RUNNER_TEMP/doge-ledger-emulator-report.json" \
+            "$RUNNER_TEMP/doge-ledger-synthetic-signature-result.json" \
+            "$RUNNER_TEMP/doge-ledger-htlc-refund-probe.json" \
+            "$RUNNER_TEMP/doge-ledger-d8-prephysical-gate.json"
+      - name: Download previously source-qualified D0 Dogecoin 1.14.9 only
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dogecoin-d0-verified-evidence-99724d5b66b9475dcb96f6c471c75ce01ed60f9a
+          run-id: 40866305437
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/d8-ledger-qualified-d0
+      - name: Verify frozen D0 and D1 execution identity plus source attestation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash asset-exchange/qualification/dogecoin/d0/verify-runtime-evidence.sh \
+            "$RUNNER_TEMP/d8-ledger-qualified-d0" "$RUNNER_TEMP/d8-ledger-d0-verification"
+      - name: Use pinned native Dogecoin C ABI on exact Ledger synthetic HTLC refund in private Linux namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          PARENT_NS="$(readlink /proc/self/ns/net)"
+          test -n "$PARENT_NS"
+          sudo unshare --net -- /bin/bash -c '
+            set -euo pipefail
+            ip link set lo up
+            exec /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 "$@"
+          ' d8-ledger-native /usr/bin/python3 -B \
+            "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_native_consensus.py" \
+            --authorization AUTHORIZE_D8_LEDGER_SYNTHETIC_NATIVE_CONSENSUS_NO_CHAIN \
+            --ledger-report "$RUNNER_TEMP/doge-ledger-htlc-refund-probe.json" \
+            --d0-evidence "$RUNNER_TEMP/d8-ledger-qualified-d0" \
+            --work "$RUNNER_TEMP/d8-ledger-native-work" \
+            --output "$RUNNER_TEMP/doge-ledger-native-consensus-result.json"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/doge-ledger-native-consensus-result.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          report = json.loads((root / "doge-ledger-native-consensus-result.json").read_text())
+          assert report["experimentStatus"] == "PASS"
+          assert report["qualificationStatus"] == "BLOCKED"
+          assert report["nativePositive"] == 1 and report["nativeNegative"] == 11
+          assert len(report["cases"]) == 12 and report["nativeFlags"] == 517
+          assert not report["dogecoinRegtestSignerQualified"]
+          assert not report["hardwareQualified"]
+          assert report["rpcCalls"] == report["transactionsBroadcast"] == report["realDogeUsed"] == report["nodes"] == 0
+          PY
+      - name: Preserve public emulator evidence even on build failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: doge-d8-ledger-emulator-diagnostic
+          path: |
+            ${{ runner.temp }}/doge-ledger-source-check.json
+            ${{ runner.temp }}/doge-ledger-elf.sha256
+            ${{ runner.temp }}/doge-ledger-emulator.png
+            ${{ runner.temp }}/doge-ledger-emulator-report.json
+            ${{ runner.temp }}/doge-ledger-apdu-report.json
+            ${{ runner.temp }}/doge-ledger-synthetic-signature-result.json
+            ${{ runner.temp }}/doge-ledger-htlc-refund-probe.json
+            ${{ runner.temp }}/doge-ledger-d8-prephysical-gate.json
+            ${{ runner.temp }}/doge-ledger-native-consensus-result.json
+            ${{ runner.temp }}/d8-ledger-d0-verification/*.json
+            ${{ runner.temp }}/doge-d8-example-prephysical-review.json
+          if-no-files-found: warn
+          retention-days: 14
