@@ -120,6 +120,7 @@ export function mountWindowsNativeDesktop({
   const fullscreenButton = documentObject.querySelector('#nativeDesktopFullscreen');
   const pointerLockButton = documentObject.querySelector('#nativeDesktopPointerLock');
   const proofIndicator = documentObject.querySelector('#nativeDesktopContinuity');
+  const gamingWorkspace = documentObject.body?.dataset?.workspaceKind === 'gaming';
   if (!canvas || !status || !closeButton) {
     throw new Error('windows_native_page_contract');
   }
@@ -253,7 +254,7 @@ export function mountWindowsNativeDesktop({
       Math.min(reconnectAttempt, NATIVE_RECONNECT_DELAYS_MS.length - 1)
     ];
     reconnectAttempt += 1;
-    setStatus('Connexion interrompue, reconnexion…');
+    setStatus(gamingWorkspace ? 'Flux interrompu, reconnexion…' : 'Connexion interrompue, reconnexion…');
     reconnectTimer = setTimeoutFn(() => {
       reconnectTimer = null;
       if (!stopped && !pageHidden && !currentClient) connect();
@@ -287,7 +288,7 @@ export function mountWindowsNativeDesktop({
           exitPresentationModes();
 
           if (stopped) {
-            setStatus('Session vidéo fermée');
+            setStatus(gamingWorkspace ? 'Flux du jeu fermé' : 'Session vidéo fermée');
             return;
           }
           // Render sends 1008 when the workspace authority expires/revokes.
@@ -295,7 +296,9 @@ export function mountWindowsNativeDesktop({
           if (state.closeCode === 1008) {
             stopped = true;
             if (proofTimer !== null) clearIntervalFn(proofTimer);
-            setStatus('Session vidéo non autorisée — ouvrir une nouvelle session');
+            setStatus(gamingWorkspace
+              ? 'Session non autorisée — ouvrez une nouvelle réservation'
+              : 'Session vidéo non autorisée — ouvrir une nouvelle session');
             return;
           }
           if (pageHidden) return;
@@ -320,9 +323,13 @@ export function mountWindowsNativeDesktop({
         showProof();
 
         const label = {
-          connecting: reconnectAttempt > 0 ? 'Reconnexion sécurisée…' : 'Connexion sécurisée…',
-          connected: 'Canal authentifié, attente de la première image…',
-          ready: 'Bureau distant actif',
+          connecting: gamingWorkspace
+            ? (reconnectAttempt > 0 ? 'Reconnexion sécurisée au jeu…' : 'Connexion sécurisée au jeu…')
+            : (reconnectAttempt > 0 ? 'Reconnexion sécurisée…' : 'Connexion sécurisée…'),
+          connected: gamingWorkspace
+            ? 'Canal authentifié, attente de l’image du jeu…'
+            : 'Canal authentifié, attente de la première image…',
+          ready: gamingWorkspace ? 'Flux du jeu actif' : 'Bureau distant actif',
         }[state?.state] ?? 'État inconnu';
         setStatus(label);
       },
@@ -360,7 +367,7 @@ export function mountWindowsNativeDesktop({
     connect();
   };
 
-  const stop = (statusMessage = 'Session vidéo fermée') => {
+  const stop = (statusMessage = gamingWorkspace ? 'Flux du jeu fermé' : 'Session vidéo fermée') => {
     if (stopped) return;
     stopped = true;
     if (proofTimer !== null) clearIntervalFn(proofTimer);
@@ -386,7 +393,9 @@ export function mountWindowsNativeDesktop({
     }
     stopRequestInFlight = true;
     if (stopSessionButton) stopSessionButton.disabled = true;
-    setStatus('Arrêt demandé — GPUbnb va libérer la session…');
+    setStatus(gamingWorkspace
+      ? 'Arrêt demandé — GPUbnb libère le workspace…'
+      : 'Arrêt demandé — GPUbnb va libérer la session…');
     try {
       const response = await apiFetch(
         `${apiBase}/workspace-sessions/${encodeURIComponent(sessionId)}/stop`,
@@ -398,7 +407,9 @@ export function mountWindowsNativeDesktop({
         },
       );
       if (!response?.ok) throw new Error('session_stop_failed');
-      stop('Arrêt confirmé — GPUbnb libère la session.');
+      stop(gamingWorkspace
+        ? 'Workspace arrêté — GPUbnb libère les ressources.'
+        : 'Arrêt confirmé — GPUbnb libère la session.');
     } catch {
       stopRequestInFlight = false;
       if (stopSessionButton) stopSessionButton.disabled = false;
@@ -427,6 +438,8 @@ if (typeof document !== 'undefined' && typeof location !== 'undefined') {
     mountWindowsNativeDesktop();
   } catch {
     const status = document.querySelector('#nativeDesktopStatus');
-    if (status) status.textContent = 'La session bureau n’est pas disponible.';
+    if (status) status.textContent = document.body?.dataset?.workspaceKind === 'gaming'
+      ? 'Le Gaming Workspace n’est pas disponible.'
+      : 'La session bureau n’est pas disponible.';
   }
 }

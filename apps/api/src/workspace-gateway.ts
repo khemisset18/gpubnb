@@ -795,8 +795,14 @@ export function registerWorkspaceGatewayRoutes(app:FastifyInstance,db:PrismaClie
     if(isWindowsNativeRuntime(row.runtimeBackend)){
       const host=String(request.headers.host||'').trim();
       if(!host)return reply.code(400).send({error:'workspace_host_required'});
+      // Gaming is presented as a player workspace, never as a Windows desktop.
+      // The same authenticated gateway cookie and native media/input channel
+      // remain in force; this does not make the still-gated game launcher ready.
+      const workspacePage=row.machineWorkspace.workspace.slug==='gaming'
+        ? '/gaming-workspace.html'
+        : '/windows-native-desktop.html';
       const target=new URL(
-        `/windows-native-desktop.html?session=${encodeURIComponent(sessionId)}`,
+        `${workspacePage}?session=${encodeURIComponent(sessionId)}`,
         `https://${host}`,
       ).toString();
       return reply.code(302).header('Location',target).send();

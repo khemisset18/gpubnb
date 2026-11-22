@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Gaming Workspace — GPUbnb</title>
+  <link rel="stylesheet" href="windows-native-desktop.css">
+  <link rel="stylesheet" href="gaming-workspace.css">
+</head>
+<body data-workspace-kind="gaming">
+  <header class="gaming-header">
+    <div class="gaming-brand">
+      <span class="gaming-mark" aria-hidden="true">G</span>
+      <div>
+        <strong>GPUbnb</strong>
+        <span>Gaming Workspace</span>
+      </div>
+    </div>
+    <span id="nativeDesktopStatus" class="gaming-status" role="status">Connexion sécurisée…</span>
+    <a id="nativeDesktopManage" class="gaming-manage" href="session.html">Session</a>
+    <button id="nativeDesktopFullscreen" type="button" aria-pressed="false">Plein écran</button>
+    <button id="nativeDesktopPointerLock" type="button" aria-pressed="false">Verrouiller la souris</button>
+    <button id="nativeDesktopStopSession" class="gaming-stop" type="button">Arrêter</button>
+  </header>
+  <main class="gaming-layout">
+    <section class="gaming-player" aria-label="Espace de jeu">
+      <div class="gaming-player-bar">
+        <span>SESSION PRIVÉE</span>
+        <span id="nativeDesktopContinuity" role="status">Flux observé : 0/300 s</span>
+      </div>
+      <canvas id="nativeDesktopCanvas" width="1280" height="720" aria-label="Flux du jeu GPUbnb. Cliquez pour activer les commandes."></canvas>
+      <div class="gaming-player-footer">
+        <span>Cliquez sur l’image pour activer clavier et souris.</span>
+        <button id="nativeDesktopClose" type="button">Fermer le flux</button>
+      </div>
+    </section>
+    <aside class="gaming-panel" aria-label="Informations et commandes">
+      <p class="gaming-kicker">VOTRE ESPACE</p>
+      <h1>Espace de jeu</h1>
+      <p>Le workspace affiche le jeu et ses commandes. Il ne donne pas accès au bureau Windows de l’hôte.</p>
+      <div class="gaming-launch-state" role="status">
+        <strong>Lancement du jeu non disponible</strong>
+        <p>Le runtime isolé ne lance pas encore Steam ni un jeu depuis cette page. Le Gaming Workspace reste en qualification privée; aucune location publique n’est activée.</p>
+      </div>
+      <div class="gaming-card">
+        <strong>Votre compte et vos jeux</strong>
+        <p>GPUbnb fournit de la puissance de calcul et la connexion. Connectez votre propre compte de jeu et utilisez vos propres licences.</p>
+      </div>
+      <div class="gaming-card">
+        <strong>Clavier et souris</strong>
+        <p>Le contrôle distant s’active uniquement lorsque l’image du jeu est sélectionnée. Le plein écran et le verrouillage du pointeur sont disponibles depuis la barre.</p>
+      </div>
+      <div class="gaming-card gaming-controller">
+        <strong>Manette</strong>
+        <p>Manette standard du navigateur : mode de compatibilité clavier/souris. Les jeux exigeant une manette Xbox/XInput native ne sont pas encore pris en charge.</p>
+      </div>
+      <p class="gaming-private-note">Qualification privée · location publique non activée</p>
+    </aside>
+  </main>
+  <script src="config.js"></script>
+  <script type="module" src="windows-native-desktop-page.js?v=20261122-gaming-workspace-1"></script>
+</body>
+</html>
