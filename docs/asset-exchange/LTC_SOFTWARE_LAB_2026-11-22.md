@@ -475,3 +475,60 @@ Le test de récupération indépendante L6 est toujours BLOQUÉ.
 (110 déjà attestées + 30 ajoutées, pas encore attestées sur le PC).**
 Aucun nœud, wallet, clé, vraie transaction, signature, diffusion
 ou fonds réels utilisés.
+
+## Complément L3/L6 — 110/110 tests WSL2 et inventaire public de récupération
+
+Le journal transmis par l'opérateur montre le worktree LTC détaché
+au commit `d1d6ec15449c3396b606959a34689686e58bff0d` et la sortie :
+
+```text
+=== LTC : 110 TESTS HORS LIGNE ===
+Ran 110 tests in 0.024s
+OK
+=== ETAT GIT LTC ===
+## HEAD (no branch)
+```
+
+**110/110 méthodes distinctes PASS sur Ubuntu WSL2**, sans erreur et
+sans fichiers locaux modifiés. Répartition : 39 préflight + 22 formes
+d'adresse + 26 octets HTLC candidats + 23 simulations de hauteurs CLTV.
+Environnement : `PYTHONDONTWRITEBYTECODE=1` et
+`unshare --user --map-root-user --net`.
+
+### Nouveau contrôle de forme du dossier de récupération, L6 partiel
+
+Les fichiers ajoutés
+`asset-exchange/qualification/litecoin/public_recovery_inventory.py`
+et `test_public_recovery_inventory.py` définissent et éprouvent une
+**liste d'inventaire public synthétique, expressément NON exécutable**,
+liant le hash canonique de la requête, les octets fictifs du script,
+son hash P2WSH, la hauteur de remboursement, la destination publique,
+les montants et l'outpoint de démonstration, la source Core et le
+genesis regtest.
+
+Le contrôleur compare strictement les données à leurs références
+synthétiques, refuse les champs nouveaux (y compris tentatives de
+clé, seed, portefeuille ou transaction signée), les mauvais réseaux,
+la modification d'un digest ou d'un paramètre, les incohérences
+script/hauteur et toute permission non autorisée. Un checksum SHA-256
+du JSON canonique permet de détecter un changement non accompagné
+de mise à jour du checksum **mais n'authentifie pas le dossier** :
+un dossier falsifié et auto-cohérent peut rester possible.
+
+**29 nouvelles méthodes de test sont présentes dans GitHub mais
+leur exécution n'est pas encore attestée** sur l'environnement de
+l'opérateur, ni sur le runner de cette étape. Total à vérifier :
+**139 méthodes (110 déjà attestées + 29 nouvelles)**.
+
+Les sorties imposent
+`independentRecoveryAvailable=false`,
+`nativeRecoveryVerified=false`, `canRecover=false`,
+`canSign=false`, `canBroadcast=false` et
+`automaticSettlementSupported=false`.
+
+**L6 reste NON QUALIFIÉ** : aucun bundle signé ou signable,
+aucun outil de recovery indépendant, aucune dépense native, aucun
+remboursement prouvé, aucune preuve d'origine authentifiée.
+L1–L5 et L7 restent bloqués ; L8/L9 différés. Aucun nœud,
+wallet, signature, broadcast ou fonds réels ; aucun code DOGE,
+registre financier ou déploiement modifié.
