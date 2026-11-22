@@ -169,3 +169,28 @@ encore l'identité d'un nœud exécuté :
 
 L1 reste NON QUALIFIÉ tant que la configuration d'un nœud réellement
 isolé, ses paramètres et l'observation réseau n'ont pas été vérifiés.
+
+## Complément L1 — contrôle statique des paramètres regtest sur WSL2
+
+L'opérateur a exécuté un contrôle Python, sans exécuter Litecoin Core,
+sur la version de `src/chainparams.cpp` récupérée en HTTPS à partir du
+commit source figé `ec1b6489a900d09cf5991e220dce089c77a232a2`.
+La commande compare les constantes extraites de `CRegTestParams`
+à des valeurs attendues prédéfinies et affiche :
+
+```text
+L1 : PARAMETRES REGTEST SOURCE OK
+Genesis : 530827f38f93b43ed12af0b3ad25a288dc02ed74d6d7857862df51fc56c416f9
+P2P : 19444 | Bech32 : rltc | Magic : fabfb5da
+```
+
+Ce contrôle démontre une **concordance statique** pour les constantes
+regtest `genesis`, `pchMessageStart`, `nDefaultPort` et `bech32_hrp`
+dans ce fichier source précis.
+
+**L1 statut : STATIC_SOURCE_PARAMETERS_PASS / NATIVE_NETWORK_BLOCKED.**
+Il n'y a pas d'attestation de nœud en fonctionnement, de binaire
+effectivement chargé, de namespace réseau effectif pour un démon, de
+mauvais réseau refusé par RPC ou d'isolation native. L2–L7 restent à
+qualifier indépendamment ; L8/L9 restent différés. Aucune transaction,
+signature ou diffusion n'a été effectuée.
