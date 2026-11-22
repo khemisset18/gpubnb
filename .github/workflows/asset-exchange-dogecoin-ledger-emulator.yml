@@ -5,6 +5,8 @@ on:
     branches: [experiment/doge-d8-ledger-emulator-free-20261122]
     paths:
       - ".github/workflows/asset-exchange-dogecoin-ledger-emulator.yml"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_emulator_probe.py"
       - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
   pull_request:
     paths:
@@ -22,6 +24,12 @@ jobs:
     env:
       LEDGER_APP_SHA: "79f3036daec38347747fb498470bed3cfb103440"
     steps:
+      - name: Checkout experiment source without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Test public-only APDU verifier
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_emulator_probe.py' -v
       - name: Fetch exact public Ledger Legacy DOGE application with submodules
         shell: bash
         run: |
@@ -97,6 +105,7 @@ jobs:
           docker image inspect ghcr.io/ledgerhq/speculos:latest --format '{{json .RepoDigests}}'
           docker run -d --rm --network none --name doge-speculos \
             -v "$APP_ROOT:/speculos/apps:ro" \
+            -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py:/speculos/ledger_emulator_probe.py:ro" \
             ghcr.io/ledgerhq/speculos:latest \
             --model nanosp --display headless --api-port 5000 apps/doge-test.elf
           trap 'docker logs doge-speculos 2>&1 | tail -n 60 || true; docker rm -f doge-speculos >/dev/null 2>&1 || true' EXIT
@@ -110,9 +119,14 @@ jobs:
           test "$ready" = 1
           docker exec doge-speculos python3 -c 'import sys,urllib.request; sys.stdout.buffer.write(urllib.request.urlopen("http://127.0.0.1:5000/screenshot",timeout=4).read())' \
             > "$RUNNER_TEMP/doge-ledger-emulator.png"
+          # Only fixed, non-signing APDUs; host external network remains disabled.
+          docker exec doge-speculos python3 /speculos/ledger_emulator_probe.py > "$RUNNER_TEMP/doge-ledger-apdu-report.json"
           python3 - <<'PY'
           import json, os, pathlib
           root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          apdu = json.loads((root / "doge-ledger-apdu-report.json").read_text())
+          assert apdu["scope"] == "NON_SIGNING_APDU_EMULATOR_IDENTITY_ONLY"
+          assert apdu["D8_hardware_status"] == "BLOCKED"
           img = (root / "doge-ledger-emulator.png").read_bytes()
           assert img.startswith(b"\x89PNG\r\n\x1a\n"), "Speculos screenshot is not PNG"
           report = json.loads((root / "doge-ledger-source-check.json").read_text())
@@ -123,7 +137,9 @@ jobs:
               "doge_regtest_contract_signature_executed": False,
               "real_physical_screen_tested": False,
               "hardware_D8_qualified": False,
-              "scope": "EMULATOR_BOOT_AND_SOURCE_ONLY",
+              "non_signing_apdu_identity_passed": True,
+              "apdu_report": apdu,
+              "scope": "EMULATOR_BOOT_AND_NON_SIGNING_APDU_ONLY",
           })
           (root / "doge-ledger-emulator-report.json").write_text(json.dumps(report, indent=2) + "\n")
           print(json.dumps(report))
@@ -138,5 +154,6 @@ jobs:
             ${{ runner.temp }}/doge-ledger-elf.sha256
             ${{ runner.temp }}/doge-ledger-emulator.png
             ${{ runner.temp }}/doge-ledger-emulator-report.json
+            ${{ runner.temp }}/doge-ledger-apdu-report.json
           if-no-files-found: warn
           retention-days: 14

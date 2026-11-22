@@ -41,3 +41,24 @@ du site selon la décision du propriétaire.
 
 Références : https://speculos.ledger.com/user/getting_an_app.html
 et https://speculos.ledger.com/user/api.html .
+
+
+## Extension expérimentale — commandes APDU publiques, aucun échange
+
+Une fois Speculos démarré, le test \`ledger_emulator_probe.py\` envoie
+exactement **cinq** APDU autorisées et bornées vers le processus émulé :
+version de la monnaie, version de l'application, clé/adresse **publique**
+BIP44 DOGE \`m/44'/3'/0'/0/0\` **sans affichage ni approbation**, puis deux
+commandes négatives (classe et instruction inconnues). Il vérifie la réponse
+DOGE des préfixes **30/22**, le checksum Base58Check et la correspondance
+de l'adresse avec la clé publique fournie. Les seules données conservées pour
+l'adresse/la clé sont leurs SHA256.
+
+**Ce test ne demande AUCUNE signature, n'envoie aucun APDU de transaction,
+n'utilise aucun DOGE, ne démontre pas la possession de clés utilisateur, ne
+connecte pas Trust Wallet, ne teste pas le Regtest ni les contrats HTLC/CLTV.**
+L'émulateur utilise sa seed de test par défaut. Un échec est consigné sans
+activation ni contournement. La qualification D8 demeure **BLOCKED**.
+
+Les tests unitaires du parseur peuvent être lancés sans émulateur :
+\`python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_emulator_probe.py' -v\`.
