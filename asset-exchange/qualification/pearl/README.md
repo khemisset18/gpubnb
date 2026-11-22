@@ -36,3 +36,45 @@ Official source snapshot reviewed:
 https://github.com/pearl-research-labs/pearl/tree/29c2b03009143c98f4519271d716bd5535762a18
 See `docs/asset-exchange/PEARL_PRL_ADAPTER_RESEARCH_V1.md`
 for the P0–P9 blocked gate matrix and major unknowns.
+
+## Second phase — security-only in-memory offer draft lifecycle (separate draft PR)
+
+`marketplace_draft_lab.py` is a deliberately **NON-DEPLOYABLE** in-RAM
+PRL/DOGE *fictional draft* lifecycle. It can simulate create,
+owner-label view/list, cancel and expiry, idempotency and revision
+checks, bounded quotas, and thread contention. It cannot post an
+offer, identify a user, persist an order, contact the chain, sign,
+fund or settle anything.
+
+`actor_label` is a **self-asserted test label, NOT authentication**.
+`now_tick` is a **caller-controlled test clock, NOT server time**.
+`prl-lab-XXXXXXXX` identifiers are predictable and MUST NOT be
+used as credentials. These are **critical production blockers**:
+this Python class must never be imported into a live API as an
+offer/publishing service.
+
+- `test_marketplace_draft_lab.py`: **47 new adversarial unit
+  methods**, passing locally under `unshare --user --map-root-user --net`.
+- `demo_marketplace_drafts.py`: runs a bounded fake create/cancel
+  example using the bundled non-executable fixture, outputs two
+  JSON snapshots with all financial permissions false.
+- Existing 47 address + preflight tests were verified previously
+  on operator Ubuntu WSL2; **94 distinct methods are expected after
+  updating to the new development branch**, not yet attested on
+  the operator's PC.
+- Full STRIDE review:
+  `docs/asset-exchange/PEARL_PRL_MARKETPLACE_SECURITY_REVIEW_2026-11-23.md`.
+
+Commands from the root of an isolated clone of the development branch:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net \
+  python3 -m unittest discover -s asset-exchange/qualification/pearl -p 'test_*.py' -v
+PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net \
+  python3 asset-exchange/qualification/pearl/demo_marketplace_drafts.py
+```
+
+**This does NOT implement public marketplace listings or satisfy
+Pearl production / native P0–P9 qualification.** PRL remains
+`MARKETPLACE_ONLY / RESTRICTED` with
+`automaticSettlementSupported=false`.
