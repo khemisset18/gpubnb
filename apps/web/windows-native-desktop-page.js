@@ -77,7 +77,7 @@ export function safeNativeDesktopErrorCode(error) {
   return SAFE_NATIVE_DESKTOP_ERROR_CODES.has(message) ? message : 'windows_native_client_failed';
 }
 
-import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-gamepad-1';
+import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-gamepad-pointer-lock-1';
 import { Stage4VideoContinuity } from './windows-native-continuity.js?v=20261016-1';
 
 const NATIVE_RECONNECT_DELAYS_MS = Object.freeze([250, 500, 1000, 2000, 5000]);
@@ -102,6 +102,7 @@ export function mountWindowsNativeDesktop({
   locationObject = globalThis.location,
   windowObject = globalThis,
   clientFactory = (options) => new WindowsNativeDesktopClient(options),
+  apiFetch = (...args) => globalThis.fetch?.(...args),
   setTimeoutFn = (callback, delay) => globalThis.setTimeout(callback, delay),
   clearTimeoutFn = (timer) => globalThis.clearTimeout(timer),
   setIntervalFn = (callback, delay) => globalThis.setInterval(callback, delay),
@@ -115,6 +116,9 @@ export function mountWindowsNativeDesktop({
   const canvas = documentObject.querySelector('#nativeDesktopCanvas');
   const status = documentObject.querySelector('#nativeDesktopStatus');
   const closeButton = documentObject.querySelector('#nativeDesktopClose');
+  const stopSessionButton = documentObject.querySelector('#nativeDesktopStopSession');
+  const fullscreenButton = documentObject.querySelector('#nativeDesktopFullscreen');
+  const pointerLockButton = documentObject.querySelector('#nativeDesktopPointerLock');
   const proofIndicator = documentObject.querySelector('#nativeDesktopContinuity');
   if (!canvas || !status || !closeButton) {
     throw new Error('windows_native_page_contract');
@@ -122,11 +126,67 @@ export function mountWindowsNativeDesktop({
 
   const sessionId = new URLSearchParams(locationObject.search).get('session');
   const streamPath = nativeDesktopStreamPath(sessionId);
+  const apiBase = String(windowObject.GPUBNB_CONFIG?.apiBase || windowObject.GPUBNB_API_URL || '')
+    .replace(/\/$/u, '');
   const manageLink = documentObject.querySelector('#nativeDesktopManage');
   if (manageLink) manageLink.href = `session.html?id=${encodeURIComponent(sessionId)}`;
   const setStatus = (value) => {
     status.textContent = value;
   };
+  const updateFullscreenButton = () => {
+    if (!fullscreenButton) return;
+    const active = Boolean(documentObject.fullscreenElement);
+    fullscreenButton.textContent = active ? 'Quitter le plein écran' : 'Plein écran';
+    fullscreenButton.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  };
+  const updatePointerLockButton = () => {
+    if (!pointerLockButton) return;
+    const active = documentObject.pointerLockElement === canvas;
+    pointerLockButton.textContent = active ? 'Libérer la souris' : 'Verrouiller la souris';
+    pointerLockButton.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  };
+  const requestFullscreen = async () => {
+    try {
+      if (documentObject.fullscreenElement) {
+        await documentObject.exitFullscreen?.();
+      } else {
+        const target = documentObject.documentElement || canvas;
+        if (typeof target.requestFullscreen !== 'function') throw new Error('fullscreen_unavailable');
+        await target.requestFullscreen();
+      }
+    } catch {
+      setStatus('Le plein écran est indisponible dans ce navigateur.');
+    }
+    updateFullscreenButton();
+  };
+  const togglePointerLock = async () => {
+    try {
+      if (documentObject.pointerLockElement === canvas) {
+        await documentObject.exitPointerLock?.();
+      } else {
+        if (typeof canvas.requestPointerLock !== 'function') throw new Error('pointer_lock_unavailable');
+        canvas.focus?.({ preventScroll: true });
+        await canvas.requestPointerLock();
+      }
+    } catch {
+      setStatus('Le verrouillage de la souris est indisponible dans ce navigateur.');
+    }
+    updatePointerLockButton();
+  };
+  const exitPresentationModes = () => {
+    if (documentObject.pointerLockElement === canvas) {
+      try { documentObject.exitPointerLock?.(); } catch {}
+    }
+    if (documentObject.fullscreenElement) {
+      try { Promise.resolve(documentObject.exitFullscreen?.()).catch(() => {}); } catch {}
+    }
+  };
+  fullscreenButton?.addEventListener('click', requestFullscreen);
+  pointerLockButton?.addEventListener('click', togglePointerLock);
+  documentObject.addEventListener?.('fullscreenchange', updateFullscreenButton);
+  documentObject.addEventListener?.('pointerlockchange', updatePointerLockButton);
+  updateFullscreenButton();
+  updatePointerLockButton();
   const proof = proofIndicator ? new Stage4VideoContinuity() : null;
   // Backoff recovery is a separate proof, even when no 300s indicator is shown.
   // One decoded image followed by a frozen stream is NOT a stable connection.
@@ -167,6 +227,7 @@ export function mountWindowsNativeDesktop({
     unbindCurrent = null;
     try { unbind?.(); } catch {}
     try { client?.close(); } catch {}
+    exitPresentationModes();
   };
 
   const markRecovered = () => {
@@ -223,6 +284,7 @@ export function mountWindowsNativeDesktop({
           currentClient = null;
           unbindCurrent = null;
           try { unbind?.(); } catch {}
+          exitPresentationModes();
 
           if (stopped) {
             setStatus('Session vidéo fermée');
@@ -298,7 +360,7 @@ export function mountWindowsNativeDesktop({
     connect();
   };
 
-  const stop = () => {
+  const stop = (statusMessage = 'Session vidéo fermée') => {
     if (stopped) return;
     stopped = true;
     if (proofTimer !== null) clearIntervalFn(proofTimer);
@@ -307,10 +369,45 @@ export function mountWindowsNativeDesktop({
     releaseCurrent();
     windowObject.removeEventListener?.('pagehide', onPageHide);
     windowObject.removeEventListener?.('pageshow', onPageShow);
-    setStatus('Session vidéo fermée');
+    documentObject.removeEventListener?.('fullscreenchange', updateFullscreenButton);
+    documentObject.removeEventListener?.('pointerlockchange', updatePointerLockButton);
+    fullscreenButton?.removeEventListener?.('click', requestFullscreen);
+    pointerLockButton?.removeEventListener?.('click', togglePointerLock);
+    stopSessionButton?.removeEventListener?.('click', requestSessionStop);
+    setStatus(statusMessage);
+  };
+
+  let stopRequestInFlight = false;
+  const requestSessionStop = async () => {
+    if (stopped || stopRequestInFlight) return;
+    if (typeof apiFetch !== 'function' || !apiBase) {
+      setStatus('Arrêt indisponible — ouvrez « Gérer la session ».');
+      return;
+    }
+    stopRequestInFlight = true;
+    if (stopSessionButton) stopSessionButton.disabled = true;
+    setStatus('Arrêt demandé — GPUbnb va libérer la session…');
+    try {
+      const response = await apiFetch(
+        `${apiBase}/workspace-sessions/${encodeURIComponent(sessionId)}/stop`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      );
+      if (!response?.ok) throw new Error('session_stop_failed');
+      stop('Arrêt confirmé — GPUbnb libère la session.');
+    } catch {
+      stopRequestInFlight = false;
+      if (stopSessionButton) stopSessionButton.disabled = false;
+      setStatus('Arrêt non confirmé — réessayez ou ouvrez « Gérer la session ».');
+    }
   };
 
   closeButton.addEventListener('click', stop, { once: true });
+  stopSessionButton?.addEventListener('click', requestSessionStop);
   windowObject.addEventListener?.('pagehide', onPageHide);
   windowObject.addEventListener?.('pageshow', onPageShow);
 

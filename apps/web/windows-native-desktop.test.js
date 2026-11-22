@@ -712,3 +712,63 @@ test('unfocused remote canvas cannot receive mouse movement or wheel actions', a
     'remote pointer and wheel are disabled immediately after focus loss');
   unbind();
 });
+
+test('pointer lock uses bounded relative movement and releases input when the lock is lost', async () => {
+  const socket = new FakeSocket();
+  const canvas = fakeCanvas();
+  const actions = [];
+  const keyboard = {
+    hidden: false,
+    pointerLockElement: null,
+    listeners: new Map(),
+    addEventListener(name, handler) { this.listeners.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (this.listeners.get(name) === handler) this.listeners.delete(name);
+    },
+    emit(name, event = {}) { this.listeners.get(name)?.(event); },
+  };
+  canvas.ownerDocument = keyboard;
+  const client = new WindowsNativeDesktopClient({
+    canvas,
+    webSocketFactory: () => socket,
+    mediaFactory: ({ output }) => ({
+      async push() {
+        output(
+          { displayWidth: 1280, displayHeight: 720, close() {} },
+          { streamEpoch: 51n, frameSequence: 1n, width: 1280, height: 720,
+            keyframe: true, codec: 'avc1.640028' },
+        );
+      },
+      close() {},
+    }),
+    inputFactory: () => ({
+      key(code, keyUp) { actions.push(['key', code, keyUp]); return true; },
+      mouseAbsolute(x, y) { actions.push(['absolute', x, y]); return true; },
+      mouseRelative(x, y) { actions.push(['relative', x, y]); return true; },
+      mouseButton(button, keyUp) { actions.push(['button', button, keyUp]); return true; },
+      mouseWheel() { return true; },
+    }),
+  });
+  client.start('/workspace-gateway/session-1/native-stream', 'https://gpubnb.test/');
+  socket.readyState = 1;
+  socket.emit('message', { data: new ArrayBuffer(1) });
+  await client.mediaQueue;
+  const unbind = client.bindDom({ keyboardTarget: keyboard, pointerTarget: canvas });
+
+  canvas.emit('focus');
+  keyboard.pointerLockElement = canvas;
+  keyboard.emit('pointerlockchange');
+  canvas.emit('pointermove', { movementX: 50_000, movementY: -3, preventDefault() {} });
+  keyboard.emit('keydown', { code: 'KeyW', preventDefault() {} });
+  keyboard.pointerLockElement = null;
+  keyboard.emit('pointerlockchange');
+  canvas.emit('pointermove', { clientX: 50, clientY: 60, preventDefault() {} });
+
+  assert.deepEqual(actions, [
+    ['relative', 4096, -3],
+    ['key', 'KeyW', false],
+    ['key', 'KeyW', true],
+  ]);
+  unbind();
+  assert.equal(keyboard.listeners.has('pointerlockchange'), false);
+});
