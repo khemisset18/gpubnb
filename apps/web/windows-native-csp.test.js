@@ -21,6 +21,8 @@ test('gaming player workspace is a browser game surface, not a desktop page', ()
   assert.match(html, /id="nativeDesktopStopSession"/u);
   assert.match(html, /vos propres licences/u);
   assert.match(html, /ne sont pas encore pris en charge/u);
+  assert.match(html, /Lancement du jeu non disponible/u);
+  assert.match(html, /aucune location publique n’est activée/u);
   assert.doesNotMatch(html, /Bureau distant|Windows 11|<style(?:\s|>)/iu);
   assert.match(html, /gaming-workspace\.css/u);
   assert.match(css, /\.gaming-player\s*\{/u);
