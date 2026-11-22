@@ -11,6 +11,8 @@ on:
       - "asset-exchange/qualification/dogecoin/d8/test_ledger_tx_sign_probe.py"
       - "asset-exchange/qualification/dogecoin/d8/ledger_htlc_refund_probe.py"
       - "asset-exchange/qualification/dogecoin/d8/test_ledger_htlc_refund_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/d8_prephysical_gate.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_d8_prephysical_gate.py"
       - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
   pull_request:
     paths:
@@ -38,6 +40,8 @@ jobs:
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_tx_sign_probe.py' -v
       - name: Unit-test synthetic D2-style P2SH HTLC refund fixture
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_htlc_refund_probe.py' -v
+      - name: Verify hard-blocked D8 classification and mutation negatives
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_d8_prephysical_gate.py' -v
       - name: Fetch exact public Ledger Legacy DOGE application with submodules
         shell: bash
         run: |
@@ -184,7 +188,18 @@ jobs:
           assert result["independent_on_device_htlc_terms_displayed"] is False
           assert result["dogecoin_regtest_network_authenticated"] is False
           assert result["real_doge_used"] == 0 and result["broadcasts"] == 0
+          for field in ["mutated_destination_signature_invalid",
+                        "mutated_funding_outpoint_signature_invalid",
+                        "mutated_sequence_signature_invalid",
+                        "mutated_sighash_trailer_signature_invalid"]:
+              assert result[field] is True
           PY
+          python3 asset-exchange/qualification/dogecoin/d8/d8_prephysical_gate.py \
+            "$RUNNER_TEMP/doge-ledger-source-check.json" \
+            "$RUNNER_TEMP/doge-ledger-emulator-report.json" \
+            "$RUNNER_TEMP/doge-ledger-synthetic-signature-result.json" \
+            "$RUNNER_TEMP/doge-ledger-htlc-refund-probe.json" \
+            "$RUNNER_TEMP/doge-ledger-d8-prephysical-gate.json"
       - name: Preserve public emulator evidence even on build failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -198,5 +213,6 @@ jobs:
             ${{ runner.temp }}/doge-ledger-apdu-report.json
             ${{ runner.temp }}/doge-ledger-synthetic-signature-result.json
             ${{ runner.temp }}/doge-ledger-htlc-refund-probe.json
+            ${{ runner.temp }}/doge-ledger-d8-prephysical-gate.json
           if-no-files-found: warn
           retention-days: 14
