@@ -98,3 +98,26 @@ la racine du worktree :
 
 Aucun changement au registre, au nœud, au signer, au workflow ou
 à la branche DOGE.
+
+## L3 — script HTLC candidat en octets publics, sans opération blockchain
+
+`candidate_htlc.py` propose **uniquement un format d'octets de
+script P2WSH fictif** pour examen : branche de preimage SHA-256
+32 octets et clé redeem, branche de hauteur CLTV + clé refund.
+Les données publiques de démonstration ne sont pas garanties comme
+des points valides et ne représentent aucun portefeuille.
+
+`test_candidate_htlc.py` ajoute **26 tests unitaires** (encodage
+ScriptNum minimal et bornes, calcul SHA-256 du script, structure
+IF/ELSE/ENDIF, mutations et refus). Ils ont été exécutés avec
+succès dans l'environnement local de construction ; le worktree
+WSL2 de l'opérateur n'a **pas encore** été retesté depuis cet ajout.
+
+Le total à confirmer sur le PC est maintenant **87 méthodes (61+26)** :
+
+    PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net python3 -m unittest discover -s asset-exchange/qualification/litecoin -p 'test_*.py' -v
+
+Ce module **ne génère pas de transactions, ne signe rien, ne fait
+aucun appel réseau ni RPC et ne prouve aucune standardness ou consensus
+natif**. L'exécution et la validité d'un refund Litecoin restent
+bloquées jusqu'aux essais natifs. Ne pas intégrer au runtime financier.
