@@ -4,6 +4,7 @@ import { createCancellation, cancellationDigestHex } from "../../core/src/cancel
 import { invariant } from "../../core/src/errors.mjs";
 import { validateDeploymentId } from "../../core/src/deployment.mjs";
 import { resolveAssetCatalogByIdentity } from "../../core/src/asset-registry.mjs";
+import { assertSameSubject, createActor, validateIdempotencyKey } from "./authz.mjs";
 
 // Pearl is not yet backed by a verified canonical asset identity. The
 // marketplace research entry cannot be used to publish signed live offers.
@@ -27,7 +28,6 @@ export function assertPearlOfferExposureGate(offer) {
   }
 }
 
-import { assertSameSubject, createActor, validateIdempotencyKey } from "./authz.mjs";
 
 function opaqueSignature(signature) {
   const isBuffer = Buffer.isBuffer(signature);
