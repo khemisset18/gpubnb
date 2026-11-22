@@ -81,3 +81,41 @@ The current experimental code does **not** even post a marketplace-only offer. A
 5. Native consensus, mining/hardware, wallet, signer and production activation remain **outside current scope** and **blocked**.
 
 **Final invariant: PRL MARKETPLACE_ONLY / RESTRICTED; automaticSettlementSupported=false; no real-funds route.**
+
+## 7. Verified Exchange offer-publishing integration gap
+
+The current Pearl experiment branch includes these explicit
+repository declarations, read without execution:
+
+- `asset-exchange/api/README.md` calls the Exchange API a
+  **"G5 non-financial shell"** and states **"no business routes"**
+  and **"No offer/trade/settlement/admin endpoint is enabled in
+  this slice."** Offer, accept, cancel and authentication endpoints
+  are listed only under *future responsibilities*.
+- `asset-exchange/web/README.md` describes a **"G5 skeleton
+  only"** and says no user-facing settlement flow is implemented.
+- `asset-exchange/README.md` describes API and web as
+  future modules and forbids Core credential / database reuse.
+- The Pearl matrix lists `pearl-mainnet-native` for discovery/offers
+  in `MARKETPLACE_ONLY` status, but the matrix **does not create
+  executable listing routes**.
+
+**Implication:** seeing PRL in mining and in the Exchange asset
+matrix is NOT evidence that someone can post an actual PRL exchange
+offer today. The lab's `canPostOffer=false` flag is intentional.
+
+The next **separately reviewed** scope should first establish
+an Exchange-only authentication and authorization model, explicit
+native PRL identity (not ticker-only), immutable public listing
+terms, canonical integer amounts after upstream unit confirmation,
+explicit unsupported-settlement warnings, cancellation/idempotence,
+rate limits, safe persistence without Core credentials, API and UI
+negative tests, and a no-funds mock path. Only then should a
+marketplace-only public listing flow be considered. This PR does
+not implement those routes, and it MUST NOT enable offer posting
+by changing the lab fixture's `canPostOffer` permission.
+
+**Identity gate:** the `rprl` prefix's shared use by Pearl
+regtest and simnet rules out network verification from address
+text alone. No public offer path should treat that HRP as
+proof of actual chain identity or payment readiness.
