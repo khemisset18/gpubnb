@@ -93,9 +93,7 @@ permissions financières à `false`.
 
 `test_prl_exchange_gate.mjs` ajoute **10 tests Node.js**
 de cette politique de refus avant tout vérificateur de
-signature et toute écriture au repository. **Ces tests ne sont
-pas encore attestés sur Ubuntu WSL2.** Les 94 tests Python
-précédents restent la dernière preuve sur le PC.
+signature et toute écriture au repository. **Ces tests sont maintenant attestés sur Ubuntu WSL2 : 10/10 PASS**, avec les 94 tests Python (94/94) et les cinq tests Node de non-régression du registre Exchange (5/5). **Total : 109/109 PASS** sur le commit testé `60a3934`. Les commandes de test ont été exécutées dans un namespace réseau isolé, sans serveur ni signature.
 
 Depuis un clone isolé de cette branche, sans serveur :
 
