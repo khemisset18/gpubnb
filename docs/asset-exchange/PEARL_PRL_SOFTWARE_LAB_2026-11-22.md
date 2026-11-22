@@ -265,3 +265,49 @@ natives Pearl restent non qualifiés.
 Aucun fichier de minage ni aucun autre domaine hors
 Asset Exchange n'est modifié. Aucune capacité de
 publication PRL ou de règlement n'est activée.
+
+## Tentative opérateur — 23 novembre 2026 — blocage Node.js dans WSL2
+
+L'opérateur a cloné séparément et en sparse checkout la branche
+`experiment/pearl-prl-architecture-hardening-20261123`
+dans `$HOME/gpubnb-prl-exchange-arch-lab`. Seuls les répertoires
+`asset-exchange` et `docs/asset-exchange` ont été récupérés.
+
+Résultat réellement observé :
+
+```text
+=== PRL : 94 TESTS PYTHON ===
+----------------------------------------------------------------------
+Ran 94 tests in 0.060s
+
+OK
+=== PRL : 10 TESTS ARCHITECTURE ===
+unshare: failed to execute node: No such file or directory
+```
+
+**94/94 tests Python PASS sur Ubuntu WSL2** pour le code de cette
+branche. **Les 10 nouveaux tests JavaScript et le contrôle de
+non-régression `asset-registry.test.mjs` n'ont pas démarré** :
+l'exécutable `node` est absent/non résolu par ce namespace.
+Le shell étant lancé avec `set -euo pipefail`, il s'est arrêté
+avant l'affichage du commit exact et de l'état Git final ;
+ne pas revendiquer le worktree propre sans sortie de `git status`.
+
+Le constat `node: No such file or directory` est un **blocage
+de l'outillage**, PAS une preuve que les tests Node.js échouent.
+Les publications PRL restent désactivées, l'API n'a pas été lancée,
+aucune opération de règlement n'a été effectuée.
+
+Prochaine vérification non destructive :
+
+```sh
+command -v node || true
+command -v nodejs || true
+cat /etc/os-release
+git -C "$HOME/gpubnb-prl-exchange-arch-lab" status --short --branch
+```
+
+Après installation ou découverte d'un Node.js compatible et
+de confiance, les tests Node devront être relancés uniquement
+dans le namespace réseau isolé. Rien ne nécessite d'accéder
+au répertoire ni au code de minage.
