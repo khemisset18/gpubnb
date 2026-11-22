@@ -3,7 +3,31 @@ import { createAcceptance, acceptanceDigestHex } from "../../core/src/acceptance
 import { createCancellation, cancellationDigestHex } from "../../core/src/cancellation.mjs";
 import { invariant } from "../../core/src/errors.mjs";
 import { validateDeploymentId } from "../../core/src/deployment.mjs";
+import { resolveAssetCatalogByIdentity } from "../../core/src/asset-registry.mjs";
 import { assertSameSubject, createActor, validateIdempotencyKey } from "./authz.mjs";
+
+// Pearl is not yet backed by a verified canonical asset identity. The
+// marketplace research entry cannot be used to publish signed live offers.
+// Keep this in the real offer-service boundary, before signature verification
+// and before all repository writes: display metadata is NOT authorization.
+export function assertPearlOfferExposureGate(offer) {
+  for (const identity of [offer.giveAsset, offer.wantAsset]) {
+    if (identity.chainId !== "pearl") continue;
+    const record = resolveAssetCatalogByIdentity(identity);
+    invariant(
+      record !== null &&
+      record.registryId === "pearl-mainnet-native" &&
+      record.identityReady === true &&
+      record.capabilities.newOffersEnabled === true &&
+      record.capabilities.newTradesEnabled === false &&
+      record.capabilities.automaticSettlementSupported === false &&
+      record.routing.settlement === null,
+      "PRL_OFFER_UNQUALIFIED",
+      "Pearl offers are blocked pending independent identity and policy qualification"
+    );
+  }
+}
+
 
 function opaqueSignature(signature) {
   const isBuffer = Buffer.isBuffer(signature);
@@ -38,6 +62,7 @@ export function createOfferService({
     async publishOffer({ actor, offer, signature, idempotencyKey }) {
       const parsedActor = createActor(actor);
       const parsedOffer = parseSignedOffer(offer);
+      assertPearlOfferExposureGate(parsedOffer);
       assertSameSubject(parsedActor, parsedOffer.maker);
       invariant(parsedOffer.deploymentId === serviceDeploymentId, "DEPLOYMENT_MISMATCH", "offer belongs to another deployment");
       validateIdempotencyKey(idempotencyKey);

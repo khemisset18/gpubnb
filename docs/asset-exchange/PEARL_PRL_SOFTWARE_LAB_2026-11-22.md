@@ -230,3 +230,171 @@ distribué n'existe et aucune route API d'offres n'est déployée.
 **P0–P9 restent non qualifiés** pour les transactions / fonds réels.
 Les vérifications ne constituent ni audit indépendant, ni attestation
 de chaîne, ni validation du matériel, ni contrôle de production.
+
+## Contrôle d'architecture Exchange PRL — 23 novembre 2026 (en attente de tests Node)
+
+Branche : `experiment/pearl-prl-architecture-hardening-20261123`.
+La dernière campagne opérateur confirmée reste **94/94
+tests Python PASS** sur le commit `9c685cc`.
+
+L'analyse statique de l'Exchange réel a identifié :
+- ticker incorrect `PEARL` dans le registre Asset Exchange ;
+- `newOffersEnabled=true` par défaut pour un actif Pearl
+  avec `identityReady=false` ;
+- absence de garde spécifique PRL dans la couche de
+  publication des offres malgré l'identité native non qualifiée ;
+- README API G5 obsolète, alors que des modules routes,
+  sessions, PostgreSQL et offer-service existent dans les sources.
+
+Les corrections proposées sont **uniquement dans l'Exchange** :
+symbole `PRL` ; `newOffersEnabled=false` pour Pearl ;
+refus des offres Pearl sur les côtés give/want avant toute
+signature ou toute écriture au dépôt ; clarification documentaire.
+
+Le fichier `test_prl_exchange_gate.mjs` apporte **10 méthodes
+Node.js nouvelles non encore exécutées/attestées sur Ubuntu**.
+Ces tests n'exécutent aucun signataire, n'ouvrent aucun
+service, ne créent aucune transaction et ne touchent aucun fonds.
+
+**Bloqueur restant critique :** la politique d'acceptation
+d'anciennes offres PRL, et les contrôles au niveau de la
+base de données atomique, ne sont pas encore qualifiés.
+L'authentification publique, le déploiement et les preuves
+natives Pearl restent non qualifiés.
+
+Aucun fichier de minage ni aucun autre domaine hors
+Asset Exchange n'est modifié. Aucune capacité de
+publication PRL ou de règlement n'est activée.
+
+## Tentative opérateur — 23 novembre 2026 — blocage Node.js dans WSL2
+
+L'opérateur a cloné séparément et en sparse checkout la branche
+`experiment/pearl-prl-architecture-hardening-20261123`
+dans `$HOME/gpubnb-prl-exchange-arch-lab`. Seuls les répertoires
+`asset-exchange` et `docs/asset-exchange` ont été récupérés.
+
+Résultat réellement observé :
+
+```text
+=== PRL : 94 TESTS PYTHON ===
+----------------------------------------------------------------------
+Ran 94 tests in 0.060s
+
+OK
+=== PRL : 10 TESTS ARCHITECTURE ===
+unshare: failed to execute node: No such file or directory
+```
+
+**94/94 tests Python PASS sur Ubuntu WSL2** pour le code de cette
+branche. **Les 10 nouveaux tests JavaScript et le contrôle de
+non-régression `asset-registry.test.mjs` n'ont pas démarré** :
+l'exécutable `node` est absent/non résolu par ce namespace.
+Le shell étant lancé avec `set -euo pipefail`, il s'est arrêté
+avant l'affichage du commit exact et de l'état Git final ;
+ne pas revendiquer le worktree propre sans sortie de `git status`.
+
+Le constat `node: No such file or directory` est un **blocage
+de l'outillage**, PAS une preuve que les tests Node.js échouent.
+Les publications PRL restent désactivées, l'API n'a pas été lancée,
+aucune opération de règlement n'a été effectuée.
+
+Prochaine vérification non destructive :
+
+```sh
+command -v node || true
+command -v nodejs || true
+cat /etc/os-release
+git -C "$HOME/gpubnb-prl-exchange-arch-lab" status --short --branch
+```
+
+Après installation ou découverte d'un Node.js compatible et
+de confiance, les tests Node devront être relancés uniquement
+dans le namespace réseau isolé. Rien ne nécessite d'accéder
+au répertoire ni au code de minage.
+
+## Diagnostic complémentaire de l'outil WSL2 — 23 novembre 2026
+
+Le journal opérateur complémentaire a confirmé explicitement :
+
+```text
+PRETTY_NAME="Ubuntu 26.04 LTS"
+VERSION_CODENAME=resolute
+x86_64
+=== NODE.JS DISPONIBLE ? ===
+NODE.JS ABSENT DE WSL2
+=== ETAT GIT EXCHANGE PRL ===
+60a3934
+## experiment/pearl-prl-architecture-hardening-20261123...origin/experiment/pearl-prl-architecture-hardening-20261123
+```
+
+**Le clone de la branche d'architecture PRL est propre et sur le
+commit `60a39344ac662b7811725ea89f77192f206f64b6`.**
+Le diagnostic direct confirme l'absence de `node` et
+`nodejs` dans le PATH Ubuntu, ce qui explique que les tests
+JavaScript ne se sont pas lancés. **Ce n'est pas un résultat FAIL
+du code**. Les 94 tests Python PASS restent confirmés.
+
+Pour respecter la séparation avec tout minage, le plan
+privilégié est un exécutable Node.js officiel vérifié par SHA256,
+installé dans un dossier spécifique au laboratoire Exchange,
+sans `sudo`, sans `apt` global, sans `npm install`, sans changer
+le PATH permanent ni les autres worktrees. Les tests Node
+seront lancés en isolement réseau uniquement après la
+vérification du binaire. Pas de route API démarrée.
+
+## Attestation opérateur — Node.js 24.22.3 et 109/109 tests PASS sur WSL2
+
+Le compte rendu transmis par l'opérateur après installation **portable** de
+Node.js dans `$HOME/gpubnb-exchange-tools` confirme les résultats ci-dessous,
+sur la branche d'architecture PRL et le commit **`60a39344ac662b7811725ea89f77192f206f64b6`** :
+
+```text
+=== PRL : 94 TESTS PYTHON ===
+Ran 94 tests in 0.060s
+OK
+=== VERIFICATION SHA256 ===
+/home/hicham/gpubnb-exchange-tools/node-v24.22.3-linux-x64.tar.xz: OK
+=== VERSION NODE ===
+v24.22.3
+=== 10 TESTS ARCHITECTURE PRL ===
+ℹ tests 10
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+=== NON-REGRESSION REGISTRE EXCHANGE ===
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+=== ETAT FINAL GIT ===
+60a3934
+## experiment/pearl-prl-architecture-hardening-20261123...origin/experiment/pearl-prl-architecture-hardening-20261123
+```
+
+**Bilan démontré sur le PC : 94 tests Python PRL + 10 tests Node.js
+spécifiques à l'architecture Pearl + 5 tests Node.js de non-régression
+du registre Asset Exchange = 109/109 tests PASS.** Les exécutions des
+tests Python et Node.js ont eu lieu via `unshare --user --map-root-user
+--net`. La vérification SHA-256 du binaire Node correspond à l'empreinte
+attendue dans la commande opérateur ; elle ne constitue PAS en elle-même
+une attestation indépendante du signataire du binaire.
+
+Les tests Node.js confirment les contrôles ciblés du
+`test_prl_exchange_gate.mjs` : symbole PRL dans le catalogue Exchange,
+`identityReady=false`, `newOffersEnabled=false`, refus fail-closed
+des propositions Pearl en give/want (mainnet/regtest/simnet/testnet
+et fausses familles TOKEN/NFT), absence d'appel au vérificateur de
+signature ou au repository pendant ces refus et non-régression
+du catalogue BTC dans les scénarios testés.
+
+**Cela ne qualifie ni l'acceptation d'éventuelles offres PRL historiques
+en base, ni le déploiement API, ni les signatures, ni la chaîne,
+ni la récupération ni les règlements financiers.** L'identité PRL reste
+non vérifiée et toutes les capacités de publication/transaction
+automatiques concernant PRL restent désactivées.
+Aucune modification aux fichiers ou profils de minage n'a été effectuée.
+
+**Checkpoint : PRL_EXCHANGE_OFFLINE_109_PASS /
+REAL_PRL_OFFERS_AND_SETTLEMENT_BLOCKED.**

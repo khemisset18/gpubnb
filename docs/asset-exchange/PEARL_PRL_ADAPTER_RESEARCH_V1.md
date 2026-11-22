@@ -82,40 +82,44 @@ The current experimental code does **not** even post a marketplace-only offer. A
 
 **Final invariant: PRL MARKETPLACE_ONLY / RESTRICTED; automaticSettlementSupported=false; no real-funds route.**
 
-## 7. Verified Exchange offer-publishing integration gap
+## 7. CORRECTIF ARCHITECTURE — code API Exchange existant
 
-The current Pearl experiment branch includes these explicit
-repository declarations, read without execution:
+**Correction de l'audit du 23 novembre 2026 : les README G5
+sont incomplets/obsolètes vis-à-vis du code présent.** La présence
+ou l'absence d'une route ne peut pas être déduite d'un README seul.
 
-- `asset-exchange/api/README.md` calls the Exchange API a
-  **"G5 non-financial shell"** and states **"no business routes"**
-  and **"No offer/trade/settlement/admin endpoint is enabled in
-  this slice."** Offer, accept, cancel and authentication endpoints
-  are listed only under *future responsibilities*.
-- `asset-exchange/web/README.md` describes a **"G5 skeleton
-  only"** and says no user-facing settlement flow is implemented.
-- `asset-exchange/README.md` describes API and web as
-  future modules and forbids Core credential / database reuse.
-- The Pearl matrix lists `pearl-mainnet-native` for discovery/offers
-  in `MARKETPLACE_ONLY` status, but the matrix **does not create
-  executable listing routes**.
+Les fichiers existants suivants ont été lus dans la branche Exchange
+lors de la revue de l'architecture :
 
-**Implication:** seeing PRL in mining and in the Exchange asset
-matrix is NOT evidence that someone can post an actual PRL exchange
-offer today. The lab's `canPostOffer=false` flag is intentional.
+- `asset-exchange/api/src/routes.mjs` : code des routes
+  `GET /v1/assets`, `GET /v1/assets/:id`,
+  `POST /v1/offers`, `POST /v1/offers/:id/cancel`,
+  `POST /v1/offers/:id/accept`, ainsi que sessions/admin.
+- `asset-exchange/api/src/session.mjs` :
+  sessions via cookie `__Host-`, jeton CSRF et gestion de l'expiration.
+- `asset-exchange/api/src/offer-service.mjs` :
+  contrôles d'acteur, de signature externe et de temps, suivis
+  d'un dépôt atomique.
+- `asset-exchange/api/src/postgres-offer-repository.mjs` :
+  adaptateur de stockage PostgreSQL utilisant les fonctions
+  atomiques Exchange.
+- `asset-exchange/core/src/asset-registry.mjs` :
+  registre des actifs et permissions.
 
-The next **separately reviewed** scope should first establish
-an Exchange-only authentication and authorization model, explicit
-native PRL identity (not ticker-only), immutable public listing
-terms, canonical integer amounts after upstream unit confirmation,
-explicit unsupported-settlement warnings, cancellation/idempotence,
-rate limits, safe persistence without Core credentials, API and UI
-negative tests, and a no-funds mock path. Only then should a
-marketplace-only public listing flow be considered. This PR does
-not implement those routes, and it MUST NOT enable offer posting
-by changing the lab fixture's `canPostOffer` permission.
+**Cette lecture prouve l'existence du code source, PAS le déploiement
+ni l'efficacité opérationnelle de ces routes.** Elles ne doivent pas
+être activées pour PRL sans preuve d'identité native et validations
+indépendantes. Le correctif de périmètre dans la branche
+`experiment/pearl-prl-architecture-hardening-20261123`
+garde la publication PRL désactivée et corrige le ticker
+`PEARL` erroné vers `PRL` **uniquement dans le registre Exchange**.
 
-**Identity gate:** the `rprl` prefix's shared use by Pearl
-regtest and simnet rules out network verification from address
-text alone. No public offer path should treat that HRP as
-proof of actual chain identity or payment readiness.
+Le service d'offres Exchange rejette PRL avant vérificateur de
+signature et avant écriture au dépôt. Ce contrôle de publication
+ne démontre pas à lui seul l'absence d'anciennes offres PRL ni la
+sûreté d'acceptation d'une offre historique : la qualification
+d'entrée en transaction et les invariants atomiques du dépôt restent
+à auditer séparément. Le présent changement n'active aucun flux PRL.
+
+**Aucun fichier hors Asset Exchange ou documentation Pearl/Exchange
+ne doit être modifié par ce chantier.**

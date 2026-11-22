@@ -78,3 +78,38 @@ PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net \
 Pearl production / native P0–P9 qualification.** PRL remains
 `MARKETPLACE_ONLY / RESTRICTED` with
 `automaticSettlementSupported=false`.
+
+## Phase 3 — garde architecturale de publication dans l'Exchange réel
+
+Branche indépendante :
+`experiment/pearl-prl-architecture-hardening-20261123`.
+
+Cette phase ne modifie que des éléments d'Asset Exchange et
+des documents Exchange. L'API d'offres existante est soumise
+à une règle de refus PRL lorsque l'identité native est non
+qualifiée. Le catalogue Exchange affiche désormais le symbole
+`PRL` tout en laissant `newOffersEnabled=false` et toutes les
+permissions financières à `false`.
+
+`test_prl_exchange_gate.mjs` ajoute **10 tests Node.js**
+de cette politique de refus avant tout vérificateur de
+signature et toute écriture au repository. **Ces tests sont maintenant attestés sur Ubuntu WSL2 : 10/10 PASS**, avec les 94 tests Python (94/94) et les cinq tests Node de non-régression du registre Exchange (5/5). **Total : 109/109 PASS** sur le commit testé `60a3934`. Les commandes de test ont été exécutées dans un namespace réseau isolé, sans serveur ni signature.
+
+Depuis un clone isolé de cette branche, sans serveur :
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net \
+  python3 -m unittest discover -s asset-exchange/qualification/pearl -p 'test_*.py' -q
+unshare --user --map-root-user --net \
+  node --test asset-exchange/qualification/pearl/test_prl_exchange_gate.mjs
+unshare --user --map-root-user --net \
+  node --test asset-exchange/core/test/asset-registry.test.mjs
+```
+
+Le chemin d'acceptation d'éventuelles offres PRL historiques
+reste un **blocage critique** à auditer et verrouiller
+au niveau de la politique d'offre et de la base atomique
+avant tout déploiement. Aucune publication d'offre PRL réelle,
+aucune signature ni aucun règlement n'est autorisé ici.
+
+Voir `docs/asset-exchange/PEARL_PRL_EXCHANGE_ARCHITECTURE_SECURITY_2026-11-23.md`.
