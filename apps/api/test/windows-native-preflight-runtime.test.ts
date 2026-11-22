@@ -112,7 +112,7 @@ test('private Gaming attempt is rejected whenever commercial Windows rentals are
 }));
 
 test('Gaming session status and access require the private attempt gate and never report public eligibility',async()=>fixture(async({app,state,headers})=>{
-  state.session={id:'gaming-session',status:'READY',runtimeBackend:'WINDOWS_NATIVE',expiresAt:new Date(Date.now()+60_000),
+  state.session={id:'gaming-session',renterId:'renter',status:'READY',runtimeBackend:'WINDOWS_NATIVE',expiresAt:new Date(Date.now()+60_000),
     preparationProgress:100,preparationStep:'CONNECTION_READY',preparationAttempts:1,preparationRequestedAt:new Date(),
     preparationStartedAt:new Date(),preparationCompletedAt:new Date(),endedAt:null,updatedAt:new Date(),
     connectionMetadata:{gatewayPath:'/workspace-gateway/gaming-session/native-stream'},gatewayLastSeenAt:new Date(),job:null,
