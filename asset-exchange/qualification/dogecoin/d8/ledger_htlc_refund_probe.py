@@ -40,14 +40,25 @@ def contract_script_pubkey(redeem):
     return bytes.fromhex("a914") + h + bytes.fromhex("87")
 
 
-def spend_digest(funding, redeem, paid_outputs, *, lock=LOCK_HEIGHT, sequence=SEQUENCE):
-    if not 100 <= len(redeem) <= 150 or not 0 < lock < 500_000_000 or sequence != SEQUENCE:
+def spend_digest(funding, redeem, paid_outputs, *, lock=LOCK_HEIGHT, sequence=SEQUENCE,
+                 sighash_type=1, negative_only=False):
+    """Model legacy transaction digest. Wrong sequence/type is permitted ONLY
+    when explicitly deriving a negative verification digest, never to sign."""
+    if not 100 <= len(redeem) <= 150 or not 0 < lock < 500_000_000:
         raise ValueError("outside synthetic HTLC refund profile")
+    if type(sequence) is not int or not 0 <= sequence <= 0xffffffff:
+        raise ValueError("invalid sequence")
+    if type(sighash_type) is not int or sighash_type not in (1, 2):
+        raise ValueError("invalid experimental sighash")
+    if (sequence != SEQUENCE or sighash_type != 1) and negative_only is not True:
+        raise ValueError("wrong sequence or sighash cannot be a positive refund")
     prevhash = tx.sha256d(funding)
     preimage = (bytes.fromhex("01000000") + b"\x01" + prevhash + bytes(4) +
                 bytes([len(redeem)]) + redeem + sequence.to_bytes(4, "little") +
                 paid_outputs + lock.to_bytes(4, "little"))
-    return tx.sha256d(preimage + bytes.fromhex("01000000"))
+    # When sighash_type=2 this is only a changed 4-byte hash trailer to prove
+    # signature separation, NOT a SIGHASH_NONE consensus digest/approval path.
+    return tx.sha256d(preimage + sighash_type.to_bytes(4, "little"))
 
 
 def synthetic_scriptsig(sig, redeem):
@@ -95,6 +106,19 @@ def probe():
     mutated_redeem = redeem[:-35] + bytes([redeem[-35] ^ 1]) + redeem[-34:]
     if tx.check_signature(der, spend_digest(funding, mutated_redeem, outputs), pub):
         raise ValueError("mutated contract redeemScript signature unexpectedly valid")
+    altered_destination = bytes([0x43]) + tx.DUMMY_DESTINATION_HASH[1:]
+    different_outputs = b"\x01" + tx.output(tx.PAYMENT_KOINU, tx.p2pkh_script(altered_destination))
+    if tx.check_signature(der, spend_digest(funding, redeem, different_outputs), pub):
+        raise ValueError("mutated destination signature unexpectedly valid")
+    different_funding = funding[:7] + bytes([funding[7] ^ 1]) + funding[8:]
+    if tx.check_signature(der, spend_digest(different_funding, redeem, outputs), pub):
+        raise ValueError("mutated funding outpoint signature unexpectedly valid")
+    if tx.check_signature(der, spend_digest(funding, redeem, outputs,
+            sequence=SEQUENCE-1, negative_only=True), pub):
+        raise ValueError("mutated sequence signature unexpectedly valid")
+    if tx.check_signature(der, spend_digest(funding, redeem, outputs,
+            sighash_type=2, negative_only=True), pub):
+        raise ValueError("mutated sighash trailer signature unexpectedly valid")
     scriptsig = synthetic_scriptsig(der + b"\x01", redeem)
     visible = " ".join(review["simulated_screen_sequence"]).lower()
     terms = {
@@ -122,6 +146,10 @@ def probe():
         "mutated_refund_value_rejected": True,
         "mutated_refund_lock_rejected": True,
         "mutated_redeem_rejected": True,
+        "mutated_destination_signature_invalid": True,
+        "mutated_funding_outpoint_signature_invalid": True,
+        "mutated_sequence_signature_invalid": True,
+        "mutated_sighash_trailer_signature_invalid": True,
         "emulator_screen": review,
         "screen_htlc_terms_observed": terms,
         "missing_htlc_fields": [field for field, seen in terms.items() if not seen],
