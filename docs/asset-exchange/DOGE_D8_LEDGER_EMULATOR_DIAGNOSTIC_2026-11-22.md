@@ -69,3 +69,24 @@ Les tests unitaires du parseur peuvent être lancés sans émulateur :
 Un scénario distinct construit un faux UTXO DOGE de **5 DOGE fictifs** (octets locaux, non publiés) et un paiement P2PKH de **4,99 DOGE fictifs**, avec **0,01 DOGE fictif de frais**. Il demande l'approbation à l'écran émulé uniquement après la lecture des montants et de l'étiquette d'adresse, puis vérifie une éventuelle signature ECDSA secp256k1 et le rejet cryptographique d'une transaction dont la sortie a été mutée de 1 koinu. Les réponses de refus/échec sont conservées comme diagnostics, sans signature de repli.
 
 Le test ne prouve pas l'affichage complet et indépendant de tous les champs ; une approbation simulée n'est jamais assimilée à un opérateur humain. Aucun serveur Dogecoin, UTXO réel, RPC, transaction diffusée, clé utilisateur, Trust Wallet ni réseau externe. Si le pilote legacy DOGE ne permet pas cette séquence, **l'échec est réel et D8 reste BLOCKED**, pas artificiellement promu PASS. Une signature P2PKH classique ne prouverait pas l'HTLC/CLTV Regtest exigé par GPUbnb.
+
+
+## Essai supplémentaire : remboursements HTLC/CLTV synthétiques
+
+Un nouveau scénario dans le *même* émulateur Ledger Dogecoin teste
+la structure D2 de GPUbnb (template HTLC \`6382012088a8...\`,
+branche REFUND, P2SH, lock CLTV 1351, séquence nonfinale
+\`0xfffffffe\`), mais remplace la clé publique de remboursement par la
+clé jetable **publique** obtenue de l'émulateur. Aucun seed n'est extrait.
+Financement fictif 5 DOGE, sortie fictive 4,99 DOGE, frais fictifs 0,01 DOGE.
+Il tente de signer un condensat legacy SIGHASH_ALL, vérifie publiquement
+ECDSA et refuse les mutations de montant, lock et redeemScript.
+
+**Ne pas confondre** signature numérique du hash de transaction en
+configuration DOGE mainnet avec une signature indépendante
+de l'ensemble des conditions Regtest/HTLC. Le firmware étudié n'affiche pas
+indépendamment tous les champs \`signer_review_fields\` de GPUbnb
+(réseau/genesis, rôle refund, outpoint, CLTV/lock, sequence, sighash etc.).
+Même si ECDSA et les mutations passent, le résultat **ne valide PAS D8**.
+Il ne fait aucune dépense, ne diffuse rien, ne communique avec aucun nœud
+ou service et conserve les preuves comme diagnostic isolé en PR brouillon.

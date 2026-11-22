@@ -9,6 +9,8 @@ on:
       - "asset-exchange/qualification/dogecoin/d8/test_ledger_emulator_probe.py"
       - "asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py"
       - "asset-exchange/qualification/dogecoin/d8/test_ledger_tx_sign_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/ledger_htlc_refund_probe.py"
+      - "asset-exchange/qualification/dogecoin/d8/test_ledger_htlc_refund_probe.py"
       - "docs/asset-exchange/DOGE_D8_LEDGER_EMULATOR_DIAGNOSTIC_2026-11-22.md"
   pull_request:
     paths:
@@ -34,6 +36,8 @@ jobs:
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_emulator_probe.py' -v
       - name: Check offline transaction fixture and independent ECDSA verifier
         run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_tx_sign_probe.py' -v
+      - name: Unit-test synthetic D2-style P2SH HTLC refund fixture
+        run: python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_ledger_htlc_refund_probe.py' -v
       - name: Fetch exact public Ledger Legacy DOGE application with submodules
         shell: bash
         run: |
@@ -111,6 +115,7 @@ jobs:
             -v "$APP_ROOT:/speculos/apps:ro" \
             -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py:/speculos/ledger_emulator_probe.py:ro" \
             -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_tx_sign_probe.py:/speculos/ledger_tx_sign_probe.py:ro" \
+            -v "$GITHUB_WORKSPACE/asset-exchange/qualification/dogecoin/d8/ledger_htlc_refund_probe.py:/speculos/ledger_htlc_refund_probe.py:ro" \
             ghcr.io/ledgerhq/speculos:latest \
             --model nanosp --display headless --api-port 5000 apps/doge-test.elf
           trap 'docker inspect doge-speculos --format "{{json .State}}" || true; docker logs doge-speculos 2>&1 | tail -n 85 || true; docker rm -f doge-speculos >/dev/null 2>&1 || true' EXIT
@@ -163,6 +168,23 @@ jobs:
           assert result["D8"] == "BLOCKED"
           assert result["real_DOGE_used"] == 0 and result["broadcasts"] == 0
           PY
+          # New HTLC-shaped synthetic fixture. This is NOT private Regtest
+          # signing qualification because the emulator remains a mainnet DOGE app.
+          docker exec doge-speculos python3 /speculos/ledger_htlc_refund_probe.py \
+            | tee "$RUNNER_TEMP/doge-ledger-htlc-refund-probe.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          result = json.loads((root / "doge-ledger-htlc-refund-probe.json").read_text())
+          assert result["signature_on_synthetic_htlc_refund_digest_verified"] is True
+          for field in ["mutated_refund_value_rejected", "mutated_refund_lock_rejected",
+                        "mutated_redeem_rejected"]:
+              assert result[field] is True
+          assert result["D8_status"] == "BLOCKED"
+          assert result["independent_on_device_htlc_terms_displayed"] is False
+          assert result["dogecoin_regtest_network_authenticated"] is False
+          assert result["real_doge_used"] == 0 and result["broadcasts"] == 0
+          PY
       - name: Preserve public emulator evidence even on build failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -175,5 +197,6 @@ jobs:
             ${{ runner.temp }}/doge-ledger-emulator-report.json
             ${{ runner.temp }}/doge-ledger-apdu-report.json
             ${{ runner.temp }}/doge-ledger-synthetic-signature-result.json
+            ${{ runner.temp }}/doge-ledger-htlc-refund-probe.json
           if-no-files-found: warn
           retention-days: 14

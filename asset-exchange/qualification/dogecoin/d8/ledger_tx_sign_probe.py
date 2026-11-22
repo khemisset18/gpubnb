@@ -104,8 +104,11 @@ def p2pkh_script(pubkey_hash):
 
 
 def output(amount, script):
-    if not 1_000_000 <= amount <= FUNDING_KOINU or len(script) != 25:
-        raise ValueError("non-fixed synthetic amount/script")
+    if not 1_000_000 <= amount <= FUNDING_KOINU or not (
+        (len(script) == 25 and script.startswith(bytes.fromhex("76a914")) and script.endswith(bytes.fromhex("88ac"))) or
+        (len(script) == 23 and script.startswith(bytes.fromhex("a914")) and script.endswith(bytes.fromhex("87")))
+    ):
+        raise ValueError("non-fixed synthetic P2PKH/P2SH amount/script")
     return amount.to_bytes(8, "little") + bytes([len(script)]) + script
 
 
@@ -175,7 +178,7 @@ def get_trusted_input(signer_script):
     send_ok(0x42, 0x80, 0, DUMMY_PREVOUT + b"\x00")
     send_ok(0x42, 0x80, 0, SEQUENCE)
     send_ok(0x42, 0x80, 0, b"\x01")
-    send_ok(0x42, 0x80, 0, FUNDING_KOINU.to_bytes(8, "little") + b"\x19")
+    send_ok(0x42, 0x80, 0, FUNDING_KOINU.to_bytes(8, "little") + bytes([len(signer_script)]))
     send_ok(0x42, 0x80, 0, signer_script)
     trusted = send_ok(0x42, 0x80, 0, bytes(4))
     if not 48 <= len(trusted) <= 128:
