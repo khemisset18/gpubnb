@@ -31,3 +31,55 @@
 ## Décision
 
 On peut continuer gratuitement le développement et les essais dans Regtest privé. Mais **sans appareil physique compatible et consentement sur son écran, D8 ne peut pas être conclu**, même avec 100 % des tests d'émulation au vert. Aucun merge ni activation de swaps DOGE réels n'est autorisé. D9 sera la revue indépendante globale après la fin du site, selon le souhait du propriétaire.
+
+
+## Nouveau précontrôle technique avant D8 (aucun appareil, aucune signature)
+
+Le script `asset-exchange/qualification/dogecoin/d8/physical_request_preflight.py`
+prend une demande de remboursement Regtest au schéma existant, les **deux**
+digests de termes/demande conservés **indépendamment** avant la demande,
+et une hauteur Regtest relevée séparément par le laboratoire autorisé.
+Il utilise le moteur existant `refund_ladder` sans en modifier les règles.
+Il vérifie le format, la liaison des montants/roles/script/chaîne,
+les huit champs `signer_review_fields` et les étapes de frais, et conduit
+**17 mutations distinctes AVANT tout envoi au signataire** :
+réseau, genesis, source, identité de requête, expiration, destination,
+montant de financement, outpoint, script/redeem, plafond frais, frais de
+palier, valeur de remboursement, sighash, transaction brute, séquence,
+lockTime et digest de requête.
+
+Sur une machine Linux dans le laboratoire privé, **avec uniquement des données publiques** :
+
+```sh
+python3 asset-exchange/qualification/dogecoin/d8/physical_request_preflight.py \
+  /path/to/PUBLIC_REQUEST.json \
+  TRUSTED_TERMS_DIGEST_64_HEX_FROM_SEPARATE_ORIGINAL_RECEIPT \
+  TRUSTED_REQUEST_DIGEST_64_HEX_FROM_SEPARATE_ORIGINAL_RECEIPT \
+  VERIFIED_REGTEST_HEIGHT \
+  /new/empty/path/d8-preflight.json
+```
+
+Le fichier de sortie doit être **inexistant** : mode 0600 et écriture exclusive.
+Aucun secret, aucune vraie transaction ni client RPC n'est utilisé.
+On ne doit **pas** se fier à un digest qui viendrait simplement de la demande
+elle-même : le programme vérifie l'égalité des valeurs fournies, **pas**
+leur provenance, et ne vérifie pas le caractère authentique de la hauteur
+de blockchain fournie. Ses sorties portent explicitement
+`independentReceiptOriginAuthenticated:false`,
+`chainHeightSourceAuthenticated:false`, `canSign:false`,
+`hardwareQualified:false` et `approvedForDOGEMainnet:false`.
+
+Exécuter les tests sans aucune clé ni appareil :
+
+```sh
+python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 \
+  -p 'test_physical_request_preflight.py' -v
+```
+
+**Interprétation importante :** les 17 refus sont des refus du **moteur
+logiciel de validation AVANT l'envoi**. Ils ne sont PAS les refus
+de l'appareil lui-même requis par H8.3. Il faudra présenter ces requêtes
+mutées au pilote matériel qualifié et vérifier les refus sur le vrai
+appareil avant de conclure H8.3, dans la limite des scénarios permis.
+Aucune « approbation » logicielle n'autorise l'utilisation d'un appareil
+Ledger DOGE non qualifié ou de fonds réels.
