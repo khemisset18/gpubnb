@@ -348,7 +348,6 @@ impl AudioCaptureSession {
     }
 }
 
-#[cfg(any(target_os = "windows", test))]
 fn encode_audio_capture_request(
     request: AudioCaptureRequest,
 ) -> Result<[u8; AUDIO_CAPTURE_REQUEST_SIZE], MediaProbeError> {
@@ -403,7 +402,9 @@ fn decode_audio_packet(
         || payload_bytes != expected_bytes
         || payload.len() != payload_bytes
         || flags & !0x03 != 0
-        || (52..64).step_by(4).any(|offset| read_u32(result, offset).ok() != Some(0))
+        || (52..64)
+            .step_by(4)
+            .any(|offset| read_u32(result, offset).ok() != Some(0))
     {
         return Err(MediaProbeError::InvalidResult);
     }
@@ -1390,10 +1391,7 @@ mod tests {
         assert_eq!(&wire[12..16], &2048u32.to_le_bytes());
         assert_eq!(&wire[16..20], &25u32.to_le_bytes());
         assert_eq!(&wire[20..24], &[0u8; 4]);
-        assert_eq!(
-            &wire[24..32],
-            &0x1122_3344_5566_7788u64.to_le_bytes()
-        );
+        assert_eq!(&wire[24..32], &0x1122_3344_5566_7788u64.to_le_bytes());
 
         for invalid in [
             AudioCaptureRequest {
@@ -1435,9 +1433,9 @@ mod tests {
         assert!(CPP_AUDIO_SOURCE.contains("WaitForMultipleObjects("));
         assert!(CPP_AUDIO_SOURCE.contains("AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR"));
         assert!(CPP_AUDIO_SOURCE.contains("bufferFlags & ~kKnownAudioBufferFlags"));
-        assert!(CPP_AUDIO_SOURCE.contains(
-            "AUDCLNT_STREAMFLAGS_NOPERSIST,\n        0,\n        0,"
-        ));
+        assert!(
+            CPP_AUDIO_SOURCE.contains("AUDCLNT_STREAMFLAGS_NOPERSIST,\n        0,\n        0,")
+        );
         assert!(!CPP_AUDIO_SOURCE.contains("const REFERENCE_TIME duration"));
     }
 
@@ -1468,13 +1466,7 @@ mod tests {
             (AudioSampleFormat::PcmInt32, 4),
         ] {
             let payload = vec![0x5a; 4 * bytes_per_sample];
-            let result = audio_result(
-                expected,
-                format,
-                2,
-                0,
-                payload.len() as u32,
-            );
+            let result = audio_result(expected, format, 2, 0, payload.len() as u32);
             assert_eq!(
                 decode_audio_packet(&result, &payload, expected)
                     .expect("supported PCM format")
@@ -1536,9 +1528,11 @@ mod tests {
             target_process_id: 2048,
         };
         let silent_wire = audio_result(expected, AudioSampleFormat::PcmUint8, 2, 1, 4);
-        assert!(decode_audio_packet(&silent_wire, &[0x80; 4], expected)
-            .expect("unsigned 8-bit PCM silence")
-            .silent);
+        assert!(
+            decode_audio_packet(&silent_wire, &[0x80; 4], expected)
+                .expect("unsigned 8-bit PCM silence")
+                .silent
+        );
         assert_eq!(
             decode_audio_packet(&silent_wire, &[0; 4], expected).err(),
             Some(MediaProbeError::InvalidResult)
