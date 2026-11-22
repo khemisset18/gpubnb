@@ -374,3 +374,49 @@ de l'exécution. Commit testé :
 purement hors ligne et n'exécutent ni script dans un vrai nœud Litecoin,
 ni validation de consensus, ni signature, ni remboursement, ni transaction,
 ni wallet. L8 et L9 restent différés et aucune activation n'est permise.
+
+## Complément L3 — modèle de bornes CLTV/finalité purement hypothétique
+
+Après réception du journal WSL2, les **87/87 tests hors ligne** sont
+attestés sur le poste (commit `2f7dd83`, 0 erreur, worktree propre).
+
+L'examen de `src/script/interpreter.cpp` au commit amont
+`ec1b6489a900d09cf5991e220dce089c77a232a2` montre dans
+`GenericTransactionSignatureChecker<T>::CheckLockTime` :
+vérification du même type de locktime hauteur/temps, `nLockTime`
+supérieur ou égal à la condition CLTV, et `nSequence` non final.
+L'examen de `src/consensus/tx_verify.cpp`, `IsFinalTx`, montre que,
+pour un input non final, `nLockTime < nBlockHeight` doit être satisfait
+avant l'inclusion fictive par hauteur. Ce contrôle source reste limité
+à ces champs : le code `IsFinalTx` contient aussi des contraintes
+MWEB, non simulées ici.
+
+Deux fichiers supplémentaires ont été créés :
+- `refund_height_model.py` — simulateur déterministe de valeurs
+  publiques synthétiques `script_height`, `nLockTime`,
+  `nSequence`, version, réseau, MWEB et hauteur d'inclusion
+  **hypothétique**, sans transaction ni source de chaîne ;
+- `test_refund_height_model.py` — **23 méthodes unitaires PASS
+  localement** : cas à la hauteur cible, hauteur cible + 1,
+  `nLockTime` trop bas, type temps au lieu de hauteur, séquence
+  finale/inattendue, données mal typées, mauvaise chaîne, MWEB,
+  et gardes contre toute autorisation financière.
+
+Les 23 méthodes ont été exécutées dans l'environnement local de
+construction, **pas encore sur l'Ubuntu WSL2 de l'opérateur**.
+Les empreintes Git ont été comparées entre les fichiers testés et
+ceux publiés :
+`3e17aed1e6dac5707aabede2941b07f98624abb2` et
+`9572da609a3a9458866925b164f7ff9766382313`.
+
+**Total attendu sur WSL2 après actualisation : 110 méthodes**
+(87 déjà attestées + 23 supplémentaires à attester).
+
+Le résultat `SIMULATED_SCALAR_CONDITIONS_MET_NO_CHAIN_PROOF`
+ne veut pas dire qu'un vrai refund peut être émis, ni même que
+le contrat ou le witness est valide. **Toutes les sorties ont
+`canRefund=false`, `canSign=false`, `canBroadcast=false`,
+`nativeConsensusVerified=false` et
+`automaticSettlementSupported=false`.** L1–L9 restent bloqués
+ou différés selon les gates. Aucun nœud, wallet, clé, réseau, émission
+ni fonds réels.
