@@ -21,6 +21,7 @@ const allocation = fs.readFileSync(
   new URL('../src/resource-allocation-service.ts', import.meta.url),
   'utf8',
 );
+const config = fs.readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8');
 
 test('Windows-native Stage 3 qualification remains private and explicit', () => {
   assert.match(desktop, /qualification === 'windows-native'/);
@@ -93,13 +94,20 @@ test('private qualification reads the selected global workspace definition', () 
   assert.doesNotMatch(desktop, /WorkspaceRelease\.UPCOMING/);
 });
 
-test('private Gaming booking preserves workspace identity and never borrows the screen-only gate', () => {
+test('private Gaming attempt preserves workspace identity and requires a separate no-payment test gate', () => {
   assert.match(desktop, /requestedWorkspaceSlug: slug/);
   assert.match(desktop, /workspace: \{ slug \}/);
   assert.match(desktop, /const spec = workspaceSpec\[slug\]/);
   assert.match(desktop, /action: slug === 'gaming'[\s\S]*?WINDOWS_NATIVE_GAMING_SESSION_REQUESTED/);
   assert.match(desktop, /privateQualificationSourceAllowed\(slug, qualifiedSource, machine\.ownerId, renterId\)/);
-  assert.match(desktop, /windowsNativePrivateMediaReady\(\): boolean \{\s*return false/);
+  assert.match(desktop, /function windowsNativePrivateAttemptEnabled\(slug: WindowsNativePrivateWorkspaceSlug\): boolean/);
+  assert.match(desktop, /config\.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED === 'true'/);
+  assert.match(desktop, /config\.WINDOWS_NATIVE_RENTALS_ENABLED === 'false'/);
+  assert.match(desktop, /qualificationPassed: false/);
+  assert.match(desktop, /publicEligible: false/);
+  assert.match(desktop, /windowsNativePrivateAttemptEnabled\(slug\)/);
+  assert.match(config, /WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED:[\s\S]{0,180}\.default\('false'\)/);
+  assert.match(config, /Private Gaming test attempts require no-payment beta mode and disabled Windows-native rentals/);
 });
 
 

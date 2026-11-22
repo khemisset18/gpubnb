@@ -55,14 +55,14 @@ const qualificationBookingStatuses: BookingStatus[] = [
 const WINDOWS_NATIVE_QUALIFICATION_SECONDS = 30 * 60;
 
 /**
- * Private media stays closed until real PC1/PC2 audio, input, isolation and
- * STOP behavior are qualified. Keep workspace-specific reasons so Gaming
- * cannot be mistaken for a Cloud Desktop qualification.
+ * Cloud Desktop stays closed until its real PC1/PC2 media path is qualified.
+ * Gaming may run only an explicitly enabled owner-only, no-payment test attempt;
+ * that attempt never records a qualification pass or enables public rentals.
  */
 type WindowsNativePrivateWorkspaceSlug = 'cloud-desktop' | 'gaming';
 const WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASONS: Record<WindowsNativePrivateWorkspaceSlug, string> = {
   'cloud-desktop': 'windows_native_audio_not_qualified',
-  gaming: 'windows_native_audio_controller_not_qualified',
+  gaming: 'windows_native_private_gaming_test_attempt_disabled',
 };
 
 function isWindowsNativePrivateWorkspaceSlug(value: unknown): value is WindowsNativePrivateWorkspaceSlug {
@@ -87,8 +87,15 @@ function privateQualificationSourceAllowed(
   return slug !== 'gaming' || source.captureBackend === 'iddcx';
 }
 
-function windowsNativePrivateMediaReady(): boolean {
-  return false;
+function windowsNativePrivateAttemptEnabled(slug: WindowsNativePrivateWorkspaceSlug): boolean {
+  // This permits one owner-only, no-payment Gaming test attempt so the actual
+  // PC1→PC2 path can be measured. It is deliberately not a qualification pass:
+  // public Windows rentals remain behind their separate release and evidence gates.
+  return slug === 'gaming'
+    && windowsNativePrivateQualificationEnabled()
+    && config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED === 'true'
+    && config.WINDOWS_NATIVE_RENTALS_ENABLED === 'false'
+    && !windowsNativeCommercialReleaseEnabled();
 }
 
 const activeAllocations: ResourceAllocationStatus[] = [
@@ -436,7 +443,7 @@ async function createWindowsNativeQualificationBooking(
   if (!windowsNativePrivateQualificationEnabled()) {
     return { error: 'windows_native_qualification_disabled' as const };
   }
-  if (!windowsNativePrivateMediaReady()) {
+  if (!windowsNativePrivateAttemptEnabled(slug)) {
     return { error: windowsNativePrivateMediaBlockReason(slug) };
   }
 
@@ -769,7 +776,7 @@ async function createWindowsNativeQualificationSession(
   if (!windowsNativePrivateQualificationEnabled()) {
     return { error: 'windows_native_qualification_disabled' as const };
   }
-  if (!windowsNativePrivateMediaReady()) {
+  if (!windowsNativePrivateAttemptEnabled(slug)) {
     return { error: windowsNativePrivateMediaBlockReason(slug) };
   }
 
@@ -1055,7 +1062,12 @@ async function createWindowsNativeQualificationSession(
                 ? 'WINDOWS_NATIVE_GAMING_SESSION_REQUESTED'
                 : 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED',
               details: {
-                qualification: 'stage3',
+                qualification: slug === 'gaming' ? 'private-gaming-test-attempt' : 'stage3',
+                ...(slug === 'gaming' ? {
+                  testAttemptOnly: true,
+                  qualificationPassed: false,
+                  publicEligible: false,
+                } : {}),
                 workspaceSlug: slug,
                 gpuUuid: nativeGpuUuid,
               },
@@ -1490,7 +1502,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       };
     }
 
-    if (!windowsNativePrivateMediaReady()) {
+    if (!windowsNativePrivateAttemptEnabled(slug)) {
       return {
         privateNoPaymentMode: true,
         allowed: false,
@@ -1502,6 +1514,9 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
     return {
       privateNoPaymentMode: true,
       allowed: true,
+      testAttemptOnly: true,
+      qualificationPassed: false,
+      publicEligible: false,
       code: 'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED',
     };
   });
@@ -1531,7 +1546,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
     if (!windowsNativePrivateQualificationEnabled()) {
       return reply.code(409).send({ error: 'windows_native_qualification_disabled' });
     }
-    if (!windowsNativePrivateMediaReady()) {
+    if (!windowsNativePrivateAttemptEnabled(slug)) {
       return reply.code(409).send({ error: windowsNativePrivateMediaBlockReason(slug) });
     }
 
@@ -1566,7 +1581,8 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       if (qualification === 'windows-native' && !windowsNativePrivateQualificationEnabled()) {
         return reply.code(409).send({ error: 'windows_native_qualification_disabled' });
       }
-      if (qualification === 'windows-native' && !windowsNativePrivateMediaReady()) {
+      if (qualification === 'windows-native'
+        && !windowsNativePrivateAttemptEnabled(slug as WindowsNativePrivateWorkspaceSlug)) {
         return reply.code(409).send({ error: windowsNativePrivateMediaBlockReason(slug) });
       }
       const selected = await db.booking.findFirst({
@@ -1627,7 +1643,14 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
           machine: { select: { gpuModel: true, vramMiB: true, connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
           booking: { select: { status: true, startsAt: true, endsAt: true } },
           machineWorkspace: { select: { workspace: { select: { slug: true, name: true } } } },
-          events: { where: { action: 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED' }, select: { id: true }, take: 1 },
+          events: {
+            where: { action: { in: [
+              'WINDOWS_NATIVE_QUALIFICATION_REQUESTED',
+              'WINDOWS_NATIVE_GAMING_SESSION_REQUESTED',
+            ] } },
+            select: { id: true, action: true },
+            take: 2,
+          },
         },
       });
       if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
@@ -1646,8 +1669,14 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       });
       const connection = safeConnection(row.connectionMetadata);
       const live = connection.ready && isWorkspaceGatewayLive(row.gatewayLastSeenAt);
+      const privateScreenQualification = row.events.some((event) =>
+        !event.action || event.action === 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED');
+      const privateGamingAttempt = row.events.some((event) =>
+        event.action === 'WINDOWS_NATIVE_GAMING_SESSION_REQUESTED');
+      const privateAttemptBlocked = privateGamingAttempt
+        && !windowsNativePrivateAttemptEnabled('gaming');
       const privateQualification = row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE
-        && row.events.length > 0;
+        && (privateScreenQualification || privateAttemptBlocked);
       const phase = preparationPhase(row.status, row.preparationStep, row.job?.status ?? null, live);
       const preparationStart = row.preparationStartedAt ?? row.preparationRequestedAt ?? row.job?.createdAt ?? row.updatedAt;
       const preparationEnd = row.preparationCompletedAt ?? row.endedAt ?? row.job?.finishedAt ?? new Date();
@@ -1671,8 +1700,15 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
           errorCode: row.job?.errorCode ?? null,
         },
         canOpen: !privateQualification && policy.allowed && live,
+        ...(privateGamingAttempt ? {
+          testAttemptOnly: true,
+          qualificationPassed: false,
+          publicEligible: false,
+        } : {}),
         blockedReason: privateQualification
-          ? windowsNativePrivateMediaBlockReason(slug).toUpperCase()
+          ? (privateAttemptBlocked
+            ? WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASONS.gaming.toUpperCase()
+            : windowsNativePrivateMediaBlockReason(slug).toUpperCase())
           : !policy.allowed ? policy.code : !connection.ready ? 'GATEWAY_NOT_READY' : live ? null : 'GATEWAY_STALE',
       };
     });
@@ -1695,12 +1731,30 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
           gatewayLastSeenAt: true,
           machine: { select: { connectivity: true, operational: true, moderationStatus: true, lastHeartbeatAt: true } },
           booking: { select: { status: true } },
-          events: { where: { action: 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED' }, select: { id: true }, take: 1 },
+          events: {
+            where: { action: { in: [
+              'WINDOWS_NATIVE_QUALIFICATION_REQUESTED',
+              'WINDOWS_NATIVE_GAMING_SESSION_REQUESTED',
+            ] } },
+            select: { id: true, action: true },
+            take: 2,
+          },
         },
       });
       if (!row) return reply.code(404).send({ error: 'workspace_session_not_found' });
-      if (row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE && row.events.length > 0) {
+      const privateScreenQualification = row.events.some((event) =>
+        !event.action || event.action === 'WINDOWS_NATIVE_QUALIFICATION_REQUESTED');
+      const privateGamingAttempt = row.events.some((event) =>
+        event.action === 'WINDOWS_NATIVE_GAMING_SESSION_REQUESTED');
+      if (row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE && privateScreenQualification) {
         return reply.code(409).send({ error: windowsNativePrivateMediaBlockReason(slug) });
+      }
+      if (row.runtimeBackend === WorkspaceRuntimeBackend.WINDOWS_NATIVE
+        && privateGamingAttempt
+        && !windowsNativePrivateAttemptEnabled('gaming')) {
+        return reply.code(409).send({
+          error: WINDOWS_NATIVE_PRIVATE_MEDIA_BLOCK_REASONS.gaming,
+        });
       }
 
       const policy = evaluateWorkspaceAccess({

@@ -28,7 +28,7 @@
     },
     gaming:{
       label:'Gaming / Steam',
-      info:"Gaming / Steam Windows : après qualification réelle, le navigateur transmet vidéo, audio et Gamepad vers le Host. Les jeux exigeant XInput natif restent incompatibles.",
+      info:"Gaming / Steam : un essai privé sans paiement peut mesurer le parcours PC1→PC2. Cet essai ne vaut pas qualification et n’active jamais la location publique. Les jeux exigeant XInput natif restent incompatibles.",
       canPrivatePreflight:true,
       canPrivateLaunch:true,
     },
@@ -161,12 +161,20 @@
       if(preflight.privateNoPaymentMode!==true){
         throw new Error('Le mode privé sans paiement n\'est pas actif. Aucune réservation créée.');
       }
+      if(selectedWorkspace==='gaming' && (
+        preflight.testAttemptOnly!==true
+        || preflight.qualificationPassed!==false
+        || preflight.publicEligible!==false
+      )){
+        throw new Error('Le serveur n’a pas confirmé un essai Gaming strictement privé. Aucune réservation créée.');
+      }
       if(preflight.allowed!==true){
         const reason={
           PRIVATE_WINDOWS_HOST_NOT_READY:'PC1 ne prouve pas encore sa capacité Windows native.',
           PRIVATE_WINDOWS_HOST_RESERVED:'PC1 est déjà réservé par une autre session.',
           windows_native_audio_not_qualified:'Cloud Desktop reste bloqué : le flux audio doit encore être qualifié sur PC1 et PC2.',
           windows_native_audio_controller_not_qualified:'Gaming reste bloqué : l’audio, le mode manette navigateur et l’isolation doivent encore être qualifiés sur PC1 et PC2. Les jeux qui exigent XInput ne sont pas pris en charge.',
+          windows_native_private_gaming_test_attempt_disabled:'Le serveur n’autorise pas encore l’essai privé Gaming sans paiement. Aucune réservation créée.',
         }[preflight.code]||'Préconditions privées manquantes.';
         throw new Error(reason+' Aucune réservation créée.');
       }
@@ -175,7 +183,7 @@
           ' n\'a pas encore de chemin de lancement privé qualifié. Aucune réservation créée.');
       }else{
         privateReady=true;
-        setStatus('Précontrôle PC1 favorable. Un clic sur « Démarrer » vérifiera de nouveau les autorisations avant toute session.');
+        setStatus('Essai privé autorisé. Il ne qualifie pas le streaming et ne rend pas le Host publiquement réservable; « Démarrer » revérifiera toutes les autorisations.');
       }
     }catch(error){
       privateReady=false;
@@ -207,12 +215,20 @@
       if(preflight.privateNoPaymentMode!==true){
         throw new Error('Test bloqué : serveur privé sans paiement non activé. Aucune réservation créée.');
       }
+      if(selectedWorkspace==='gaming' && (
+        preflight.testAttemptOnly!==true
+        || preflight.qualificationPassed!==false
+        || preflight.publicEligible!==false
+      )){
+        throw new Error('Test bloqué : le serveur n’a pas confirmé un essai Gaming strictement privé. Aucune réservation créée.');
+      }
       if(preflight.allowed!==true){
         const reason={
           PRIVATE_WINDOWS_HOST_NOT_READY:'PC1 ne confirme pas encore la session Windows native.',
           PRIVATE_WINDOWS_HOST_RESERVED:'PC1 est déjà réservé par une autre session.',
           windows_native_audio_not_qualified:'Cloud Desktop reste bloqué : audio et lecture navigateur à qualifier sur PC1 et PC2.',
-          windows_native_audio_controller_not_qualified:'Gaming reste bloqué : audio, commandes et isolation à qualifier sur PC1 et PC2. Les jeux exigeant XInput natif sont incompatibles.'
+          windows_native_audio_controller_not_qualified:'Gaming reste bloqué : audio, commandes et isolation à qualifier sur PC1 et PC2. Les jeux exigeant XInput natif sont incompatibles.',
+          windows_native_private_gaming_test_attempt_disabled:'Le serveur n’autorise pas encore l’essai privé Gaming sans paiement.'
         }[preflight.code]||'Préconditions de qualification manquantes.';
         throw new Error(`Test bloqué : ${reason} Aucune réservation créée.`);
       }

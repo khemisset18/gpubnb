@@ -296,7 +296,7 @@ test('four private workspace choices stay server-gated until their own media qua
     if(path==='/auth/me')return response(200,{user:{id:'renter-1'}});
     if(path.startsWith('/qualification/windows-native/preflight'))return response(200,{
       privateNoPaymentMode:true,allowed:false,
-      code:path.includes('workspaceSlug=gaming')?'windows_native_audio_controller_not_qualified':'windows_native_audio_not_qualified',
+      code:path.includes('workspaceSlug=gaming')?'windows_native_private_gaming_test_attempt_disabled':'windows_native_audio_not_qualified',
     });
     throw new Error(`Unexpected request for non-launchable profile: ${path}`);
   }});
@@ -326,12 +326,28 @@ test('four private workspace choices stay server-gated until their own media qua
   assert.equal(box.calls.length,4,'a blocked launcher cannot create a booking or workspace session');
 });
 
-test('qualified private Gaming carries the selected workspace through booking, session, status and access',async()=>{
+test('Gaming launcher rejects a positive preflight that omits the test-only and non-public markers',async()=>{
+  const gaming=node();gaming.dataset.privateWorkspace='gaming';
+  const box=browser({route:'/stage3-windows-native.html',groups:{'[data-private-workspace]':[gaming]},fetcher:path=>{
+    if(path==='/auth/me')return response(200,{user:{id:'owner-renter'}});
+    if(path==='/qualification/windows-native/preflight?workspaceSlug=gaming')
+      return response(200,{privateNoPaymentMode:true,allowed:true,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'});
+    throw new Error(`Unexpected request before server attests test-only mode: ${path}`);
+  }});
+  box.load('stage3-windows-native.js');
+  gaming.events.get('click')();
+  box.nodes.get('#stage3-check').events.get('click')();await settle();
+  assert.equal(box.nodes.get('#stage3-start').disabled,true);
+  assert.match(box.nodes.get('#stage3-status').textContent,/strictement privé/i);
+  assert.ok(!box.calls.some(call=>call.options.method==='POST'));
+});
+
+test('authorized private Gaming test carries the workspace through booking, session, status and access without claiming qualification',async()=>{
   const gaming=node();gaming.dataset.privateWorkspace='gaming';
   const box=browser({route:'/stage3-windows-native.html',groups:{'[data-private-workspace]':[gaming]},fetcher:(path,options={})=>{
     if(path==='/auth/me')return response(200,{user:{id:'owner-renter'}});
     if(path==='/qualification/windows-native/preflight?workspaceSlug=gaming')
-      return response(200,{privateNoPaymentMode:true,allowed:true,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'});
+      return response(200,{privateNoPaymentMode:true,allowed:true,testAttemptOnly:true,qualificationPassed:false,publicEligible:false,code:'PRIVATE_WINDOWS_TEST_ATTEMPT_ALLOWED'});
     if(path==='/qualification/windows-native/booking'){
       assert.equal(options.method,'POST');assert.deepEqual(JSON.parse(options.body),{workspaceSlug:'gaming'});
       return response(201,{bookingId:'booking-1'});
@@ -349,6 +365,7 @@ test('qualified private Gaming carries the selected workspace through booking, s
   gaming.events.get('click')();
   box.nodes.get('#stage3-check').events.get('click')();await settle();
   assert.equal(box.nodes.get('#stage3-start').disabled,false);
+  assert.match(box.nodes.get('#stage3-status').textContent,/ne qualifie pas le streaming/i);
   box.nodes.get('#stage3-start').events.get('click')();await settle();
   assert.deepEqual(box.calls.map(call=>call.path),[
     '/auth/me','/qualification/windows-native/preflight?workspaceSlug=gaming',

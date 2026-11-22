@@ -10,11 +10,22 @@ The current Gaming candidate is PR #387 on
 `feat/gaming-end-to-end-20261122`, stacked on the private browser workspace
 page. Its audio software path now runs from Steam process-loopback capture to
 the authenticated browser player, but it has no Windows or PC1→PC2 proof. The
-preflight is read-only; launch controls remain disabled and the API keeps
-reservation, access and owner opt-in blocked while audio/controller qualification
-gates are false. Old private qualification sessions remain blocked at the
-status/access API and gateway fence and are sent to the Agent as `STOPPING` for
-local cleanup.
+preflight is read-only and launch controls remain blocked by default. The API
+does not treat a private test attempt as satisfying the audio/controller
+qualification gates. Old screen-only qualification sessions remain blocked at
+the status/access API and gateway fence and are sent to the Agent as `STOPPING`
+for local cleanup.
+
+The code has a separate, default-off operator gate for a **private Gaming test
+attempt**: `WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED=true` is accepted
+only while `BETA_TEST_DEV_BYPASS=true`, `ESCROW_PROGRAM_ID` is still
+`NOT_DEPLOYED_YET`, and `WINDOWS_NATIVE_RENTALS_ENABLED=false`. It permits the
+authenticated owner to exercise the hidden/paused host path without real
+payment. The response and session event explicitly record that this is only a
+test attempt: it does not pass qualification, enable owner publication, or make
+the GPU publicly bookable. Leave the gate false until the signed test package
+and controlled operator window are ready. Public native rentals remain blocked
+independently.
 
 Read-only Render inspection on 2026-11-21 found the service
 [`gpubnb-stage3-private`](https://dashboard.render.com/web/srv-dau86i2d0e5s73elmk10)

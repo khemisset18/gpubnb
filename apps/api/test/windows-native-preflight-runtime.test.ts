@@ -21,8 +21,11 @@ const host = () => ({id:'private-listing', hourlyLamports:3600n,
     vendor:'NVIDIA', moderationStatus:'CLEAR', status:'AVAILABLE'}}]});
 
 async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; headers: Record<string,string>}) => Promise<void>) {
-  const original={bypass:config.BETA_TEST_DEV_BYPASS,escrow:config.ESCROW_PROGRAM_ID};
+  const original={bypass:config.BETA_TEST_DEV_BYPASS,escrow:config.ESCROW_PROGRAM_ID,
+    privateGamingAttempt:config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED,
+    commercialRentals:config.WINDOWS_NATIVE_RENTALS_ENABLED};
   config.BETA_TEST_DEV_BYPASS='true';config.ESCROW_PROGRAM_ID='NOT_DEPLOYED_YET';
+  config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='false';config.WINDOWS_NATIVE_RENTALS_ENABLED='false';
   const state={authenticated:true,reads:0,candidates:[] as any[], listingReads:0,firstReadOnly:false,session:null as any,redisWrites:0};
   const db={gpuListing:{findMany:async()=>{state.reads++;state.listingReads++;return state.firstReadOnly&&state.listingReads===1?[host()]:state.candidates;}},
     booking:{count:async()=>{state.reads++;return 0;},findFirst:async()=>{state.reads++;return null;}},
@@ -32,7 +35,9 @@ async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; he
     del:async()=>1,set:async()=>{state.redisWrites++;return 'OK';}} as unknown as Redis;
   const app=Fastify();await app.register(cookie);registerDesktopWorkspaceRoutes(app,db,redis);
   try {await run({app,state,headers:{cookie:`${config.SESSION_COOKIE_NAME}=offline-fixture-token`}});}
-  finally {await app.close();config.BETA_TEST_DEV_BYPASS=original.bypass;config.ESCROW_PROGRAM_ID=original.escrow;}
+  finally {await app.close();config.BETA_TEST_DEV_BYPASS=original.bypass;config.ESCROW_PROGRAM_ID=original.escrow;
+    config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED=original.privateGamingAttempt;
+    config.WINDOWS_NATIVE_RENTALS_ENABLED=original.commercialRentals;}
 }
 
 test('actual private GET and POST refuse absent/expired authentication before any DB read',async()=>fixture(async({app,state,headers})=>{
@@ -67,17 +72,69 @@ test('private Gaming is owner-bound, uses its own block reason and rejects direc
   const preflight=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
   assert.equal(preflight.statusCode,200);assert.equal(preflight.json().privateNoPaymentMode,true);
   assert.equal(preflight.json().allowed,false);
-  assert.equal(preflight.json().code,'windows_native_audio_controller_not_qualified');
+  assert.equal(preflight.json().code,'windows_native_private_gaming_test_attempt_disabled');
   const readsBefore=state.reads;
   const booking=await app.inject({method:'POST',url:'/qualification/windows-native/booking',headers,
     payload:{workspaceSlug:'gaming'}});
   assert.equal(booking.statusCode,409);
-  assert.equal(booking.json().error,'windows_native_audio_controller_not_qualified');
+  assert.equal(booking.json().error,'windows_native_private_gaming_test_attempt_disabled');
   const session=await app.inject({method:'POST',url:'/bookings/forged-booking/workspace/gaming?qualification=windows-native',headers});
   assert.equal(session.statusCode,409);
-  assert.equal(session.json().error,'windows_native_audio_controller_not_qualified');
+  assert.equal(session.json().error,'windows_native_private_gaming_test_attempt_disabled');
   assert.equal(state.reads,readsBefore,'unqualified Gaming must stop before booking or allocation lookups');
   assert.equal(state.redisWrites,0,'unqualified Gaming cannot create access or session grants');
+}));
+
+test('explicit private Gaming attempt permits only an owner test and never records qualification or public eligibility',async()=>fixture(async({app,state,headers})=>{
+  config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
+  state.candidates=[host()];
+  const gaming=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+  assert.equal(gaming.statusCode,200);
+  assert.equal(gaming.json().privateNoPaymentMode,true);
+  assert.equal(gaming.json().allowed,true);
+  assert.equal(gaming.json().testAttemptOnly,true);
+  assert.equal(gaming.json().qualificationPassed,false);
+  assert.equal(gaming.json().publicEligible,false);
+  const desktop=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=cloud-desktop',headers});
+  assert.equal(desktop.json().allowed,false);
+  assert.equal(desktop.json().code,'windows_native_audio_not_qualified');
+  assert.equal(state.redisWrites,0);
+}));
+
+test('private Gaming attempt is rejected whenever commercial Windows rentals are enabled',async()=>fixture(async({app,state,headers})=>{
+  config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
+  config.WINDOWS_NATIVE_RENTALS_ENABLED='true';
+  state.candidates=[host()];
+  const response=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+  assert.equal(response.json().allowed,false);
+  assert.equal(response.json().code,'windows_native_private_gaming_test_attempt_disabled');
+  assert.equal(state.redisWrites,0);
+}));
+
+test('Gaming session status and access require the private attempt gate and never report public eligibility',async()=>fixture(async({app,state,headers})=>{
+  state.session={id:'gaming-session',status:'READY',runtimeBackend:'WINDOWS_NATIVE',expiresAt:new Date(Date.now()+60_000),
+    preparationProgress:100,preparationStep:'CONNECTION_READY',preparationAttempts:1,preparationRequestedAt:new Date(),
+    preparationStartedAt:new Date(),preparationCompletedAt:new Date(),endedAt:null,updatedAt:new Date(),
+    connectionMetadata:{gatewayPath:'/workspace-gateway/gaming-session/native-stream'},gatewayLastSeenAt:new Date(),job:null,
+    machine:{gpuModel:'NVIDIA test',vramMiB:8192,connectivity:'ONLINE',operational:'AVAILABLE',moderationStatus:'CLEAR',lastHeartbeatAt:new Date()},
+    booking:{status:'FUNDED',startsAt:new Date(),endsAt:new Date(Date.now()+60_000)},
+    machineWorkspace:{workspace:{slug:'gaming',name:'Gaming'}},events:[{id:'gaming-attempt',action:'WINDOWS_NATIVE_GAMING_SESSION_REQUESTED'}]};
+  const blocked=await app.inject({method:'GET',url:'/bookings/gaming-booking/workspace/gaming/status',headers});
+  assert.equal(blocked.json().status,'BLOCKED');assert.equal(blocked.json().canOpen,false);
+  assert.equal(blocked.json().blockedReason,'WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_DISABLED');
+  const blockedAccess=await app.inject({method:'POST',url:'/bookings/gaming-booking/workspace/gaming/access',headers});
+  assert.equal(blockedAccess.statusCode,409);
+  assert.equal(blockedAccess.json().error,'windows_native_private_gaming_test_attempt_disabled');
+  assert.equal(state.redisWrites,0);
+
+  config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
+  const allowed=await app.inject({method:'GET',url:'/bookings/gaming-booking/workspace/gaming/status',headers});
+  assert.equal(allowed.json().status,'READY');assert.equal(allowed.json().canOpen,true);
+  assert.equal(allowed.json().testAttemptOnly,true);assert.equal(allowed.json().qualificationPassed,false);
+  assert.equal(allowed.json().publicEligible,false);
+  const access=await app.inject({method:'POST',url:'/bookings/gaming-booking/workspace/gaming/access',headers});
+  assert.equal(access.statusCode,200);assert.match(access.json().openPath,/\?grant=/);
+  assert.equal(state.redisWrites,1);
 }));
 
 test('private qualification rejects unsupported workspace slugs before database access',async()=>fixture(async({app,state,headers})=>{
