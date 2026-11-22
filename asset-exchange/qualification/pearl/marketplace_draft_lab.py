@@ -14,9 +14,9 @@ _MAX_TOTAL = 128
 _MAX_OWNER = 4
 _MAX_LIFETIME = 1440
 _MAX_TICK = 1_000_000_000
-_OWNER_RE = re.compile(r"lab_[a-z0-9]{3,16}\\Z", re.ASCII)
-_COMMAND_RE = re.compile(r"cmd_[a-z0-9_-]{6,32}\\Z", re.ASCII)
-_RECORD_RE = re.compile(r"prl-lab-[0-9]{8}\\Z", re.ASCII)
+_OWNER_RE = re.compile(r"lab_[a-z0-9]{3,16}\Z", re.ASCII)
+_COMMAND_RE = re.compile(r"cmd_[a-z0-9_-]{6,32}\Z", re.ASCII)
+_RECORD_RE = re.compile(r"prl-lab-[0-9]{8}\Z", re.ASCII)
 
 
 class DraftRefused(ValueError):
