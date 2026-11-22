@@ -48,6 +48,40 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s asset-exchange/qualification/dogecoin/d8 -p 'test_physical_request_preflight.py' -v
+      - name: End-to-end offline H8 public request preflight (fake D2 fixture only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, "asset-exchange/qualification/dogecoin/d8")
+          from test_physical_request_preflight import public_only_fixture
+          request = public_only_fixture()
+          target = pathlib.Path(os.environ["RUNNER_TEMP"])
+          (target / "doge-d8-example-request.json").write_text(
+              json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
+          (target / "doge-d8-example-terms-digest").write_text(request["termsDigest"])
+          (target / "doge-d8-example-request-digest").write_text(request["requestDigest"])
+          PY
+          # Digests above are generated from the same PUBLIC synthetic fixture:
+          # test only, never independent user authorization.
+          python3 asset-exchange/qualification/dogecoin/d8/physical_request_preflight.py \
+            "$RUNNER_TEMP/doge-d8-example-request.json" \
+            "$(cat "$RUNNER_TEMP/doge-d8-example-terms-digest")" \
+            "$(cat "$RUNNER_TEMP/doge-d8-example-request-digest")" \
+            1353 \
+            "$RUNNER_TEMP/doge-d8-example-prephysical-review.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          data = json.loads((pathlib.Path(os.environ["RUNNER_TEMP"]) /
+                             "doge-d8-example-prephysical-review.json").read_text())
+          assert data["status"] == "SOFTWARE_REQUEST_PREFLIGHT_PASS_HARDWARE_BLOCKED"
+          assert data["refusalChecksCompleted"] == 17
+          assert data["canSign"] is False and data["hardwareQualified"] is False
+          assert data["independentReceiptOriginAuthenticated"] is False
+          assert data["chainHeightSourceAuthenticated"] is False
+          assert data["broadcasts"] == data["realFundsUsed"] == 0
+          PY
       - name: Fetch exact public Ledger Legacy DOGE application with submodules
         shell: bash
         run: |
@@ -220,5 +254,6 @@ jobs:
             ${{ runner.temp }}/doge-ledger-synthetic-signature-result.json
             ${{ runner.temp }}/doge-ledger-htlc-refund-probe.json
             ${{ runner.temp }}/doge-ledger-d8-prephysical-gate.json
+            ${{ runner.temp }}/doge-d8-example-prephysical-review.json
           if-no-files-found: warn
           retention-days: 14
