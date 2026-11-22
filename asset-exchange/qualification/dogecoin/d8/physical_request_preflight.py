@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 
 HERE = Path(__file__).resolve().parent
@@ -37,12 +38,21 @@ def require(ok, message):
 def read_json(path):
     """No symlink, non-regular, oversized, or duplicate-key input."""
     location = Path(path)
-    require(not location.is_symlink(), "request symlink not allowed")
-    st = location.stat()
-    require(location.is_file() and st.st_nlink == 1 and
-            0 < st.st_size <= MAX_REQUEST_BYTES, "invalid bounded public request file")
-    raw = location.read_bytes()
-    require(0 < len(raw) <= MAX_REQUEST_BYTES, "oversized request")
+    fd = os.open(str(location), os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        st = os.fstat(fd)
+        require(stat.S_ISREG(st.st_mode) and st.st_nlink == 1 and
+                0 < st.st_size <= MAX_REQUEST_BYTES, "invalid bounded public request file")
+        raw = bytearray()
+        while len(raw) <= MAX_REQUEST_BYTES:
+            part = os.read(fd, min(8192, MAX_REQUEST_BYTES + 1 - len(raw)))
+            if not part:
+                break
+            raw.extend(part)
+        require(0 < len(raw) <= MAX_REQUEST_BYTES and len(raw) == st.st_size,
+                "oversized or changing public request")
+    finally:
+        os.close(fd)
     def unique(pairs):
         doc = {}
         for k, v in pairs:
@@ -136,7 +146,7 @@ def evaluate(request, *, independently_retained_terms_digest,
                 trusted_terms_digest=independently_retained_terms_digest,
                 trusted_request_digest=independently_retained_request_digest,
                 current_height=observed_regtest_height)
-        except (ValueError, TypeError, KeyError, IndexError):
+        except ValueError:
             refused.append(kind)
         else:
             raise ValueError("unsafe pre-signature policy mutation accepted: " + kind)
