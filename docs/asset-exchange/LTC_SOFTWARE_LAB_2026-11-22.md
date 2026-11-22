@@ -510,10 +510,12 @@ Le contrôleur compare strictement les données à leurs références
 synthétiques, refuse les champs nouveaux (y compris tentatives de
 clé, seed, portefeuille ou transaction signée), les mauvais réseaux,
 la modification d'un digest ou d'un paramètre, les incohérences
-script/hauteur et toute permission non autorisée. Un checksum SHA-256
-du JSON canonique permet de détecter un changement non accompagné
-de mise à jour du checksum **mais n'authentifie pas le dossier** :
-un dossier falsifié et auto-cohérent peut rester possible.
+script/hauteur et toute permission non autorisée. Une empreinte SHA-256 du JSON canonique est retournée à titre
+d'identifiant. **Sans référence de hash épinglée et authentifiée
+indépendamment, elle ne démontre pas qu'un dossier n'a pas été
+falsifié**. La comparaison aux données sources synthétiques n'est
+pas une authentification : un dossier et ses sources tous deux
+falsifiés, mais auto-cohérents, restent possibles.
 
 **29 nouvelles méthodes de test sont présentes dans GitHub mais
 leur exécution n'est pas encore attestée** sur l'environnement de
