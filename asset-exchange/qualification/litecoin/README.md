@@ -183,3 +183,25 @@ Un inventaire L6 redondant de 29 tests, ajouté temporairement, a
 été retiré pour éviter de dupliquer le contrôle du spécimen public.
 La seule validation L6 recherchée à ce stade est la cohérence des
 preuves publiques fictives ; aucune garantie de récupération native.
+
+## L7 — comparaison de deux observations publiques fictives
+
+`synthetic_watcher_disagreement.py` refuse par défaut les
+observations qui ne respectent pas le schéma `litecoin/regtest`,
+ainsi que les champs MWEB, valeurs de types incorrects, txid
+incompatibles et sources insuffisantes ou dupliquées.
+Les statuts CONFLICTED, REORGED, UNKNOWN, le désaccord sur
+les hauteurs, confirmations ou hash de bloc et les données
+périmées produisent une classification `SIMULATED_UNCERTAIN_...`.
+
+Même lorsque deux observations fictives s'accordent,
+`canAdvance=false`, `canRefund=false`,
+`canSign=false`, `canBroadcast=false` et
+`realChainEvidenceVerified=false`. Les libellés de source
+n'attestent pas l'indépendance réelle.
+
+`test_synthetic_watcher_disagreement.py` apporte **32 nouvelles
+méthodes** dont l'exécution WSL2 reste à confirmer.
+**172 tests attendus = 140 déjà PASS sur Ubuntu + 32 ajoutés**.
+Ce n'est pas un watcher, ni une source RPC ou une preuve de reorg :
+**L7 reste non qualifié**.
