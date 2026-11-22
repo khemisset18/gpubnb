@@ -264,10 +264,15 @@ def probe():
     # Fixed one-input, one-output, simple P2PKH transaction, NO HTLC.
     paid_outputs = b"\x01" + output(PAYMENT_KOINU, p2pkh_script(DUMMY_DESTINATION_HASH))
     print("DOGE_TX_DIAG: synthetic funding accepted, streaming signing input", file=sys.stderr, flush=True)
+    print("DOGE_TX_DIAG: before HASH_INPUT_START 0x44 first", file=sys.stderr, flush=True)
     send_ok(0x44, 0, 0, bytes.fromhex("01000000") + b"\x01")
+    print("DOGE_TX_DIAG: first 0x44 accepted", file=sys.stderr, flush=True)
+    print("DOGE_TX_DIAG: before 0x44 trusted-input chunk", file=sys.stderr, flush=True)
     send_ok(0x44, 0x80, 0, b"\x01" + bytes([len(trusted)]) + trusted +
             bytes([len(signer_script)]) + signer_script)
+    print("DOGE_TX_DIAG: trusted-input chunk accepted, before 0x44 sequence", file=sys.stderr, flush=True)
     send_ok(0x44, 0x80, 0, SEQUENCE)
+    print("DOGE_TX_DIAG: all 0x44 chunks accepted", file=sys.stderr, flush=True)
     print("DOGE_TX_DIAG: streaming complete, attempting synthetic screen review", file=sys.stderr, flush=True)
     review = review_synthetic_finalize(paid_outputs)
     print("DOGE_TX_DIAG: review complete, requesting ECDSA", file=sys.stderr, flush=True)
