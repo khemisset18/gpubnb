@@ -289,3 +289,63 @@ sighash concret d'un HTLC, ni l'intégration GPUbnb.
 **L3 état : SOURCE_MARKERS_PASS / NATIVE_SCRIPT_QUALIFICATION_BLOCKED**.
 Le dernier bilan logiciel exécuté sur WSL2 reste **61/61 PASS**.
 Toujours aucun wallet, nœud, signature, diffusion ou fonds réels.
+
+## Complément L3 — garde-fous statiques et script HTLC candidat sans signature
+
+### Garde-fous observés par l'opérateur sur Ubuntu WSL2
+
+L'opérateur a exécuté un second contrôle statique de
+`src/script/interpreter.cpp`, sur le commit Litecoin Core figé
+`ec1b6489a900d09cf5991e220dce089c77a232a2`.
+Le journal indique **7 marqueurs/conditions statiques PASS** :
+
+- drapeau `SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY` dans le bloc CLTV ;
+- erreur `SCRIPT_ERR_NEGATIVE_LOCKTIME` dans CLTV ;
+- appel à `checker.CheckLockTime(nLockTime)` ;
+- drapeau `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` dans CSV ;
+- erreur `SCRIPT_ERR_NEGATIVE_LOCKTIME` dans CSV ;
+- appel à `checker.CheckSequence(nSequence)` ;
+- présence du contrôle `SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH`
+  et de `CSHA256()` dans le traitement SegWit v0.
+
+Résultat affiché :
+`L3 : GARDE-FOUS STATIQUES VERIFIES`.
+
+Ces 7 marqueurs **ne sont pas sept tests unitaires supplémentaires** :
+les derniers tests unitaires certifiés par l'opérateur restent
+**61/61 PASS**. Les marqueurs ne démontrent pas le comportement du
+consensus sous activation de flags, ni l'exécution d'un script GPUbnb.
+
+### Nouveau laboratoire d'octets de script (hors ligne)
+
+Deux fichiers **strictement isolés et non intégrés au règlement**
+ont été ajoutés dans `asset-exchange/qualification/litecoin/` :
+
+- `candidate_htlc.py` : construit **uniquement les octets d'un script
+  candidat synthétique**, avec branche IF (taille du secret SHA-256,
+  comparaison du digest, vérification de clé publique) et branche ELSE
+  (hauteur CLTV absolue, DROP, vérification de clé publique) ;
+  inspection de la structure canonique et du programme P2WSH (SHA-256).
+- `test_candidate_htlc.py` : **26 méthodes unitaires distinctes PASS**
+  en environnement local de construction, y compris bornes des hauteurs,
+  ScriptNum minimal, mutations d'opcodes, refuse les tailles/clés/encodages
+  anormaux, refuse le trailing, confirme que la sortie ne peut jamais
+  activer signer/diffuser/settlement.
+
+Les fichiers publiés dans GitHub ont été revérifiés par empreinte Git
+contre les fichiers locaux testés :
+`eebb253ace797963b5c2b79c22b0362898d9bfb4` et
+`eabc48cdcaa474f8d344c170d5966e0ebe0ef869`.
+
+**Après mise à jour du worktree WSL2, 87 méthodes distinctes sont
+attendues (61 + 26)**. Ce total **n'est pas encore exécuté sur le PC
+de l'opérateur** ; il ne doit donc pas être affiché comme validé.
+
+**L3 état : STATIC_GUARDS_PASS + OFFLINE_CANDIDATE_BYTES_PASS /
+NATIVE_SCRIPT_EXECUTION_BLOCKED.** Les clés utilisées dans les tests
+sont des OCTETS PUBLICS SYNTHÉTIQUES, sans vérification de point
+elliptique ni propriétaire, donc pas de signature possible ici.
+Aucune transaction, wallet, nœud ou RPC. Aucune qualification de
+refund réellement exécutable, de standardness, de sighash, de witness
+stack, de CLTV natif, de frais ou de gestion des reorgs. L1–L9
+restent non qualifiés ou différés. `MARKETPLACE_ONLY` inchangé.
