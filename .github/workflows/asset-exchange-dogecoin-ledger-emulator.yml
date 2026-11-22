@@ -2,7 +2,7 @@ name: DOGE D8 free Ledger emulator diagnostic
 
 on:
   push:
-    branches: [experiment/doge-d8-ledger-emulator-free-20261122]
+    branches: [experiment/doge-d8-ledger-emulator-free-20261122, test/doge-full-offline-regression-20261122]
     paths:
       - ".github/workflows/asset-exchange-dogecoin-ledger-emulator.yml"
       - "asset-exchange/qualification/dogecoin/d8/ledger_emulator_probe.py"

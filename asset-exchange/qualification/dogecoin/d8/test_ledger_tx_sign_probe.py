@@ -48,6 +48,19 @@ class FixtureTests(unittest.TestCase):
         changed = b"\x01" + p.output(p.PAYMENT_KOINU-1, p.p2pkh_script(p.DUMMY_DESTINATION_HASH))
         self.assertNotEqual(p.make_digest(funding, script, outputs), p.make_digest(funding, script, changed))
 
+    def test_script_sequence_must_share_one_legacy_apdu(self):
+        script = p.p2pkh_script(bytes([7] * 20))
+        trusted = bytes([0x32] * 56)
+        chunk = p.build_input_hash_chunk(trusted, script)
+        self.assertEqual(chunk, b"\x01" + b"\x38" + trusted + b"\x19" + script + p.SEQUENCE)
+        self.assertEqual(chunk[-4:], bytes.fromhex("ffffffff"))
+        self.assertEqual(len(chunk), 88)
+        self.assertEqual(bytes.fromhex(p.make_apdu(0x44, 0x80, 0, chunk))[5:], chunk)
+        with self.assertRaises(ValueError):
+            p.build_input_hash_chunk(bytes(47), script)
+        with self.assertRaises(ValueError):
+            p.build_input_hash_chunk(trusted, bytes([0] * 25))
+
     def test_apdu_whitelist_and_payload_bound(self):
         for ins in (0x40,0x4e,0xff,0x47):
             with self.assertRaises(ValueError):
