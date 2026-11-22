@@ -320,9 +320,7 @@ fn parse_args(args: &[String]) -> Result<Command, CliError> {
                 gpu_uuid,
                 application,
             }),
-            Command::AuthorityChild { .. } => {
-                Err(CliError::new("workspace_not_implemented", 21))
-            }
+            Command::AuthorityChild { .. } => Err(CliError::new("workspace_not_implemented", 21)),
             _ => Err(CliError::new("invalid_authority_arguments", 2)),
         },
         Some("--self-test") if args.len() == 2 && args[1] == "--json" => Ok(Command::SelfTest),
@@ -413,7 +411,10 @@ fn execute(command: &Command) -> Result<String, CliError> {
             #[cfg(target_os = "windows")]
             {
                 let report = gpubnb_windows_stream_helper::authority::start_session(
-                    session_id, workspace, gpu_uuid, application.as_deref(),
+                    session_id,
+                    workspace,
+                    gpu_uuid,
+                    application.as_deref(),
                 )
                 .map_err(authority_error)?;
                 Ok(format!(
@@ -423,7 +424,11 @@ fn execute(command: &Command) -> Result<String, CliError> {
                     report.media_token,
                     report.audio_ready,
                     report.controller_ready,
-                    if report.controller_ready { "browser-gamepad-keyboard-mouse" } else { "unavailable" }
+                    if report.controller_ready {
+                        "browser-gamepad-keyboard-mouse"
+                    } else {
+                        "unavailable"
+                    }
                 ))
             }
         }
@@ -441,7 +446,10 @@ fn execute(command: &Command) -> Result<String, CliError> {
             #[cfg(target_os = "windows")]
             {
                 let report = gpubnb_windows_stream_helper::authority::start_console_session(
-                    session_id, workspace, gpu_uuid, application.as_deref(),
+                    session_id,
+                    workspace,
+                    gpu_uuid,
+                    application.as_deref(),
                 )
                 .map_err(authority_error)?;
                 Ok(format!(
@@ -451,7 +459,11 @@ fn execute(command: &Command) -> Result<String, CliError> {
                     report.media_token,
                     report.audio_ready,
                     report.controller_ready,
-                    if report.controller_ready { "browser-gamepad-keyboard-mouse" } else { "unavailable" }
+                    if report.controller_ready {
+                        "browser-gamepad-keyboard-mouse"
+                    } else {
+                        "unavailable"
+                    }
                 ))
             }
         }
@@ -568,11 +580,17 @@ fn execute(command: &Command) -> Result<String, CliError> {
                 match command {
                     Command::AuthorityConsoleChild { .. } => {
                         gpubnb_windows_stream_helper::authority::run_console_authority_child(
-                            session_id, workspace, gpu_uuid, application.as_deref(),
+                            session_id,
+                            workspace,
+                            gpu_uuid,
+                            application.as_deref(),
                         )
                     }
                     _ => gpubnb_windows_stream_helper::authority::run_authority_child(
-                        session_id, workspace, gpu_uuid, application.as_deref(),
+                        session_id,
+                        workspace,
+                        gpu_uuid,
+                        application.as_deref(),
                     ),
                 }
                 .map_err(authority_error)?;

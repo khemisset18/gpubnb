@@ -945,9 +945,7 @@ fn run_authority_child_backend(
             let mut exit_after_response = false;
             let response = match request {
                 "START" if !start_reported => {
-                    let guard = runtime
-                        .lock()
-                        .map_err(|_| AuthorityError::ControlPipe)?;
+                    let guard = runtime.lock().map_err(|_| AuthorityError::ControlPipe)?;
                     let active = guard.as_ref().ok_or(AuthorityError::MediaProof)?;
                     let media_token = active
                         .media_token()
@@ -1119,7 +1117,8 @@ mod tests {
 
     #[test]
     fn ready_response_is_strict() {
-        let value = "READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|1|1";
+        let value =
+            "READY|42|54321|0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|1|1";
         let parsed = parse_ready(value).expect("ready");
         assert_eq!(parsed.generation, 42);
         assert_eq!(parsed.media_port, 54321);
