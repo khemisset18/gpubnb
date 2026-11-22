@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="GPUbnb — préparation sécurisée et locale d’une adresse Dogecoin publique pour Trust Wallet ; aucun paiement actif.">
+  <title>Trust Wallet & DOGE — Préparation GPUbnb</title>
+  <link rel="stylesheet" href="portal.css">
+  <link rel="stylesheet" href="doge-wallet.css">
+  <script type="module" src="doge-wallet.mjs"></script>
+</head>
+<body>
+  <header class="portal-header"><a class="portal-brand" href="index.html">GPUbnb</a><nav class="portal-nav" aria-label="Navigation"><a href="index.html">Marketplace GPU</a><a href="dashboard.html">Tableau de bord</a></nav></header>
+  <main class="tw-main">
+    <section class="panel" aria-labelledby="tw-heading">
+      <span class="tw-badge">Préparation · DOGE non activé</span>
+      <h1 id="tw-heading">Trust Wallet et Dogecoin</h1>
+      <p>GPUbnb prépare la compatibilité Trust Wallet. Cette page vérifie <strong>uniquement le format d’une adresse DOGE publique</strong>, en local sur ton navigateur.</p>
+      <p class="tw-lock">Ce n’est pas une connexion à Trust Wallet, ni une preuve de propriété. Aucun paiement, échange, signature ou transaction réelle n’est possible ici.</p>
+      <form id="doge-public-address-form" class="tw-form" autocomplete="off" novalidate>
+        <label for="doge-public-address">Adresse publique DOGE copiée depuis Trust Wallet</label>
+        <input id="doge-public-address" name="doge-public-address" type="text" inputmode="text" spellcheck="false" autocomplete="off" maxlength="50" placeholder="Adresse DOGE publique (pas de phrase secrète)" required aria-describedby="doge-help">
+        <p id="doge-help" class="muted">Ne colle jamais de phrase de récupération, clé privée ou mot de passe. L’adresse n’est ni sauvegardée ni envoyée à GPUbnb. La vérification de format concerne une adresse personnelle DOGE Mainnet ; le réseau privé Regtest des essais reste distinct.</p>
+        <div class="tw-actions"><button type="submit" class="button button-primary">Vérifier l’adresse (hors ligne)</button><button type="button" class="button" id="doge-clear" hidden>Effacer</button></div>
+      </form>
+      <div id="doge-address-result" class="tw-status" role="status" aria-live="polite"><p>Aucune adresse vérifiée.</p></div>
+      <button type="button" class="button" disabled aria-disabled="true">Échanger DOGE avec Trust Wallet — indisponible</button>
+      <p class="muted">L’interface Trust Wallet publiée ne démontre pas les signatures DOGE Regtest HTLC/CLTV exigées par GPUbnb. Les tests logiciels restent séparés, avec des fonds fictifs.</p>
+      <p><a href="https://trustwallet.com/" target="_blank" rel="noopener noreferrer">Site officiel de Trust Wallet</a></p>
+    </section>
+  </main>
+  <footer class="footer">GPUbnb · Lecture seule · Aucun fonds réel · DOGE non activé</footer>
+</body>
+</html>
