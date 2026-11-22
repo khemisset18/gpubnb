@@ -150,12 +150,15 @@ pub fn encode_browser_audio_header(
     out[44..46].copy_from_slice(&header.channels.to_le_bytes());
     out[46..48].copy_from_slice(&0u16.to_le_bytes());
     out[48..52].copy_from_slice(&header.frames.to_le_bytes());
-    let flags = (if header.silent { BROWSER_AUDIO_FLAG_SILENT } else { 0 })
-        | (if header.discontinuity {
-            BROWSER_AUDIO_FLAG_DISCONTINUITY
-        } else {
-            0
-        });
+    let flags = (if header.silent {
+        BROWSER_AUDIO_FLAG_SILENT
+    } else {
+        0
+    }) | (if header.discontinuity {
+        BROWSER_AUDIO_FLAG_DISCONTINUITY
+    } else {
+        0
+    });
     out[52..56].copy_from_slice(&flags.to_le_bytes());
     out[56..60].copy_from_slice(&header.payload_bytes.to_le_bytes());
     // 60..64 are reserved and intentionally remain zero.

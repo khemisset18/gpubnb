@@ -718,10 +718,12 @@ mod tests {
         first.frame_bytes = 4;
         first.chunk_offset = 0;
         first.chunk_bytes = 2;
-        assert!(reassembler
-            .push_chunk(&packet(first, b"ab"), 1)
-            .expect("first half")
-            .is_none());
+        assert!(
+            reassembler
+                .push_chunk(&packet(first, b"ab"), 1)
+                .expect("first half")
+                .is_none()
+        );
 
         let mut mismatched = first;
         mismatched.chunk_offset = 2;

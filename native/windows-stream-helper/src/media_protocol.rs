@@ -26,7 +26,8 @@ pub const WORKER_AUDIO_PACKET_HEADER_SIZE: usize = 48;
 pub const WORKER_AUDIO_PACKET_MAX_BYTES: usize = 512 * 1024;
 pub const WORKER_AUDIO_BATCH_MAX_PACKETS: usize = 4;
 pub const WORKER_AUDIO_BATCH_MAX_BYTES: usize = WORKER_AUDIO_BATCH_HEADER_SIZE
-    + WORKER_AUDIO_BATCH_MAX_PACKETS * (WORKER_AUDIO_PACKET_HEADER_SIZE + WORKER_AUDIO_PACKET_MAX_BYTES);
+    + WORKER_AUDIO_BATCH_MAX_PACKETS
+        * (WORKER_AUDIO_PACKET_HEADER_SIZE + WORKER_AUDIO_PACKET_MAX_BYTES);
 const WORKER_AUDIO_BATCH_MAGIC: [u8; 4] = *b"GBAU";
 const WORKER_AUDIO_FLAG_SILENT: u32 = 1 << 0;
 const WORKER_AUDIO_FLAG_DISCONTINUITY: u32 = 1 << 1;
@@ -480,18 +481,21 @@ pub fn encode_worker_audio_batch(
     {
         return Err(MediaFrameError::AudioPacket);
     }
-    let total_bytes = packets.iter().try_fold(WORKER_AUDIO_BATCH_HEADER_SIZE, |total, packet| {
-        validate_audio_packet(packet)?;
-        if packet.qpc_position_100ns != 0
-            && packet.qpc_position_100ns > fence.video_qpc_position_100ns
-        {
-            return Err(MediaFrameError::AudioPacket);
-        }
-        total
-            .checked_add(WORKER_AUDIO_PACKET_HEADER_SIZE)
-            .and_then(|value| value.checked_add(packet.bytes.len()))
-            .ok_or(MediaFrameError::AudioPacket)
-    })?;
+    let total_bytes =
+        packets
+            .iter()
+            .try_fold(WORKER_AUDIO_BATCH_HEADER_SIZE, |total, packet| {
+                validate_audio_packet(packet)?;
+                if packet.qpc_position_100ns != 0
+                    && packet.qpc_position_100ns > fence.video_qpc_position_100ns
+                {
+                    return Err(MediaFrameError::AudioPacket);
+                }
+                total
+                    .checked_add(WORKER_AUDIO_PACKET_HEADER_SIZE)
+                    .and_then(|value| value.checked_add(packet.bytes.len()))
+                    .ok_or(MediaFrameError::AudioPacket)
+            })?;
     if total_bytes > WORKER_AUDIO_BATCH_MAX_BYTES {
         return Err(MediaFrameError::AudioPacket);
     }
@@ -510,9 +514,17 @@ pub fn encode_worker_audio_batch(
     out.extend_from_slice(&[0; 8]);
 
     for packet in packets {
-        let payload_bytes = u32::try_from(packet.bytes.len()).map_err(|_| MediaFrameError::AudioPacket)?;
-        let flags = (if packet.silent { WORKER_AUDIO_FLAG_SILENT } else { 0 })
-            | (if packet.discontinuity { WORKER_AUDIO_FLAG_DISCONTINUITY } else { 0 });
+        let payload_bytes =
+            u32::try_from(packet.bytes.len()).map_err(|_| MediaFrameError::AudioPacket)?;
+        let flags = (if packet.silent {
+            WORKER_AUDIO_FLAG_SILENT
+        } else {
+            0
+        }) | (if packet.discontinuity {
+            WORKER_AUDIO_FLAG_DISCONTINUITY
+        } else {
+            0
+        });
         out.extend_from_slice(&(WORKER_AUDIO_PACKET_HEADER_SIZE as u32).to_le_bytes());
         out.extend_from_slice(&packet.sample_rate.to_le_bytes());
         out.extend_from_slice(&packet.channels.to_le_bytes());
@@ -569,7 +581,9 @@ pub fn decode_worker_audio_batch(
         let header_end = offset
             .checked_add(WORKER_AUDIO_PACKET_HEADER_SIZE)
             .ok_or(MediaFrameError::AudioPacket)?;
-        let header = frame.get(offset..header_end).ok_or(MediaFrameError::AudioPacket)?;
+        let header = frame
+            .get(offset..header_end)
+            .ok_or(MediaFrameError::AudioPacket)?;
         if read_u32(header, 0)? as usize != WORKER_AUDIO_PACKET_HEADER_SIZE
             || header[40..48].iter().any(|byte| *byte != 0)
         {
@@ -577,7 +591,8 @@ pub fn decode_worker_audio_batch(
         }
         let sample_rate = read_u32(header, 4)?;
         let channels = u16::from_le_bytes([header[8], header[9]]);
-        let sample_format = audio_sample_format_from_id(u16::from_le_bytes([header[10], header[11]]))?;
+        let sample_format =
+            audio_sample_format_from_id(u16::from_le_bytes([header[10], header[11]]))?;
         let frames = read_u32(header, 12)?;
         let flags = read_u32(header, 16)?;
         let payload_bytes = read_u32(header, 20)? as usize;
@@ -590,8 +605,13 @@ pub fn decode_worker_audio_batch(
             return Err(MediaFrameError::AudioPacket);
         }
         offset = header_end;
-        let payload_end = offset.checked_add(payload_bytes).ok_or(MediaFrameError::AudioPacket)?;
-        let bytes = frame.get(offset..payload_end).ok_or(MediaFrameError::AudioPacket)?.to_vec();
+        let payload_end = offset
+            .checked_add(payload_bytes)
+            .ok_or(MediaFrameError::AudioPacket)?;
+        let bytes = frame
+            .get(offset..payload_end)
+            .ok_or(MediaFrameError::AudioPacket)?
+            .to_vec();
         let packet = BoundAudioPacket {
             sample_rate,
             channels,
@@ -623,7 +643,11 @@ fn validate_bound_audio_packet(packet: &BoundAudioPacket) -> Result<(), MediaFra
         .checked_mul(packet.channels as usize)
         .and_then(|frames| frames.checked_mul(audio_bytes_per_sample(packet.sample_format)))
         .ok_or(MediaFrameError::AudioPacket)?;
-    let silence_sample = if packet.sample_format == AudioSampleFormat::PcmUint8 { 0x80 } else { 0 };
+    let silence_sample = if packet.sample_format == AudioSampleFormat::PcmUint8 {
+        0x80
+    } else {
+        0
+    };
     if !(8_000..=192_000).contains(&packet.sample_rate)
         || !(1..=8).contains(&packet.channels)
         || packet.frames == 0
@@ -705,7 +729,12 @@ mod tests {
         );
         assert_eq!(encoded[5], MEDIA_FRAME_FLAG_KEYFRAME);
         assert_eq!(&encoded[6..8], &[0, 0]);
-        assert_eq!(decode_worker_media_frame_header(&encoded).unwrap().qpc_position_100ns, 123_456_789);
+        assert_eq!(
+            decode_worker_media_frame_header(&encoded)
+                .unwrap()
+                .qpc_position_100ns,
+            123_456_789
+        );
         assert_eq!(decode_worker_media_frame_header(&encoded), Ok(header()));
     }
 
@@ -830,7 +859,10 @@ mod tests {
         ));
         assert!(matches!(
             encode_worker_audio_batch(
-                WorkerAudioBatchFence { target_process_id: 0, ..fence },
+                WorkerAudioBatchFence {
+                    target_process_id: 0,
+                    ..fence
+                },
                 &[]
             ),
             Err(MediaFrameError::AudioPacket)
