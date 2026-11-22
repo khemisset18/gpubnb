@@ -249,6 +249,7 @@ pub enum AudioSampleFormat {
 }
 
 impl AudioSampleFormat {
+    #[cfg(any(target_os = "windows", test))]
     const fn bytes_per_sample(self) -> usize {
         match self {
             Self::IeeeFloat32 | Self::PcmInt32 => 4,
@@ -258,6 +259,7 @@ impl AudioSampleFormat {
         }
     }
 
+    #[cfg(any(target_os = "windows", test))]
     fn from_abi(value: u16) -> Result<Self, MediaProbeError> {
         match value {
             1 => Ok(Self::IeeeFloat32),
@@ -1476,7 +1478,7 @@ mod tests {
         }
 
         assert_eq!(
-            decode_audio_packet(&wire, &vec![0x5a; 15], expected).err(),
+            decode_audio_packet(&wire, &[0x5a; 15], expected).err(),
             Some(MediaProbeError::InvalidResult)
         );
         assert_eq!(
