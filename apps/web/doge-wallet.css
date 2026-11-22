@@ -1,0 +1,12 @@
+/* Trust Wallet DOGE public-address preview; no dynamic external resources. */
+.tw-main{width:min(800px,calc(100% - 32px));margin:48px auto 80px}
+.tw-form{display:grid;gap:12px;margin:24px 0}
+.tw-form label{font-weight:800}
+.tw-form input{width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);background:#07100b;color:var(--text);font:inherit}
+.tw-form input:focus-visible{outline:3px solid var(--accent)}
+.tw-actions{display:flex;gap:12px;flex-wrap:wrap}
+.tw-status{overflow-wrap:anywhere;border:1px solid var(--line);background:#0b1410;padding:16px;border-radius:12px;margin:20px 0}
+.tw-error{color:var(--danger)}
+.tw-lock{color:var(--warn);font-weight:800}
+.tw-badge{display:inline-flex;padding:5px 10px;border:1px solid #7f6633;border-radius:99px;color:var(--warn);font-size:.85rem}
+[hidden]{display:none!important}
