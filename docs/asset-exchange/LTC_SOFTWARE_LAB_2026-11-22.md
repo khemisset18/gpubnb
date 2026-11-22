@@ -420,3 +420,58 @@ le contrat ou le witness est valide. **Toutes les sorties ont
 `automaticSettlementSupported=false`.** L1–L9 restent bloqués
 ou différés selon les gates. Aucun nœud, wallet, clé, réseau, émission
 ni fonds réels.
+
+## Complément L3/L6 — 110/110 WSL2 et spécimen de dossier public non récupérable
+
+### Rapport utilisateur contrôlé sur Ubuntu WSL2
+
+Le journal transmis par l'opérateur rapporte :
+
+```text
+HEAD is now at d1d6ec1 docs(ltc): explain hypothetical refund-height model and 110-test WSL2 checkpoint
+Ran 110 tests in 0.028s
+OK
+=== ETAT GIT LTC ===
+## HEAD (no branch)
+```
+
+**110/110 méthodes distinctes PASS sur WSL2**, zéro échec :
+39 préflight d'enveloppe, 22 adresses transparentes/Bech32,
+26 scripts HTLC synthétiques et 23 modèle de bornes CLTV/finalité.
+Les tests ont été lancés dans `unshare --user --map-root-user --net`
+avec `PYTHONDONTWRITEBYTECODE=1`. Aucun changement local
+détecté dans le worktree LTC.
+Le commit testé est `d1d6ec15449c3396b606959a34689686e58bff0d`.
+
+### Nouveau prototype strictement public — aucune récupération
+
+Deux fichiers additifs ont été préparés :
+- `public_evidence_specimen.py`, qui réunit une demande fictive
+  déjà contrôlée et les octets publics d'un script candidat.
+  Il compare les empreintes du JSON, du script et du programme P2WSH,
+  et vérifie la hauteur CLTV, la chaîne, le genesis, les champs
+  autorisés et des permissions toutes à false ;
+- `test_public_evidence_specimen.py`, **30 méthodes unitaires PASS
+  dans l'environnement local de construction**. Il teste notamment
+  les doubles clés JSON, mutations du script, champs ajoutés,
+  checksum trompeur, permission sign/refund,
+  chaîne et genesis incorrects, incohérences de montants et de hauteur.
+
+Empreintes Git des fichiers publiés identiques aux fichiers testés :
+`113d1db2ceee4b5d6453ec430bf58760b424435c`,
+`c14b0a7a73beda3c3492c62b1a0466ae5199ca72`.
+
+**Ce spécimen n'est PAS un bundle de remboursement, n'est PAS une
+preuve d'origine authentifiée et n'est PAS utile pour dépenser ou
+récupérer une transaction réelle.** Son SHA-256 sans clé est
+recalculable par n'importe qui. Tous les indicateurs financiers et
+de récupération restent false, y compris
+`independentRecoveryVerified=false`, `canRefund=false`,
+`canSign=false`, `canBroadcast=false` et
+`automaticSettlementSupported=false`.
+Le test de récupération indépendante L6 est toujours BLOQUÉ.
+
+**Total attendu après actualisation sur WSL2 : 140 méthodes
+(110 déjà attestées + 30 ajoutées, pas encore attestées sur le PC).**
+Aucun nœud, wallet, clé, vraie transaction, signature, diffusion
+ou fonds réels utilisés.
