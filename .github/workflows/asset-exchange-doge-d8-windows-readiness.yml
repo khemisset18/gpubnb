@@ -1,0 +1,46 @@
+name: DOGE D8 Windows read-only WSL2 readiness
+
+on:
+  push:
+    branches: [experiment/doge-d8-ledger-emulator-free-20261122]
+    paths:
+      - ".github/workflows/asset-exchange-doge-d8-windows-readiness.yml"
+      - "asset-exchange/qualification/dogecoin/d8/d8-windows-readiness.ps1"
+      - "asset-exchange/qualification/dogecoin/d8/test-d8-windows-readiness.ps1"
+      - "docs/asset-exchange/DOGE_D8_WINDOWS_FREE_LAB_2026-11-22.md"
+  pull_request:
+    paths:
+      - ".github/workflows/asset-exchange-doge-d8-windows-readiness.yml"
+      - "asset-exchange/qualification/dogecoin/d8/d8-windows-readiness.ps1"
+      - "asset-exchange/qualification/dogecoin/d8/test-d8-windows-readiness.ps1"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-read-only:
+    if: github.repository == 'khemisset18/gpubnb'
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Checkout candidate without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify Windows PowerShell safety and optional exclusive report output
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ./asset-exchange/qualification/dogecoin/d8/test-d8-windows-readiness.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Windows D8 check failed." }
+      - name: Confirm no hardware or financial qualification in this job
+        shell: pwsh
+        run: |
+          $doc = Get-Content -LiteralPath "$env:RUNNER_TEMP/d8-windows-readiness.json" -Raw | ConvertFrom-Json
+          if ($doc.physicalD8Qualified -ne $false -or $doc.privateRegtestExecutedOnThisPC -ne $false) {
+            throw "Windows tool promoted diagnostics to hardware qualification."
+          }
+          if ($doc.keysRead -ne $false -or $doc.realDogeUsed -ne 0 -or $doc.broadcasts -ne 0) {
+            throw "Windows tool asserted wallet access or financial side effects."
+          }
+          Write-Host "WINDOWS_ONLY_READINESS_DIAGNOSTIC=PASS"
