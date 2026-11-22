@@ -36,6 +36,10 @@ jobs:
           # PowerShell diagnostic itself succeeds with SETUP_REQUIRED.
           # Any PowerShell exception from the test script is already fatal.
           & ./asset-exchange/qualification/dogecoin/d8/test-d8-windows-readiness.ps1
+          # pwsh -command inherits native WSL's nonzero last exit on some
+          # Windows runners despite passing PowerShell assertions. The script
+          # throws on any failed assertion; only then mark this diagnostic PASS.
+          exit 0
       - name: Confirm no hardware or financial qualification in this job
         shell: pwsh
         run: |
