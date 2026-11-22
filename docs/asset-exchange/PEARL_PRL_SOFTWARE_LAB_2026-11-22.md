@@ -126,3 +126,107 @@ Les tests n'autorisent toujours ni offre publiée, ni vraie transaction,
 ni clé, signature, financement, échange, nœud, RPC ou broadcast.
 L'indépendance réelle regtest/simnet reste non démontrée par HRP
 (`rprl` partagé). P0/P1/P3–P9 restent non qualifiés ou différés.
+
+## Complément sécurité des brouillons PRL — 23 novembre 2026
+
+Branche additionnelle distincte :
+`experiment/pearl-prl-marketplace-draft-security-20261123`,
+partant de la branche Pearl préflight. Le diff doit rester limité
+à `asset-exchange/qualification/pearl/` et aux documents Pearl.
+
+Le nouveau composant `marketplace_draft_lab.py` simule
+exclusivement des brouillons PRL/DOGE non publiables et non réglables.
+Identifiant d'acteur, horloge, clé de commande, id de brouillon
+et prix sont tous **fictifs et non authentifiés**.
+Les sorties ne publient aucune offre ; tous les droits financiers
+restent `false`. Aucune route API / Web ni mécanisme financier modifié.
+
+### Preuves en environnement local de construction
+
+```text
+PYTHONDONTWRITEBYTECODE=1 unshare --user --map-root-user --net \
+  python3 -m unittest discover -s . -p 'test_*.py' -q
+----------------------------------------------------------------------
+Ran 47 tests in 0.021s
+OK
+```
+
+Les 47 nouvelles méthodes passent dans l'environnement de
+construction isolé. Sont testés : mutations de schéma, identités
+démonstratives divergentes, IDOR simulé, idempotence, anti-replay
+concurrent, révision d'annulation, TTL, quotas, copies de sortie
+et absence d'I/O lors des opérations.
+
+Le même sandbox réseau isolé a exécuté
+`python3 demo_marketplace_drafts.py` : première sortie
+`DRAFT_PREVIEW_ONLY` puis `CANCELLED_PREVIEW_ONLY`, avec
+`realExchangeListingCreated=false` et toutes les autorisations
+financières à `false`.
+
+Empreintes Git des **fichiers publiés = fichiers testés localement** :
+
+- `marketplace_draft_lab.py` :
+  `51d1525d8658c5a02af96a2c2b28138adb35cc43`.
+- `test_marketplace_draft_lab.py` :
+  `f7eaa26ac9700ced8db519fcb5d727d722806ead`.
+- `demo_marketplace_drafts.py` :
+  `b94da2f0fa890a3226e314346e69f3f8b57afe48`.
+
+Le total de l'ensemble Pearl devient **94 tests attendus** :
+47 préflight/adresses déjà attestés sur le PC de l'opérateur
++ 47 nouveaux uniquement attestés dans le sandbox de construction.
+**94/94 n'est pas encore validé sur WSL2 de l'opérateur.**
+
+Ne pas transformer le résultat du laboratoire en une permission
+de publier des annonces. Voir le rapport
+`docs/asset-exchange/PEARL_PRL_MARKETPLACE_SECURITY_REVIEW_2026-11-23.md`
+et ses blocages critiques (acteur non authentifié, horloge de test,
+absence de persistance/quotas distribués et de routes réelles).
+
+**P0–P9 et mise en production : NON QUALIFIÉS.**
+
+## Attestation opérateur Ubuntu WSL2 — 94/94 PASS, démonstration conforme
+
+L'opérateur a exécuté la suite entière de la branche
+`experiment/pearl-prl-marketplace-draft-security-20261123`
+dans son Ubuntu WSL2 avec le namespace réseau isolé
+`unshare --user --map-root-user --net` et
+`PYTHONDONTWRITEBYTECODE=1`.
+
+Fin de journal relevée :
+
+```text
+Ran 94 tests in 0.073s
+
+OK
+=== DEMONSTRATION HORS LIGNE ===
+... "draftId": "prl-lab-00000001", "revision": 1,
+    "status": "DRAFT_PREVIEW_ONLY",
+    "actorAuthenticated": false,
+    "realExchangeListingCreated": false,
+    "canPostOffer": false, "canSettle": false
+... "draftId": "prl-lab-00000001", "revision": 2,
+    "status": "CANCELLED_PREVIEW_ONLY",
+    "actorAuthenticated": false,
+    "realExchangeListingCreated": false,
+    "canPostOffer": false, "canSettle": false
+=== ETAT GIT ===
+9c685cc
+## experiment/pearl-prl-marketplace-draft-security-20261123...origin/experiment/pearl-prl-marketplace-draft-security-20261123
+```
+
+Le code testé est le commit
+`9c685ccf0d8ab1fabbc0fd6a01a25de42458620b`.
+**Les 94/94 méthodes sont attestées PASS sur le poste de
+l'opérateur, sans erreur et avec copie Git propre.**
+La démonstration a montré le changement d'état local attendu
+sans offre publiée ni activation de permissions financières.
+
+**Classification : OFFLINE_DRAFT_MODEL_94_PASS /
+PRODUCTION_MARKETPLACE_BLOCKED.** Les identifiants de propriétaires
+ne sont toujours pas authentifiés, l'horloge est contrôlable par
+l'appelant, les données ne sont pas persistées, aucun rate limiting
+distribué n'existe et aucune route API d'offres n'est déployée.
+**P0–P9 restent non qualifiés** pour les transactions / fonds réels.
+Les vérifications ne constituent ni audit indépendant, ni attestation
+de chaîne, ni validation du matériel, ni contrôle de production.
