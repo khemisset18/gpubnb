@@ -31,17 +31,18 @@ jobs:
       # A changed API source is EXPECTED here; this read-only report does not
       # attest that Render runs the candidate. Recheck live deployment identity
       # before any physical test, and never confuse source drift with parity.
-      # The Gaming browser workspace branch also changes apps/web. Assert that
-      # delta for that PR only; all other candidates must keep the observed web
-      # source unchanged. This report never attests protocol compatibility or
-      # release readiness.
+      # The stacked Gaming workspace PRs both change apps/web. Assert that
+      # delta for those branches; all other candidates must keep the observed
+      # web source unchanged. This report never attests protocol compatibility
+      # or release readiness.
       - name: Record candidate API drift from observed Render source (read-only)
         env:
           REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CANDIDATE_BRANCH: ${{ github.event.pull_request.head.ref || '' }}
         run: |
           EXPECT_WEB_DELTA=--expect-web-source-unchanged
-          if [ "$CANDIDATE_BRANCH" = "feat/gaming-end-to-end-20261122" ]; then
+          if [ "$CANDIDATE_BRANCH" = "feat/gaming-end-to-end-20261122" ] \
+            || [ "$CANDIDATE_BRANCH" = "feat/gaming-workspace-rebuild-20261123" ]; then
             EXPECT_WEB_DELTA=--expect-web-source-changed
           fi
           python scripts/stage4_private_backend_delta.py \
