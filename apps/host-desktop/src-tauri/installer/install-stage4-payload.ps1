@@ -83,7 +83,7 @@ function Assert-ProtectedInstallDirectory([string]$Path) {
 
 function Read-PreflightPackage {
     $package = Get-CanonicalDirectory $PackageDirectory 'host_native_package_directory_invalid'
-    $allowed = @($manifestNames + 'build-identities.json' + 'stage4.manifest.json')
+    $allowed = @($nativeNames + 'build-identities.json' + 'stage4.manifest.json')
     foreach ($item in @(Get-ChildItem -LiteralPath $package -Force -Recurse -ErrorAction Stop)) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
             $item.PSIsContainer -or $item.Name -cnotin $allowed) {
@@ -117,15 +117,17 @@ function Read-PreflightPackage {
         if ($record.Count -ne 1 -or $record[0].architecture -cne 'AMD64') {
             throw "host_native_preflight_component_manifest_invalid:$name"
         }
-        $path = Join-Path $package $name
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
-            (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne
-                $record[0].sha256) {
-            throw "host_native_preflight_component_hash_mismatch:$name"
-        }
-        $signature = Get-AuthenticodeSignature -LiteralPath $path
-        if ($signature.Status -ne 'NotSigned' -or $null -ne $signature.SignerCertificate) {
-            throw "host_native_preflight_signed_component_rejected:$name"
+        if ($name -cne 'gpubnb-agent.exe') {
+            $path = Join-Path $package $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+                (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+                    $record[0].sha256) {
+                throw "host_native_preflight_component_hash_mismatch:$name"
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne 'NotSigned' -or $null -ne $signature.SignerCertificate) {
+                throw "host_native_preflight_signed_component_rejected:$name"
+            }
         }
         $records[$name] = $record[0]
     }
@@ -149,6 +151,10 @@ switch ($Mode) {
             (Get-FileHash -LiteralPath $sidecar -Algorithm SHA256).Hash.ToLowerInvariant() -cne
                 $bundle.Records['gpubnb-agent.exe'].sha256) {
             throw 'host_native_preflight_agent_mismatch'
+        }
+        $agentSignature = Get-AuthenticodeSignature -LiteralPath $sidecar
+        if ($agentSignature.Status -ne 'NotSigned' -or $null -ne $agentSignature.SignerCertificate) {
+            throw 'host_native_preflight_signed_component_rejected:gpubnb-agent.exe'
         }
         Assert-NoActiveNativeProcesses
         $destination = Get-CanonicalDirectory $NativeInstallDirectory 'host_native_install_directory_invalid'

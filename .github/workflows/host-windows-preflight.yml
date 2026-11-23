@@ -214,7 +214,6 @@ jobs:
           $payload = 'apps/host-desktop/src-tauri/stage4'
           New-Item -ItemType Directory -Force $payload | Out-Null
           foreach ($name in @(
-            'gpubnb-agent.exe',
             'gpubnb-windows-stream.exe',
             'gpubnb-windows-worker.exe',
             'GPUbnbWindowsMedia.dll',
