@@ -74,6 +74,10 @@ assert_scratch_connection() {
     echo "REFUSED: PostgreSQL 16+ required." >&2
     exit 2
   fi
+  if [[ "$(psql_ci -Atqc "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='asset_exchange' AND ((p.proname='publish_offer_atomic' AND p.pronargs=18 AND pg_get_functiondef(p.oid) LIKE '%idempotency replay publication identity mismatch%') OR (p.proname='cancel_offer_atomic' AND p.pronargs=7 AND pg_get_functiondef(p.oid) LIKE '%idempotency replay cancellation identity mismatch%') OR (p.proname='submit_trade_terms_signature_atomic' AND p.pronargs=8 AND pg_get_functiondef(p.oid) LIKE '%idempotency replay terms identity mismatch%'))")" != "3" ]]; then
+    echo "REFUSED: migration 012 replay-hardening functions are not installed." >&2
+    exit 2
+  fi
   if [[ "$(psql_ci -Atqc "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()")" != "$PGUSER" ]] ||
      [[ "$(psql_ci -Atqc 'SELECT count(*) FROM pg_database WHERE datistemplate = FALSE')" != "2" ]] ||
      [[ "$(psql_ci -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname='asset_exchange'")" != "1" ]] ||
@@ -103,7 +107,7 @@ assert_scalar() {
 
 assert_scratch_connection
 
-echo "[1/6] accept-vs-accept"
+echo "[1/10] accept-vs-accept"
 reset_fixture
 
 (
@@ -161,7 +165,7 @@ assert_scalar "SELECT count(*) FROM asset_exchange.trades WHERE offer_id='offer-
 assert_scalar "SELECT state FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "CONSUMED"
 assert_scalar "SELECT accepted_trade_id FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "trade-00000001"
 
-echo "[2/6] accept-vs-cancel"
+echo "[2/10] accept-vs-cancel"
 reset_fixture
 
 (
@@ -215,7 +219,7 @@ fi
 assert_scalar "SELECT state FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "CANCELLED"
 assert_scalar "SELECT count(*) FROM asset_exchange.trades WHERE offer_id='offer-00000001';" "0"
 
-echo "[3/6] idempotent retry"
+echo "[3/10] idempotent retry"
 reset_fixture
 cat <<'SQL' | psql_ci >/dev/null
 SELECT * FROM asset_exchange.accept_offer_atomic(
@@ -246,7 +250,7 @@ SQL
 assert_scalar "SELECT count(*) FROM asset_exchange.trades WHERE trade_id='trade-00000004';" "1"
 assert_scalar "SELECT count(*) FROM asset_exchange.trade_events WHERE trade_id='trade-00000004';" "1"
 
-echo "[4/7] concurrent identical acceptance is durably idempotent"
+echo "[4/10] concurrent identical acceptance is durably idempotent"
 reset_fixture
 (
   cat <<'SQL' | psql_ci >/tmp/ae-identical-replay-first.log 2>&1
@@ -301,7 +305,7 @@ assert_scalar "SELECT count(*) FROM asset_exchange.trades WHERE trade_id='trade-
 assert_scalar "SELECT count(*) FROM asset_exchange.trade_events WHERE trade_id='trade-00000004';" "1"
 assert_scalar "SELECT count(*) FROM asset_exchange.idempotency_records WHERE idempotency_key='accept-key-concurrent01' AND result_ref='trade-00000004';" "1"
 
-echo "[5/7] idempotency key mismatch fails"
+echo "[5/10] idempotency key mismatch fails"
 set +e
 cat <<'SQL' | psql_ci >/tmp/ae-idempotency-mismatch.log 2>&1
 SELECT * FROM asset_exchange.accept_offer_atomic(
@@ -324,7 +328,7 @@ if [[ "${mismatch_status}" -eq 0 ]]; then
   exit 1
 fi
 
-echo "[6/7] transition epoch blocks new acceptance"
+echo "[6/10] transition epoch blocks new acceptance"
 reset_fixture
 cat <<'SQL' | psql_ci >/dev/null
 UPDATE asset_exchange.operator_state
@@ -361,7 +365,7 @@ fi
 assert_scalar "SELECT count(*) FROM asset_exchange.trades;" "0"
 assert_scalar "SELECT state FROM asset_exchange.offers WHERE offer_id='offer-00000001';" "OPEN"
 
-echo "[7/7] financial immutability guards"
+echo "[7/10] financial immutability guards"
 reset_fixture
 
 set +e
@@ -444,5 +448,140 @@ if [[ "${mutate_event_status}" -eq 0 ]]; then
   echo "ERROR: append-only trade event mutation unexpectedly succeeded"
   exit 1
 fi
+
+echo "[8/10] concurrent identical publication is durably idempotent"
+reset_fixture
+(
+  cat <<'SQL' | psql_ci -At >/tmp/ae-publish-replay-first.log 2>&1
+BEGIN;
+SELECT status, offer_id FROM asset_exchange.publish_offer_atomic(
+  'ae-test-01','offer-publish-concurrent01','maker:test:001',repeat('a',64),
+  decode('aa','hex'),decode('bb','hex'),'TEST_ONLY',
+  'bitcoin|regtest|NATIVE|BTC_NATIVE|8',100,
+  'litecoin|regtest|NATIVE|LTC_NATIVE|8',250,'ABCDEFGHIJKLMNOP',7,
+  'default-taker-v1',1,'2030-01-01T00:00:00Z',
+  'publish-concurrent-key01',repeat('c',64)
+);
+SELECT pg_sleep(1);
+COMMIT;
+SQL
+) &
+publish_first_pid=$!
+sleep 0.2
+set +e
+cat <<'SQL' | psql_ci -At >/tmp/ae-publish-replay-second.log 2>&1
+SELECT status, offer_id FROM asset_exchange.publish_offer_atomic(
+  'ae-test-01','offer-publish-concurrent01','maker:test:001',repeat('a',64),
+  decode('aa','hex'),decode('bb','hex'),'TEST_ONLY',
+  'bitcoin|regtest|NATIVE|BTC_NATIVE|8',100,
+  'litecoin|regtest|NATIVE|LTC_NATIVE|8',250,'ABCDEFGHIJKLMNOP',7,
+  'default-taker-v1',1,'2030-01-01T00:00:00Z',
+  'publish-concurrent-key01',repeat('c',64)
+);
+SQL
+publish_second_status=$?
+set -e
+if ! wait "${publish_first_pid}" || [[ "${publish_second_status}" -ne 0 ]]; then
+  echo "ERROR: concurrent idempotent publication failed"
+  cat /tmp/ae-publish-replay-first.log /tmp/ae-publish-replay-second.log
+  exit 1
+fi
+grep -Fq 'OPEN|offer-publish-concurrent01' /tmp/ae-publish-replay-first.log
+grep -Fq 'OPEN|offer-publish-concurrent01' /tmp/ae-publish-replay-second.log
+assert_scalar "SELECT count(*) FROM asset_exchange.offers WHERE offer_id='offer-publish-concurrent01';" "1"
+assert_scalar "SELECT count(*) FROM asset_exchange.idempotency_records WHERE idempotency_key='publish-concurrent-key01';" "1"
+
+echo "[9/10] concurrent identical cancellation is durably idempotent"
+reset_fixture
+cat <<'SQL' | psql_ci >/dev/null
+SELECT * FROM asset_exchange.publish_offer_atomic(
+  'ae-test-01','offer-cancel-concurrent01','maker:test:001',repeat('a',64),
+  decode('aa','hex'),decode('bb','hex'),'TEST_ONLY',
+  'bitcoin|regtest|NATIVE|BTC_NATIVE|8',100,
+  'litecoin|regtest|NATIVE|LTC_NATIVE|8',250,'ABCDEFGHIJKLMNOP',7,
+  'default-taker-v1',1,'2030-01-01T00:00:00Z',
+  'publish-cancel-source01',repeat('b',64)
+);
+SQL
+(
+  cat <<'SQL' | psql_ci -At >/tmp/ae-cancel-replay-first.log 2>&1
+BEGIN;
+SELECT status, offer_id FROM asset_exchange.cancel_offer_atomic(
+  'ae-test-01','offer-cancel-concurrent01','maker:test:001',repeat('d',64),
+  decode('dd','hex'),'cancel-concurrent-key01',repeat('e',64)
+);
+SELECT pg_sleep(1);
+COMMIT;
+SQL
+) &
+cancel_first_pid=$!
+sleep 0.2
+set +e
+cat <<'SQL' | psql_ci -At >/tmp/ae-cancel-replay-second.log 2>&1
+SELECT status, offer_id FROM asset_exchange.cancel_offer_atomic(
+  'ae-test-01','offer-cancel-concurrent01','maker:test:001',repeat('d',64),
+  decode('dd','hex'),'cancel-concurrent-key01',repeat('e',64)
+);
+SQL
+cancel_second_status=$?
+set -e
+if ! wait "${cancel_first_pid}" || [[ "${cancel_second_status}" -ne 0 ]]; then
+  echo "ERROR: concurrent idempotent cancellation failed"
+  cat /tmp/ae-cancel-replay-first.log /tmp/ae-cancel-replay-second.log
+  exit 1
+fi
+grep -Fq 'CANCELLED|offer-cancel-concurrent01' /tmp/ae-cancel-replay-first.log
+grep -Fq 'CANCELLED|offer-cancel-concurrent01' /tmp/ae-cancel-replay-second.log
+assert_scalar "SELECT state FROM asset_exchange.offers WHERE offer_id='offer-cancel-concurrent01';" "CANCELLED"
+assert_scalar "SELECT count(*) FROM asset_exchange.idempotency_records WHERE idempotency_key='cancel-concurrent-key01';" "1"
+
+echo "[10/10] concurrent identical terms signature is durably idempotent"
+reset_fixture
+cat <<'SQL' | psql_ci >/dev/null
+SELECT * FROM asset_exchange.publish_offer_atomic(
+  'ae-test-01','offer-terms-concurrent01','maker:test:001',repeat('a',64),
+  decode('aa','hex'),decode('bb','hex'),'TEST_ONLY',
+  'bitcoin|regtest|NATIVE|BTC_NATIVE|8',100,
+  'litecoin|regtest|NATIVE|LTC_NATIVE|8',250,'ABCDEFGHIJKLMNOP',7,
+  'default-taker-v1',1,'2030-01-01T00:00:00Z',
+  'publish-terms-source01',repeat('b',64)
+);
+SELECT * FROM asset_exchange.accept_offer_atomic(
+  'ae-test-01','offer-terms-concurrent01','trade-terms-concurrent01',
+  'taker:test:terms',repeat('a',64),7,repeat('c',64),decode('cc','hex'),
+  'accept-terms-source001',repeat('d',64)
+);
+SQL
+(
+  cat <<'SQL' | psql_ci -At >/tmp/ae-terms-replay-first.log 2>&1
+BEGIN;
+SELECT status, trade_id FROM asset_exchange.submit_trade_terms_signature_atomic(
+  'ae-test-01','trade-terms-concurrent01','maker:test:001','MAKER',repeat('e',64),
+  decode('ee','hex'),'terms-concurrent-key01',repeat('f',64)
+);
+SELECT pg_sleep(1);
+COMMIT;
+SQL
+) &
+terms_first_pid=$!
+sleep 0.2
+set +e
+cat <<'SQL' | psql_ci -At >/tmp/ae-terms-replay-second.log 2>&1
+SELECT status, trade_id FROM asset_exchange.submit_trade_terms_signature_atomic(
+  'ae-test-01','trade-terms-concurrent01','maker:test:001','MAKER',repeat('e',64),
+  decode('ee','hex'),'terms-concurrent-key01',repeat('f',64)
+);
+SQL
+terms_second_status=$?
+set -e
+if ! wait "${terms_first_pid}" || [[ "${terms_second_status}" -ne 0 ]]; then
+  echo "ERROR: concurrent idempotent terms signature failed"
+  cat /tmp/ae-terms-replay-first.log /tmp/ae-terms-replay-second.log
+  exit 1
+fi
+grep -Fq 'ACCEPTED_PENDING_TERMS|trade-terms-concurrent01' /tmp/ae-terms-replay-first.log
+grep -Fq 'ACCEPTED_PENDING_TERMS|trade-terms-concurrent01' /tmp/ae-terms-replay-second.log
+assert_scalar "SELECT count(*) FROM asset_exchange.trade_events WHERE trade_id='trade-terms-concurrent01';" "2"
+assert_scalar "SELECT count(*) FROM asset_exchange.idempotency_records WHERE idempotency_key='terms-concurrent-key01';" "1"
 
 echo "All PostgreSQL concurrency/idempotency/immutability tests passed."
