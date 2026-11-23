@@ -48,6 +48,7 @@ from .windows_native_private_console import (
     register_console_fence_wakeup,
     selected_capture_backend,
 )
+from .private_console_consent import private_gaming_workspace_local_opt_in_enabled
 from .windows_native_runtime import (
     NativeRuntimeHandle,
     launch_windows_native_workspace,
@@ -60,7 +61,7 @@ from .windows_native_runtime import (
 
 WINDOWS_NATIVE_RUNTIME_BACKEND = "WINDOWS_NATIVE"
 WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS = frozenset({"cloud-desktop"})
-WINDOWS_NATIVE_EXTENDED_WORKSPACE_SLUGS = frozenset({"creator", "cad", "gaming"})
+WINDOWS_NATIVE_EXTENDED_WORKSPACE_SLUGS = frozenset({"creator", "cad"})
 
 
 def windows_native_active_workspace_slugs() -> frozenset[str]:
@@ -69,12 +70,17 @@ def windows_native_active_workspace_slugs() -> frozenset[str]:
     Server commercial release permission is a separate requirement and is
     disabled by default. An Agent cannot widen backend permissions merely
     because a stale API desired-session payload mentions Creator/CAD/Gaming.
+    Creator/CAD use the extended local opt-in; Gaming additionally needs its
+    own persisted private-test consent so a broad workspace flag cannot enable it.
     The signed helper still performs isolation, app, GPU, audio and controller
     checks on every launch; this is not an alternative to security review.
     """
+    active = set(WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS)
     if os.environ.get("GPUBNB_WINDOWS_NATIVE_EXTENDED_LOCAL_OPT_IN") == "true":
-        return WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS | WINDOWS_NATIVE_EXTENDED_WORKSPACE_SLUGS
-    return WINDOWS_NATIVE_INITIAL_WORKSPACE_SLUGS
+        active.update(WINDOWS_NATIVE_EXTENDED_WORKSPACE_SLUGS)
+    if private_gaming_workspace_local_opt_in_enabled():
+        active.add("gaming")
+    return frozenset(active)
 WINDOWS_NATIVE_MEDIA_HEADER = "X-GPUbnb-Media-Token"
 WINDOWS_NATIVE_USAGE_INTERVAL_SECONDS = 10.0
 WINDOWS_NATIVE_START_RETRY_MAX_SECONDS = 60.0

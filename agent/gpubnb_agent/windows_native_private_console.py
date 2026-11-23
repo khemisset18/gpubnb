@@ -7,13 +7,16 @@ may not. Never select console from a GPU model or an untrusted web request.
 """
 from __future__ import annotations
 
-import os
 import re
 import threading
 import weakref
 from typing import Any, Mapping
 
 from ._build_info import BUILD_COMMIT
+from .private_console_consent import (
+    private_console_environment_opt_in_enabled,
+    private_gaming_workspace_local_opt_in_enabled,
+)
 
 _SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
 CONSOLE_BACKEND = "console-dedicated"
@@ -64,19 +67,26 @@ def selected_capture_backend(
     if backend != CONSOLE_BACKEND:
         raise RuntimeError("native_capture_backend_unsupported")
 
+    workspace_slug = desired_session.get("workspaceSlug")
+    # The dedicated-console backend is the only current private Gaming capture
+    # path. Keep the allowlist explicit: this must not turn into a general
+    # fallback for Creator/CAD or a paid/public native workspace.
+    if workspace_slug not in {"cloud-desktop", "gaming"}:
+        raise RuntimeError("native_console_workspace_invalid")
+    if desired_session.get("runtimeBackend") != "WINDOWS_NATIVE":
+        raise RuntimeError("native_console_runtime_backend_invalid")
     if local_opt_in is None:
-        local_opt_in = os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "true"
+        # The persisted Host UI consent is scoped to Gaming and cannot silently
+        # authorize a console session for a different workspace.
+        local_opt_in = (
+            private_gaming_workspace_local_opt_in_enabled()
+            if workspace_slug == "gaming"
+            else private_console_environment_opt_in_enabled()
+        )
     if local_opt_in is not True:
         raise RuntimeError("native_console_local_opt_in_required")
     if console_session_change_fenced():
         raise RuntimeError("native_console_session_change_fenced")
-    if desired_session.get("runtimeBackend") != "WINDOWS_NATIVE":
-        raise RuntimeError("native_console_runtime_backend_invalid")
-    # The dedicated-console backend is the only current private Gaming capture
-    # path. Keep the allowlist explicit: this must not turn into a general
-    # fallback for Creator/CAD or a paid/public native workspace.
-    if desired_session.get("workspaceSlug") not in {"cloud-desktop", "gaming"}:
-        raise RuntimeError("native_console_workspace_invalid")
 
     pinned = desired_session.get("consoleAgentCommit")
     if (

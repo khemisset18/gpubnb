@@ -227,11 +227,11 @@ def probe_private_console_capability(*, enabled: bool | None = None) -> NativeDe
     allocate a session. Hold the same physical GPU authority lock as IddCx
     and native rental START/STOP; fail closed on persistent claims/quarantine.
     """
-    import os
-
     now = time.monotonic()
     if enabled is None:
-        enabled = os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "true"
+        from .private_console_consent import private_console_local_opt_in_enabled
+
+        enabled = private_console_local_opt_in_enabled()
     if enabled is not True:
         return _snapshot(NativeDesktopPreflight(False, "private_console_disabled"), now)
     if platform.system() != "Windows":

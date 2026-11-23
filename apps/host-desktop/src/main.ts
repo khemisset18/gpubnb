@@ -7,7 +7,8 @@ import './pairing.css';
 type Lifecycle = 'setup_required' | 'ready' | 'online' | 'emergency_stopped';
 type Check = { id: string; label: string; ok: boolean; detail: string; actionLabel?: string | null };
 type PairingConfiguration = { configured: boolean; browserUrl?: string | null; storesPassword: boolean; explanation: string };
-type AgentStatus = { installed: boolean; linked: boolean; running: boolean; machineId?: string | null; detail: string };
+type AgentStatus = { installed: boolean; linked: boolean; running: boolean; serviceInstalled?: boolean; serviceRunning?: boolean; machineId?: string | null; detail: string };
+type PrivateGamingConsentStatus = { enabled: boolean; consentedAt?: string | null; environmentBlocked?: boolean };
 type GpuDevice = { index: number; uuid: string; model: string; driverVersion: string; vramMib: number };
 type NativeDiagnostic = { canHost: boolean; reason: string; gpus?: GpuDevice[] };
 type GpuProcessClassification = 'SYSTEM_PROTECTED' | 'GPUBNB_PROTECTED' | 'USER_APPLICATION' | 'UNKNOWN';
@@ -371,6 +372,47 @@ const renderGpuRelease = (status: HostStatus): string => {
   return `<section class="gpu-release">${header}${statusBanner}${closeMessage}<ul class="gpu-process-list">${rows || '<li class="gpu-process-empty">Aucun processus actif sur le GPU.</li>'}</ul></section>`;
 };
 
+const renderPrivateGamingConsent = (
+  status: HostStatus,
+  consent: PrivateGamingConsentStatus | null,
+  consentError: string | null,
+): string => {
+  if (status.platform.toLowerCase() !== 'windows') return '';
+  const hasNvidiaGpu = (status.diagnostic.gpus ?? []).length > 0;
+  const canEnable = status.agent.linked
+    && status.agent.serviceInstalled === true
+    && status.agent.serviceRunning === true
+    && hasNvidiaGpu;
+  const state = consent?.enabled
+    ? '<strong class="gaming-consent-state enabled">Autorisé sur ce PC</strong>'
+    : consent?.environmentBlocked
+      ? '<strong class="gaming-consent-state">Bloqué localement</strong>'
+      : '<strong class="gaming-consent-state">Pas encore autorisé</strong>';
+  const action = consentError || consent?.environmentBlocked
+    ? ''
+    : consent?.enabled
+    ? '<button id="revoke-private-gaming" class="secondary" type="button">Révoquer l’autorisation locale</button>'
+    : '<label class="consent-check"><input id="private-gaming-consent-check" type="checkbox"> J’autorise cet essai privé sur mon PC.</label><button id="enable-private-gaming" class="primary" type="button" disabled>Autoriser l’essai privé</button>';
+  const readiness = canEnable
+    ? ''
+    : `<p class="gaming-consent-prerequisite">${!status.agent.linked
+      ? 'Reliez cette machine à votre compte GPUbnb.'
+      : status.agent.serviceInstalled !== true || status.agent.serviceRunning !== true
+        ? 'Installez et démarrez le service GPUbnb Host.'
+        : 'Aucun GPU NVIDIA n’est détecté par le diagnostic Host.'}</p>`;
+  const error = consentError
+    ? '<p class="gaming-consent-error">La lecture du consentement local est indisponible. Mettez à jour GPUbnb Host pour activer cette option.</p>'
+    : consent?.environmentBlocked
+      ? '<p class="gaming-consent-error">Une configuration locale explicite du service désactive le Gaming privé.</p>'
+      : '';
+  const explanation = consent?.enabled
+    ? '<p>Le consentement local est enregistré. Une autorisation distincte du site reste nécessaire; aucun paiement ni partage public ne démarre ici.</p>'
+    : '<p>Le locataire se connecte à son propre compte Steam et apporte les jeux qu’il possède. L’essai ouvre une session dédiée sur l’écran du PC; votre affichage personnel peut être interrompu.</p>';
+  return `<section class="gaming-consent-card"><div class="gaming-consent-heading"><div><p class="eyebrow">Cloud Gaming</p><h2>Essai privé sans paiement</h2></div>${state}</div>
+    ${explanation}<p>Cette option ne partage ni votre compte Steam ni votre session personnelle. Elle n’autorise pas la location publique.</p>
+    ${readiness}${error}<div class="gaming-consent-actions">${action}</div></section>`;
+};
+
 const miningStateLabel = (state: string): string => ({
   idle: 'Inactif',
   mining_starting: 'Démarrage',
@@ -731,6 +773,54 @@ const bindActions = (status: HostStatus): void => {
   }));
 };
 
+const bindPrivateGamingConsent = (
+  current: PrivateGamingConsentStatus | null,
+  status: HostStatus,
+): void => {
+  const enable = document.querySelector<HTMLButtonElement>('#enable-private-gaming');
+  const confirmation = document.querySelector<HTMLInputElement>('#private-gaming-consent-check');
+  if (enable && confirmation) {
+    const canEnable = status.agent.linked
+      && status.agent.serviceInstalled === true
+      && status.agent.serviceRunning === true
+      && (status.diagnostic.gpus ?? []).length > 0;
+    enable.disabled = !canEnable || !confirmation.checked;
+    confirmation.addEventListener('change', () => {
+      enable.disabled = !canEnable || !confirmation.checked;
+    });
+    enable.addEventListener('click', () => {
+      if (!confirmation.checked || !canEnable) return;
+      enable.disabled = true;
+      setMessage('Enregistrement du consentement Gaming local…');
+      void invoke<PrivateGamingConsentStatus>('set_private_gaming_consent', {
+        enabled: true,
+        consentConfirmed: true,
+      })
+        .then(() => {
+          setMessage('Consentement Gaming privé enregistré. Le site doit encore autoriser l’essai.', 'success');
+          window.setTimeout(() => void refresh(), 300);
+        })
+        .catch((error: unknown) => setMessage(`Consentement refusé : ${String(error)}`, 'error'))
+        .finally(() => { enable.disabled = false; });
+    });
+  }
+
+  document.querySelector<HTMLButtonElement>('#revoke-private-gaming')?.addEventListener('click', () => {
+    if (!current?.enabled) return;
+    if (!window.confirm('Révoquer le consentement Gaming local ? L’Agent arrêtera une session de jeu autorisée lors de son prochain contrôle.')) return;
+    setMessage('Révocation du consentement Gaming…');
+    void invoke<PrivateGamingConsentStatus>('set_private_gaming_consent', {
+      enabled: false,
+      consentConfirmed: true,
+    })
+      .then(() => {
+        setMessage('Consentement local révoqué. L’Agent arrêtera tout flux Gaming au prochain contrôle.', 'success');
+        window.setTimeout(() => void refresh(), 300);
+      })
+      .catch((error: unknown) => setMessage(`Révocation refusée : ${String(error)}`, 'error'));
+  });
+};
+
 const performGpuDetection = async (): Promise<void> => {
   gpuReleaseState = { ...gpuReleaseState, loading: true, error: null };
   await refresh(false);
@@ -785,7 +875,7 @@ async function refresh(showLoading = true): Promise<void> {
   }
   try {
     const selectedProfileId = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin)?.profileId;
-    const [status, mining, installation, miningConfiguration, telemetry, thermalSafety] = await Promise.all([
+    const [status, mining, installation, miningConfiguration, telemetry, thermalSafety, gamingConsentRead] = await Promise.all([
       invoke<HostStatus>('host_status'),
       invoke<MiningRuntimeStatus>('mining_runtime_status')
         .then((runtime): MiningRuntimeRead => ({ status: runtime, error: null }))
@@ -802,6 +892,9 @@ async function refresh(showLoading = true): Promise<void> {
         ? invoke<MiningTelemetry>('mining_telemetry_status', { profileId: selectedProfileId }).catch(() => null)
         : Promise.resolve(null),
       invoke<MiningThermalSafety>('mining_thermal_safety_status').catch(() => null),
+      invoke<PrivateGamingConsentStatus>('private_gaming_consent_status')
+        .then((value) => ({ value, error: null as string | null }))
+        .catch((error: unknown) => ({ value: null, error: String(error) })),
     ]);
     const progress = Math.round(Math.min(100, Math.max(0, status.progress)));
     const online = status.lifecycle === 'online';
@@ -813,7 +906,7 @@ async function refresh(showLoading = true): Promise<void> {
       <div class="status-stack"><span class="status-pill ${status.lifecycle}">${lifecycleLabel(status.lifecycle)}</span><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
       ${stopped ? '<section class="alert-card danger"><strong>Arrêt d’urgence actif</strong></section>' : ''}
       <section class="progress-card"><div class="progress-heading"><div><p class="eyebrow">État de préparation</p><h2>${escapeHtml(status.summary)}</h2></div><strong>${progress}%</strong></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div></section>
-      ${renderPairing(status)}${renderGpuInventory(status)}${renderGpuRelease(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
+      ${renderPairing(status)}${renderGpuInventory(status)}${renderPrivateGamingConsent(status, gamingConsentRead.value, gamingConsentRead.error)}${renderGpuRelease(status)}<p id="action-status" class="action-status" aria-live="polite"></p><ul class="checks">${renderChecks(status.checks)}</ul>
       <div class="actions"><button id="refresh" class="secondary large">Revérifier</button><button id="publish" class="primary large" ${status.ready && !stopped && !online ? '' : 'disabled'}>${online ? 'Machine déjà en ligne' : 'Mettre en ligne'}</button></div></section>`;
     const miningPage = `<section class="content mining-page"><header class="topbar"><div><p class="eyebrow">Minage personnel</p><h1>Choisissez une cryptomonnaie.</h1><p class="lead">Le minage personnel est indépendant de la publication GPUbnb. Le rendement sera calculé à partir du test réel de cette machine.</p></div>
       <div class="status-stack"><span class="badge">${escapeHtml(status.platform)} · ${escapeHtml(status.architecture)}</span></div></header>
@@ -831,6 +924,7 @@ async function refresh(showLoading = true): Promise<void> {
       bindPairing();
       bindActions(status);
       bindGpuRelease();
+      bindPrivateGamingConsent(gamingConsentRead.value, status);
     } else {
       const coin = MINING_CATALOG.find((entry) => entry.symbol === selectedMiningCoin);
       if (coin?.profileId) bindMining(coin, mining, installation, miningConfiguration);

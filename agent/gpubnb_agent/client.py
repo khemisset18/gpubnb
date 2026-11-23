@@ -208,7 +208,9 @@ def heartbeat(
         # Separate, physically measured console proof. This is sent only as
         # part of the v2 raw-body signed heartbeat, never as an IddCx claim.
         private_console_proof = None
-        if os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "true":
+        from .private_console_consent import private_console_local_opt_in_enabled
+
+        if private_console_local_opt_in_enabled():
             from ._build_info import BUILD_COMMIT
             from .windows_native_capability import probe_private_console_capability
 

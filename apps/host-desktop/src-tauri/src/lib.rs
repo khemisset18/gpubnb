@@ -25,7 +25,7 @@ mod rental_orchestrator;
 mod secure_launcher;
 mod startup_reconciliation;
 
-use agent_bridge::{AgentStatus, ProtectionStatus};
+use agent_bridge::{AgentStatus, PrivateGamingConsentStatus, ProtectionStatus};
 use diagnostics::{collect_native_diagnostic, NativeDiagnostic};
 #[cfg(feature = "desktop-runtime")]
 use miner_installer::{
@@ -456,6 +456,21 @@ fn local_agent_status() -> AgentStatus {
 
 #[cfg(feature = "desktop-runtime")]
 #[tauri::command]
+fn private_gaming_consent_status() -> Result<PrivateGamingConsentStatus, String> {
+    agent_bridge::private_gaming_consent_status()
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
+fn set_private_gaming_consent(
+    enabled: bool,
+    consent_confirmed: bool,
+) -> Result<PrivateGamingConsentStatus, String> {
+    agent_bridge::set_private_gaming_consent(enabled, consent_confirmed)
+}
+
+#[cfg(feature = "desktop-runtime")]
+#[tauri::command]
 fn link_local_agent(code: String) -> Result<AgentStatus, String> {
     agent_bridge::link(&code)
 }
@@ -752,6 +767,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             host_status,
             local_agent_status,
+            private_gaming_consent_status,
+            set_private_gaming_consent,
             link_local_agent,
             gpu_release_list,
             gpu_release_close,
@@ -891,6 +908,8 @@ mod tests {
         let exposed = [
             "host_status",
             "local_agent_status",
+            "private_gaming_consent_status",
+            "set_private_gaming_consent",
             "link_local_agent",
             "orchestration_status",
             "mining_runtime_status",
