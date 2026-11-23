@@ -47,3 +47,22 @@ Ne jamais fournir au lanceur une chaîne de connexion vers GPUbnb Core, un Excha
 - Aucun composant de minage ni paramètre GPUbnb hors Asset Exchange n'est modifié.
 
 **Décision finale : PRL = MARKETPLACE_ONLY / RESTRICTED ; identityReady=false ; newOffersEnabled=false ; newTradesEnabled=false ; automaticSettlementSupported=false. Aucune fusion ni activation.**
+
+
+## Mise à jour — preuve d'exécution WSL2 (commit f61dc5d)
+
+L'opérateur a exécuté **160/160 tests hors ligne PASS** sur
+Ubuntu WSL2 : 94 tests Python et 66 tests Node.js
+(`fail=0`, `skipped=0`), commit exact testé
+`f61dc5d6c7ead0a1448ccdd4b02cff45a3f27a4c`,
+worktree de branche propre et suivi par `origin`.
+Les tests ont été exécutés dans un namespace réseau isolé.
+Les 17 tests nouvellement ajoutés à cette phase ont passé dans
+ce groupe Node.
+
+**Aucune exécution native PostgreSQL n'a été réalisée.** La
+validation des 17 tests Node n'atteste que des contrats
+statiques du SQL, de la politique de refus et du harnais de
+laboratoire. Les migrations 010/011 restent **non appliquées**,
+la base `prl_scratch_*` reste un protocole non exécuté,
+et le déploiement financier demeure interdit.
