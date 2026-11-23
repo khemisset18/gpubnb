@@ -21,9 +21,10 @@ test('gaming player workspace is a browser game surface, not a desktop page', ()
   assert.match(html, /id="nativeDesktopStopSession"/u);
   assert.match(html, /vos propres licences/u);
   assert.match(html, /ne sont pas encore pris en charge/u);
-  assert.match(html, /Session Gaming en qualification privée/u);
-  assert.match(html, /Steam s’ouvre dans la session locataire isolée/u);
-  assert.match(html, /aucune location publique n’est activée/u);
+  assert.match(html, /Essai Gaming privé sans paiement/u);
+  assert.match(html, /Steam démarre dans un compte Windows locataire distinct déjà préparé/u);
+  assert.match(html, /n’active jamais la location publique/u);
+  assert.match(html, /un seul écran physique en 1920 × 1080 à 60 Hz/u);
   assert.doesNotMatch(html, /Bureau distant|Windows 11|<style(?:\s|>)/iu);
   assert.match(html, /gaming-workspace\.css/u);
   assert.match(css, /\.gaming-player\s*\{/u);

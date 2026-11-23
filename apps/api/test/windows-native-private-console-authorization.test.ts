@@ -66,7 +66,7 @@ test('production IddCx and public listings do not acquire a console grant', () =
   assert.doesNotMatch(api, /ListingStatus\.ACTIVE[^\n]*privateConsoleSessionMarker/);
 });
 
-test('private qualification is owner-only and Gaming cannot use the owner console', () => {
+test('private qualification is owner-only and Gaming requires the dedicated renter console', () => {
   const api = readFileSync(new URL('../src/desktop-workspace-routes.ts', import.meta.url), 'utf8');
   const booking = api.slice(
     api.indexOf('async function createWindowsNativeQualificationBooking('),
@@ -81,7 +81,7 @@ test('private qualification is owner-only and Gaming cannot use the owner consol
     api.indexOf("app.post('/qualification/windows-native/booking'"),
   );
   assert.match(api, /function privateQualificationSourceAllowed\([\s\S]*?ownerId !== userId/);
-  assert.match(api, /return slug !== 'gaming' \|\| source\.captureBackend === 'iddcx'/);
+  assert.match(api, /return slug !== 'gaming' \|\| source\.captureBackend === 'console-dedicated'/);
   assert.match(booking, /privateQualificationSourceAllowed\(slug, source, machine\.ownerId, renterId\)/);
   assert.match(booking, /privateQualificationSourceAllowed\(slug, freshSource, fresh\.machine\.ownerId, renterId\)/);
   assert.match(session, /privateQualificationSourceAllowed\(slug, qualifiedSource, machine\.ownerId, renterId\)/);

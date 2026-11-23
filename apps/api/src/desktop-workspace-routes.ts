@@ -82,9 +82,9 @@ function privateQualificationSourceAllowed(
   userId: string,
 ): boolean {
   if (!source || ownerId !== userId) return false;
-  // Gaming must use a separate IddCx renter surface; it may never borrow the
-  // owner's interactive console, even for the private no-payment test.
-  return slug !== 'gaming' || source.captureBackend === 'iddcx';
+  // Gaming's private attempt uses the dedicated renter console only. It must
+  // never fall back to IddCx or capture the provider's interactive session.
+  return slug !== 'gaming' || source.captureBackend === 'console-dedicated';
 }
 
 function windowsNativePrivateAttemptEnabled(slug: WindowsNativePrivateWorkspaceSlug): boolean {

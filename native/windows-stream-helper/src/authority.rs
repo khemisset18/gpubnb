@@ -187,6 +187,7 @@ fn random_runtime_identity() -> Result<(u64, [u8; 16]), AuthorityError> {
 fn runtime_config<'a>(
     session_id: &'a str,
     workspace: crate::lifecycle::WorkspaceKind,
+    backend: RuntimeDisplayBackend,
     gpu_uuid: &'a str,
     application_path: Option<&'a str>,
     lease: &'a crate::renter_lease::RenterSessionLease,
@@ -203,15 +204,17 @@ fn runtime_config<'a>(
         renter_user_sid: &lease.renter_user_sid,
         provider_user_sid: &lease.provider_user_sid,
         display_nonce,
-        width: if matches!(workspace, crate::lifecycle::WorkspaceKind::Gaming) {
-            1280
-        } else {
-            1920
+        // The IddCx Gaming monitor is a controlled virtual 720p surface.
+        // The private console qualification backend must match the one real
+        // physical monitor it is allowed to capture; its self-test qualifies
+        // a 1080p60 console mode and performs no display mutation.
+        width: match (workspace, backend) {
+            (crate::lifecycle::WorkspaceKind::Gaming, RuntimeDisplayBackend::IddCx) => 1280,
+            _ => 1920,
         },
-        height: if matches!(workspace, crate::lifecycle::WorkspaceKind::Gaming) {
-            720
-        } else {
-            1080
+        height: match (workspace, backend) {
+            (crate::lifecycle::WorkspaceKind::Gaming, RuntimeDisplayBackend::IddCx) => 720,
+            _ => 1080,
         },
         refresh_hz: 60,
     }
@@ -224,7 +227,11 @@ fn validate_runtime_workspace(
 ) -> Result<crate::lifecycle::WorkspaceKind, AuthorityError> {
     match (workspace, application_path, backend) {
         ("cloud-desktop", None, _) => Ok(crate::lifecycle::WorkspaceKind::CloudDesktop),
-        ("gaming", Some(path), RuntimeDisplayBackend::IddCx)
+        (
+            "gaming",
+            Some(path),
+            RuntimeDisplayBackend::IddCx | RuntimeDisplayBackend::DedicatedConsole,
+        )
             if [
                 r"C:\Program Files (x86)\Steam\steam.exe",
                 r"C:\Program Files\Steam\steam.exe",
@@ -262,13 +269,21 @@ mod runtime_workspace_tests {
                 Some(r"C:\Program Files (x86)\Steam\steam.exe"),
                 RuntimeDisplayBackend::DedicatedConsole
             ),
-            Err(AuthorityError::UnsupportedWorkspace)
+            Ok(crate::lifecycle::WorkspaceKind::Gaming)
         );
         assert_eq!(
             validate_runtime_workspace(
                 "gaming",
                 Some(r"C:\Users\Owner\Downloads\steam.exe"),
                 RuntimeDisplayBackend::IddCx
+            ),
+            Err(AuthorityError::UnsupportedWorkspace)
+        );
+        assert_eq!(
+            validate_runtime_workspace(
+                "gaming",
+                Some(r"C:\Users\Owner\Downloads\steam.exe"),
+                RuntimeDisplayBackend::DedicatedConsole
             ),
             Err(AuthorityError::UnsupportedWorkspace)
         );
@@ -416,6 +431,7 @@ fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestRepor
         let config = runtime_config(
             &session_id,
             crate::lifecycle::WorkspaceKind::CloudDesktop,
+            backend,
             &lease.gpu_uuid,
             None,
             &lease,
@@ -900,6 +916,7 @@ fn run_authority_child_backend(
         let config = runtime_config(
             session_id,
             workspace_kind,
+            backend,
             gpu_uuid,
             application_path,
             &lease,
