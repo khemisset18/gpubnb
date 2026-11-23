@@ -32,9 +32,9 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         helper = (TAURI / "installer/install-stage4-payload.ps1").read_text(encoding="utf-8")
 
         self.assertIn("!define GPUBNB_PREFLIGHT_INSTALLER", wrapper)
-        self.assertIn('File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\\\\..\\\\installer\\\\install-stage4-payload.ps1"', hooks)
-        self.assertIn('SetOutPath "$INSTDIR\\\\resources\\\\installer"', hooks)
-        self.assertIn('Delete "$INSTDIR\\\\resources\\\\installer\\\\install-stage4-payload.ps1"', hooks)
+        self.assertIn(r'File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\installer\install-stage4-payload.ps1"', hooks)
+        self.assertIn(r'SetOutPath "$INSTDIR\resources\installer"', hooks)
+        self.assertIn(r'Delete "$INSTDIR\resources\installer\install-stage4-payload.ps1"', hooks)
         self.assertIn("GPUbnbRequireDisposableCiRunner", hooks)
         self.assertIn("GPUbnbAssertNativeWorkersStopped", hooks)
         self.assertIn("$env:GITHUB_ACTIONS -cne 'true'", helper)
