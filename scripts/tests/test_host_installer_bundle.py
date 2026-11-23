@@ -68,6 +68,10 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         self.assertIn("host_native_preflight_update_requires_reviewed_rollback", helper)
         self.assertIn("host_native_preflight_remove_hash_mismatch", helper)
         self.assertIn("host_native_install_acl_broad_write_forbidden", helper)
+        self.assertLess(
+            helper.index("if (($rights -band $writeRights) -eq 0) { continue }"),
+            helper.index("$rule.IdentityReference.Translate"),
+        )
         self.assertNotRegex(helper, r"(?i)Start-Process.*(?:stream|worker)|pnputil|InstallDriver")
 
     def test_ci_bundle_smoke_requires_four_file_unsigned_policy_and_uninstall_cleanup(self):
