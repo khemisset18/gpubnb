@@ -28,6 +28,15 @@ function Get-Sha256Hex([string]$Path) {
     }
 }
 
+function Test-HasEmbeddedAuthenticodeSignature([string]$Path) {
+    try {
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromSignedFile($Path)
+        try { return $true } finally { $certificate.Dispose() }
+    } catch [System.Security.Cryptography.CryptographicException] {
+        return $false
+    }
+}
+
 $nativeNames = @(
     'gpubnb-windows-stream.exe',
     'gpubnb-windows-worker.exe',
@@ -138,9 +147,8 @@ function Read-PreflightPackage {
                     $record[0].sha256) {
                 throw "host_native_preflight_component_hash_mismatch:$name"
             }
-            $signature = Get-AuthenticodeSignature -LiteralPath $path
-            if ($signature.Status -ne 'NotSigned' -or $null -ne $signature.SignerCertificate) {
-                throw "host_native_preflight_signed_component_rejected:$name"
+            if (Test-HasEmbeddedAuthenticodeSignature $path) {
+                throw 'host_native_preflight_signed_component_rejected:$name'
             }
         }
         $records[$name] = $record[0]
@@ -166,8 +174,7 @@ switch ($Mode) {
                 $bundle.Records['gpubnb-agent.exe'].sha256) {
             throw 'host_native_preflight_agent_mismatch'
         }
-        $agentSignature = Get-AuthenticodeSignature -LiteralPath $sidecar
-        if ($agentSignature.Status -ne 'NotSigned' -or $null -ne $agentSignature.SignerCertificate) {
+        if (Test-HasEmbeddedAuthenticodeSignature $sidecar) {
             throw 'host_native_preflight_signed_component_rejected:gpubnb-agent.exe'
         }
         Assert-NoActiveNativeProcesses
