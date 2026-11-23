@@ -2,7 +2,8 @@
 
 Only an authenticated server-issued native desired session, a private local
 opt-in, and the Agent's exact compiled source commit may select this backend.
-Never select console from a listing, GPU model, or an untrusted web request.
+The private Gaming test may use this backend; Creator/CAD and ordinary listings
+may not. Never select console from a GPU model or an untrusted web request.
 """
 from __future__ import annotations
 
@@ -71,7 +72,10 @@ def selected_capture_backend(
         raise RuntimeError("native_console_session_change_fenced")
     if desired_session.get("runtimeBackend") != "WINDOWS_NATIVE":
         raise RuntimeError("native_console_runtime_backend_invalid")
-    if desired_session.get("workspaceSlug") != "cloud-desktop":
+    # The dedicated-console backend is the only current private Gaming capture
+    # path. Keep the allowlist explicit: this must not turn into a general
+    # fallback for Creator/CAD or a paid/public native workspace.
+    if desired_session.get("workspaceSlug") not in {"cloud-desktop", "gaming"}:
         raise RuntimeError("native_console_workspace_invalid")
 
     pinned = desired_session.get("consoleAgentCommit")

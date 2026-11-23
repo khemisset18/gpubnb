@@ -30,8 +30,13 @@ class PrivateConsolePolicyTests(unittest.TestCase):
         self.assertEqual(selected_capture_backend(
             desired(), local_opt_in=True, build_commit=COMMIT,
         ), "console-dedicated")
+        self.assertEqual(selected_capture_backend(
+            desired(workspaceSlug="gaming"), local_opt_in=True, build_commit=COMMIT,
+        ), "console-dedicated")
         with self.assertRaisesRegex(RuntimeError, "native_console_local_opt_in_required"):
-            selected_capture_backend(desired(), local_opt_in=False, build_commit=COMMIT)
+            selected_capture_backend(
+                desired(workspaceSlug="gaming"), local_opt_in=False, build_commit=COMMIT,
+            )
 
     def test_wrong_commit_or_malformed_pin_never_select_console(self):
         for pin in (None, "", COMMIT.upper(), "a" * 40, "f664a07", 123):
@@ -47,7 +52,8 @@ class PrivateConsolePolicyTests(unittest.TestCase):
         scenarios = [
             ({"captureBackend": "console-authorization-invalid"}, "native_capture_backend_unsupported"),
             ({"captureBackend": "unknown"}, "native_capture_backend_unsupported"),
-            ({"workspaceSlug": "gaming"}, "native_console_workspace_invalid"),
+            ({"workspaceSlug": "creator"}, "native_console_workspace_invalid"),
+            ({"workspaceSlug": "cad"}, "native_console_workspace_invalid"),
             ({"runtimeBackend": "CONTAINER"}, "native_console_runtime_backend_invalid"),
             ({"consoleAgentCommit": None}, "native_console_release_mismatch"),
         ]

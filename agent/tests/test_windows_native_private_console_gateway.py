@@ -12,7 +12,7 @@ def session(**changes):
     s = {
         "id": "sess-1",
         "runtimeBackend": "WINDOWS_NATIVE",
-        "workspaceSlug": "cloud-desktop",
+        "workspaceSlug": "gaming",
         "status": "READY",
         "expiresAt": "2099-01-01T00:00:00Z",
         "connectionMetadata": {},
@@ -56,7 +56,7 @@ class ConsoleGatewayTests(unittest.TestCase):
         with patch.object(gateway, "selected_capture_backend", return_value="console-dedicated"):
             obj._reconcile_native_sessions()
         obj._start_native_runtime.assert_called_once_with(
-            "sess-1", "cloud-desktop", private_console_qualification=True,
+            "sess-1", "gaming", private_console_qualification=True,
         )
 
     def test_bad_authority_is_not_started(self):
