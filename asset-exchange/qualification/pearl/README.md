@@ -145,3 +145,30 @@ PRL stays MARKETPLACE_ONLY / RESTRICTED, `newOffersEnabled=false`,
 No mining changes, API deployment, wallet, signatures or funds.
 
 **Phase 4 operator update:** The isolated Ubuntu WSL2 run of the historical acceptance branch finished with **94 Python PASS + 49 Node.js PASS = 143/143** at commit `71d419b`; the worktree was clean. No live Exchange publishing, real signatures, PostgreSQL migration, blockchain, payments or mining operations were executed. This is not a native SQL or production qualification.
+
+
+## Phase 5 — historic acceptance idempotency replay quarantine
+
+Branch: `experiment/pearl-prl-idempotency-replay-quarantine-20261123`,
+base PR #395; Asset Exchange files only.
+
+The *previous* three SQL triggers cannot prevent an old idempotency
+record from returning `CONSUMED` without touching offers/trades.
+The proposed **UNDEPLOYED** SQL migration 011 checks the actual
+stored offer/trade identity and the PRL quarantine before such a return,
+while keeping the original function signature.
+
+`test_prl_accept_replay_contract.mjs` contains **17 new offline
+static / harness tests**. These have **NOT yet run on WSL2**.
+The previous confirmed operator baseline is **143/143 PASS** at
+commit `71d419b`; the full new-scope expectation is 94 Python
+plus 66 Node tests = **160 tests expected, NOT ATTESTED**.
+
+A strictly scratch-only native PostgreSQL harness is in
+`asset-exchange/db/test/prl_scratch_replay_run.sh`, but it
+has not been executed and is not an installation script.
+Do not direct it to any existing database. The API's non-PRL
+consumed-offer retry behaviour remains a separate review gate.
+
+All PRL publishing and settlement permissions stay false.
+No mining files, wallets, keys, funds or live exchange operations.
