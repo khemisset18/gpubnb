@@ -6,8 +6,7 @@
       "binaries/gpubnb-host-tunnel"
     ],
     "resources": [
-      "stage4/*",
-      "installer/install-stage4-payload.ps1"
+      "stage4/*"
     ],
     "windows": {
       "nsis": {
