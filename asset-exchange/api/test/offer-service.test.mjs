@@ -91,6 +91,37 @@ test("publishing requires maker object authorization and verified signature", as
   assert.equal(result.status, "OPEN");
 });
 
+test("expired publication retry reaches atomic persistence for durable idempotency", async () => {
+  const repo = fakeRepository();
+  const svc = service(repo, { now: () => { throw new Error("publication retry must not need an application clock"); } });
+  const result = await svc.publishOffer({
+    actor: actorMaker,
+    offer: createUnsignedOffer(rawOffer),
+    signature: "sig",
+    idempotencyKey: fixtureRequestId("publish-expired-retry")
+  });
+  assert.equal(result.status, "OPEN");
+  assert.equal(repo.calls.filter(([name]) => name === "insert").length, 1);
+});
+
+test("expired new publication is refused by the atomic repository", async () => {
+  const repo = fakeRepository();
+  repo.insertOfferAtomic = async (input) => {
+    repo.calls.push(["insert", input]);
+    const error = new Error("cannot publish expired offer");
+    error.code = "OFFER_EXPIRED";
+    throw error;
+  };
+  const svc = service(repo, { now: () => 6000 });
+  await assert.rejects(() => svc.publishOffer({
+    actor: actorMaker,
+    offer: createUnsignedOffer(rawOffer),
+    signature: "sig",
+    idempotencyKey: fixtureRequestId("publish-expired-new")
+  }), error => error.code === "OFFER_EXPIRED");
+  assert.equal(repo.calls.filter(([name]) => name === "insert").length, 1);
+});
+
 test("cancel requires stored maker identity and verified signed cancellation intent", async () => {
   const repo = fakeRepository();
   const svc = service(repo);
@@ -166,6 +197,76 @@ test("cancel rejects hash, epoch, deployment, timestamp and expiry mismatch befo
   assert.equal(repo.calls.filter(([name]) => name === "cancel").length, 0);
 });
 
+test("cancelled offer permits only a durable exact cancellation retry after expiry", async () => {
+  const repo = fakeRepository();
+  const offer = createUnsignedOffer(rawOffer);
+  const cancellation = {
+    offerId: offer.offerId,
+    deploymentId: offer.deploymentId,
+    maker: actorMaker.subject,
+    offerHash: offerDigestHex(offer),
+    cancelledAtUnixMs: 1000,
+    expiryUnixMs: 2000,
+    nonce: "cancelNonce000001",
+    policyEpoch: offer.policyEpoch
+  };
+  repo.getOfferById = async (offerId) => ({
+    offerId,
+    makerSubject: actorMaker.subject,
+    state: "CANCELLED",
+    offerHash: offerDigestHex(offer),
+    policyEpoch: offer.policyEpoch
+  });
+  const expectedKey = fixtureRequestId("cancel-durable-retry");
+  repo.cancelOfferAtomic = async (input) => {
+    repo.calls.push(["cancel", input]);
+    if (input.idempotencyKey !== expectedKey) {
+      const error = new Error("idempotency replay cancellation identity mismatch");
+      error.code = "IDEMPOTENCY_REPLAY_MISMATCH";
+      throw error;
+    }
+    return { status: "CANCELLED", offerId: input.cancellation.offerId };
+  };
+  const svc = service(repo, { now: () => { throw new Error("cancellation retry must not need an application clock"); } });
+
+  const result = await svc.cancelOffer({
+    actor: actorMaker,
+    cancellation,
+    signature: "sig",
+    idempotencyKey: expectedKey
+  });
+  assert.equal(result.status, "CANCELLED");
+  await assert.rejects(() => svc.cancelOffer({
+    actor: actorMaker,
+    cancellation,
+    signature: "sig",
+    idempotencyKey: fixtureRequestId("cancel-different-retry")
+  }), error => error.code === "IDEMPOTENCY_REPLAY_MISMATCH");
+  assert.equal(repo.calls.filter(([name]) => name === "cancel").length, 2);
+});
+
+test("an expired open-offer cancellation is still refused before persistence", async () => {
+  const repo = fakeRepository();
+  const offer = createUnsignedOffer(rawOffer);
+  const svc = service(repo, { now: () => 3000 });
+  await assert.rejects(() => svc.cancelOffer({
+    actor: actorMaker,
+    cancellation: {
+      offerId: offer.offerId,
+      deploymentId: offer.deploymentId,
+      maker: actorMaker.subject,
+      offerHash: offerDigestHex(offer),
+      cancelledAtUnixMs: 1000,
+      expiryUnixMs: 2000,
+      nonce: "cancelNonce000001",
+      policyEpoch: offer.policyEpoch
+    },
+    signature: "sig",
+    idempotencyKey: fixtureRequestId("cancel-expired-new")
+  }), error => error.code === "CANCEL_EXPIRED");
+  assert.equal(repo.calls.filter(([name]) => name === "cancel").length, 0);
+});
+
 test("acceptance binds taker, offer hash and policy epoch for atomic repository verification", async () => {
   const repo = fakeRepository();
   const svc = service(repo);
@@ -208,7 +309,7 @@ test("consumed non-PRL offers reach the atomic repository for durable idempotent
     giveAssetKey: offer.giveAssetKey,
     wantAssetKey: offer.wantAssetKey
   });
-  const svc = service(repo, { now: () => 3000 });
+  const svc = service(repo, { now: () => { throw new Error("acceptance retry must not need an application clock"); } });
   const acceptance = {
     offerId: offer.offerId,
     tradeId: "trade-00000001",
