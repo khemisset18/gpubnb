@@ -41,10 +41,12 @@ test("010 creates the trusted shared key guard before 011 references it", () => 
   assert.match(newFn, /PERFORM asset_exchange\.reject_unqualified_prl_asset_keys/);
 });
 test("replay branch checks request hash before offer lookup", () => {
+  const validate = newFn.indexOf("IF p_request_hash IS NULL");
   const hash = newFn.indexOf("v_existing.request_hash <> p_request_hash");
   const read = newFn.indexOf("SELECT o.* INTO v_offer");
   const returned = newFn.indexOf("RETURN QUERY SELECT 'CONSUMED'::text, v_existing.result_ref");
-  assert.ok(hash !== -1 && read > hash && returned > read);
+  assert.ok(validate > -1 && validate < hash && read > hash && returned > read);
+  assert.match(newFn, /p_request_hash::text !~ '\^\[0-9a-f\]\{64\}\$'/);
 });
 test("replay serializes the same idempotency key across sessions before lookup", () => {
   const lock = newFn.indexOf("pg_catalog.pg_advisory_xact_lock");

@@ -32,6 +32,11 @@ BEGIN
     RAISE EXCEPTION 'acceptance signature required' USING ERRCODE = '22023';
   END IF;
 
+  IF p_request_hash IS NULL
+     OR p_request_hash::text !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'valid request hash required' USING ERRCODE = '22023';
+  END IF;
+
   IF p_idempotency_key IS NULL
      OR p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128}$' THEN
     RAISE EXCEPTION 'invalid idempotency key' USING ERRCODE = '22023';

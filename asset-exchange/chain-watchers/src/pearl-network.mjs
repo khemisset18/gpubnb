@@ -1,6 +1,6 @@
 // Source-derived identity guard only: no address, consensus or financial qualification.
 import { invariant } from "../../core/src/errors.mjs";
-export const PEARL_SOURCE_COMMIT = "0dbdb2ffd8b81193a5079bb67a59aecc10ad501c";
+export const PEARL_SOURCE_COMMIT = "09cb165b1fbafe75288ffe89b351ba1e05197636";
 const profiles = {
   "mainnet": {
     "networkId": "mainnet",

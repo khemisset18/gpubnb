@@ -40,6 +40,31 @@ BEGIN
     RAISE EXCEPTION 'nonPRL historical replay regression';
   END IF;
 
+  -- NULL or malformed request hashes must not exploit SQL's three-valued
+  -- comparison semantics in the existing-idempotency-record branch.
+  BEGIN
+    PERFORM asset_exchange.accept_offer_atomic(
+      'ae-test-01', 'prl-old-other-0001', 'prl-trade-other-0001',
+      'taker:test:other', repeat('c',64), 7,
+      repeat('d',64), decode('11','hex'),
+      'prl-scratch-other-key', NULL
+    );
+    RAISE EXCEPTION 'expected NULL request hash refusal';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    NULL;
+  END;
+  BEGIN
+    PERFORM asset_exchange.accept_offer_atomic(
+      'ae-test-01', 'prl-old-other-0001', 'prl-trade-other-0001',
+      'taker:test:other', repeat('c',64), 7,
+      repeat('d',64), decode('11','hex'),
+      'prl-scratch-other-key', repeat('e',63)
+    );
+    RAISE EXCEPTION 'expected malformed request hash refusal';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    NULL;
+  END;
+
   -- The same idempotency key/hash for a different trade MUST NOT replay.
   BEGIN
     PERFORM asset_exchange.accept_offer_atomic(
