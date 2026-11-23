@@ -244,6 +244,8 @@ jobs:
           )) {
             Copy-Item -LiteralPath (Join-Path $out $name) -Destination (Join-Path $payload $name)
           }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item -LiteralPath (Join-Path $out 'gpubnb-agent.exe') -Destination 'dist/gpubnb-agent.exe'
           $hash = (Get-FileHash (Join-Path $payload 'stage4.manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "Unsigned Stage 4 manifest SHA-256: $hash"
 
@@ -262,13 +264,11 @@ jobs:
           }
           python -m gpubnb_agent status
 
-      - name: Build standalone agent
+      - name: Stage verified Agent sidecar
         shell: pwsh
         run: |
-          $source = 'apps/host-desktop/src-tauri/stage4/gpubnb-agent.exe'
-          if (-not (Test-Path $source -PathType Leaf)) { throw 'The pinned Stage 4 Agent was not staged.' }
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item $source dist/gpubnb-agent.exe
+          $source = 'dist/gpubnb-agent.exe'
+          if (-not (Test-Path $source -PathType Leaf)) { throw 'The verified Stage 4 Agent was not staged.' }
           $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
           if (-not $target) { throw 'Rust target triple could not be determined.' }
           New-Item -ItemType Directory -Force apps/host-desktop/src-tauri/binaries | Out-Null

@@ -50,6 +50,9 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         for required in (
             "build-stage4-unsigned-package.ps1",
             "stage4.manifest.json",
+            "Join-Path $out 'gpubnb-agent.exe'",
+            "Stage verified Agent sidecar",
+            "The verified Stage 4 Agent was not staged.",
             "signatureStatus -cne 'unsigned'",
             "installable -cne $false",
             "iddDriverIncluded -cne $false",
