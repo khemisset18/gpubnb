@@ -101,7 +101,11 @@ function Assert-ProtectedInstallDirectory([string]$Path) {
         try {
             $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
         } catch {
-            throw 'host_native_install_acl_identity_unresolvable'
+            $identity = [string]$rule.IdentityReference
+            $identityType = $rule.IdentityReference.GetType().FullName
+            $rights = [string]$rule.FileSystemRights
+            $reason = $_.Exception.GetType().Name
+            throw ('host_native_install_acl_identity_unresolvable:' + $identityType + ':' + $identity + ':' + $rights + ':' + $reason)
         }
         if ($sid -in $unsafeSids -and (([int]$rule.FileSystemRights -band $writeRights) -ne 0)) {
             throw ('host_native_install_acl_broad_write_forbidden:' + $sid + ':' + $rule.FileSystemRights)
