@@ -231,13 +231,12 @@ fn validate_runtime_workspace(
             "gaming",
             Some(path),
             RuntimeDisplayBackend::IddCx | RuntimeDisplayBackend::DedicatedConsole,
-        )
-            if [
-                r"C:\Program Files (x86)\Steam\steam.exe",
-                r"C:\Program Files\Steam\steam.exe",
-            ]
-            .iter()
-            .any(|candidate| candidate.eq_ignore_ascii_case(path)) =>
+        ) if [
+            r"C:\Program Files (x86)\Steam\steam.exe",
+            r"C:\Program Files\Steam\steam.exe",
+        ]
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(path)) =>
         {
             Ok(crate::lifecycle::WorkspaceKind::Gaming)
         }
