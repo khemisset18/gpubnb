@@ -1,0 +1,106 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const path = (name) => new URL("../../db/migrations/" + name, import.meta.url);
+const original = readFileSync(path("002_atomic_offer_operations.sql"), "utf8");
+const quarantine = readFileSync(path("010_prl_historical_offer_quarantine.sql"), "utf8");
+const replay = readFileSync(path("011_prl_accept_replay_quarantine.sql"), "utf8");
+
+// These are OFFLINE STATIC CONTRACT assertions, not execution of SQL.
+// Native PostgreSQL 16+ testing is still required.
+const start = "CREATE OR REPLACE FUNCTION accept_offer_atomic(";
+const next = "CREATE OR REPLACE FUNCTION cancel_offer_atomic(";
+function extract(sql) {
+  const startAt = sql.indexOf(start);
+  assert.notEqual(startAt, -1);
+  const after = sql.indexOf("\n$$;", startAt);
+  assert.notEqual(after, -1);
+  return sql.slice(startAt, after + 4);
+}
+const oldFn = extract(original), newFn = extract(replay);
+
+test("migration 011 preserves the original public accept function signature", () => {
+  const signature = (s) => s.slice(0, s.indexOf("\nLANGUAGE plpgsql"));
+  assert.equal(signature(newFn), signature(oldFn));
+});
+test("011 is one additive transaction with no replacement of cancel function", () => {
+  assert.equal((replay.match(/^BEGIN;$/gm) ?? []).length, 1);
+  assert.equal((replay.match(/^COMMIT;$/gm) ?? []).length, 1);
+  assert.equal((replay.match(/^CREATE OR REPLACE FUNCTION /gm) ?? []).length, 1);
+  assert.equal(replay.includes(next), false);
+  assert.match(replay, /SET LOCAL search_path = asset_exchange, pg_catalog/);
+});
+test("010 creates the trusted shared key guard before 011 references it", () => {
+  assert.match(quarantine, /CREATE FUNCTION asset_exchange\.reject_unqualified_prl_asset_keys/);
+  assert.match(newFn, /PERFORM asset_exchange\.reject_unqualified_prl_asset_keys/);
+});
+test("replay branch checks request hash before offer lookup", () => {
+  const hash = newFn.indexOf("v_existing.request_hash <> p_request_hash");
+  const read = newFn.indexOf("SELECT o.* INTO v_offer");
+  const returned = newFn.indexOf("RETURN QUERY SELECT 'CONSUMED'::text, v_existing.result_ref");
+  assert.ok(hash !== -1 && read > hash && returned > read);
+});
+test("replay identity bound to the exact authenticated scope and idempotency key", () => {
+  assert.match(newFn, /v_scope text := 'accept_offer:' \|\| p_deployment_id \|\| ':' \|\| p_taker_subject/);
+  assert.match(newFn, /WHERE scope = v_scope AND idempotency_key = p_idempotency_key/);
+  assert.match(newFn, /v_existing\.result_ref = p_trade_id/);
+});
+test("replay reads actual offer and trade, not untrusted acceptance asset claims", () => {
+  assert.match(newFn, /JOIN asset_exchange\.trades AS t/);
+  assert.match(newFn, /t\.offer_id = o\.offer_id/);
+  assert.match(newFn, /o\.offer_id = p_offer_id/);
+  assert.match(newFn, /o\.deployment_id = p_deployment_id/);
+  assert.match(newFn, /o\.state = 'CONSUMED'/);
+  assert.match(newFn, /o\.accepted_trade_id = p_trade_id/);
+  assert.match(newFn, /FOR UPDATE OF o/);
+});
+test("replay crosschecks trade taker, hash, epoch, acceptance proof", () => {
+  for (const clause of [
+    "t.trade_id = p_trade_id",
+    "t.taker_subject = p_taker_subject",
+    "t.offer_hash = p_offer_hash",
+    "t.policy_epoch = p_policy_epoch",
+    "t.acceptance_hash = p_acceptance_hash",
+    "t.acceptance_signature = p_acceptance_signature"
+  ]) assert.ok(newFn.includes(clause), clause);
+});
+test("replay refuses mismatches before returning an earlier consumed result", () => {
+  const noRow = newFn.indexOf("idempotency replay offer/trade identity mismatch");
+  const guard = newFn.indexOf("PERFORM asset_exchange.reject_unqualified_prl_asset_keys");
+  const returned = newFn.indexOf("RETURN QUERY SELECT 'CONSUMED'::text, v_existing.result_ref");
+  assert.ok(noRow > -1 && guard > noRow && returned > guard);
+});
+test("new acceptances separately inspect stored PRL keys before trade insert", () => {
+  const secondRead = newFn.lastIndexOf("SELECT o.* INTO v_offer");
+  const secondGuard = newFn.lastIndexOf("PERFORM asset_exchange.reject_unqualified_prl_asset_keys");
+  const insert = newFn.indexOf("INSERT INTO asset_exchange.trades");
+  assert.ok(secondRead > 0 && secondGuard > secondRead && insert > secondGuard);
+});
+test("operator transition, epoch, signature and acceptance preconditions preserved", () => {
+  for (const clause of [
+    "v_operator.new_accepts_enabled IS NOT TRUE",
+    "v_operator.policy_epoch <> p_policy_epoch",
+    "p_acceptance_signature IS NULL",
+    "v_offer.state <> 'OPEN'",
+    "v_offer.expires_at <= clock_timestamp()",
+    "v_offer.offer_hash <> p_offer_hash",
+    "v_offer.policy_epoch <> p_policy_epoch"
+  ]) assert.ok(newFn.includes(clause), clause);
+});
+test("whole-fill, trade event and idempotency write still present", () => {
+  for (const clause of [
+    "UPDATE asset_exchange.offers",
+    "INSERT INTO asset_exchange.trades",
+    "INSERT INTO asset_exchange.trade_events",
+    "INSERT INTO asset_exchange.idempotency_records"
+  ]) assert.ok(newFn.includes(clause), clause);
+});
+test("migration does not elevate SQL privileges or mutate historic data", () => {
+  assert.doesNotMatch(replay, /\bSECURITY DEFINER\b/);
+  assert.doesNotMatch(replay, /\bDROP (TABLE|TRIGGER|FUNCTION)\b/);
+  assert.doesNotMatch(replay, /\bTRUNCATE\b/);
+  assert.doesNotMatch(replay, /\bGRANT\b/);
+  assert.doesNotMatch(replay, /\bDELETE FROM\b/);
+  assert.match(newFn, /\bSECURITY INVOKER\b/);
+});
