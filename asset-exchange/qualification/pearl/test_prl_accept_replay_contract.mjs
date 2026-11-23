@@ -121,7 +121,7 @@ test("scratch runner uses 001-009, synthetic seed, then quarantines 010-011", ()
   const baseline = scratchRun.indexOf("00[1-9]_*.sql");
   const seed = scratchRun.indexOf("prl_scratch_historical_before_010.sql");
   const first = scratchRun.indexOf("010_prl_historical_offer_quarantine.sql");
-  const second = scratchRun.indexOf("011_prl_accept_replay_quarantine.sql");
+  const second = scratchRun.lastIndexOf("011_prl_accept_replay_quarantine.sql");
   const check = scratchRun.indexOf("prl_scratch_accept_replay_after_011.sql");
   assert.ok(baseline < seed && seed < first && first < second && second < check);
   assert.match(scratchRun, /ON_ERROR_STOP=1/);
