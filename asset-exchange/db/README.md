@@ -129,3 +129,24 @@ An idempotent replay can return an earlier accepted result
 without a new insert; this migration does not rewrite history.
 Deployment roles, key-identity attestation and recovery gates
 remain blocked. No mining files or settings are involved.
+
+
+## PRL idempotent replay protection — migration 011 (NOT DEPLOYED)
+
+Migration `011_prl_accept_replay_quarantine.sql` replaces ONLY the existing
+`accept_offer_atomic` function with the same SQL signature. It checks
+an idempotent result against the actual stored offer and accepted trade,
+including the acceptance hash/signature and taker, and it executes
+the 010 PRL asset-key rejection before returning `CONSUMED`.
+It also calls that rejection on normal new acceptances.
+
+**Neither migration 010 nor 011 has been applied on any database.**
+17 new Node contract/scratch-protocol tests are written but NOT YET
+attested on operator WSL2. A native PostgreSQL 16+ test harness exists
+under `db/test/prl_scratch_*`. It refuses a non-scratch database and
+does NOT provision a server or connect to any real Exchange/Core DB.
+
+Do not run this on an existing PostgreSQL deployment. Do not treat
+text checks as native SQL qualification; migration 011 needs independent
+review and disposable-DB execution before any deployment.
+See `docs/asset-exchange/PEARL_PRL_ACCEPT_REPLAY_SECURITY_2026-11-23.md`.
