@@ -84,13 +84,18 @@ function Assert-NoActiveNativeProcesses {
 
 function Assert-ProtectedInstallDirectory([string]$Path) {
     $unsafeSids = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
-    $writeRights = [int]([Security.AccessControl.FileSystemRights]::Write -bor
-        [Security.AccessControl.FileSystemRights]::Modify -bor
-        [Security.AccessControl.FileSystemRights]::FullControl -bor
-        [Security.AccessControl.FileSystemRights]::Delete -bor
+    $writeRights = [int](
+        [Security.AccessControl.FileSystemRights]::WriteData -bor
+        [Security.AccessControl.FileSystemRights]::AppendData -bor
+        [Security.AccessControl.FileSystemRights]::WriteExtendedAttributes -bor
+        [Security.AccessControl.FileSystemRights]::WriteAttributes -bor
+        [Security.AccessControl.FileSystemRights]::CreateFiles -bor
+        [Security.AccessControl.FileSystemRights]::CreateDirectories -bor
         [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
+        [Security.AccessControl.FileSystemRights]::Delete -bor
         [Security.AccessControl.FileSystemRights]::ChangePermissions -bor
-        [Security.AccessControl.FileSystemRights]::TakeOwnership)
+        [Security.AccessControl.FileSystemRights]::TakeOwnership
+    )
     foreach ($rule in ([IO.Directory]::GetAccessControl($Path)).Access) {
         if ($rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
         try {
@@ -99,7 +104,7 @@ function Assert-ProtectedInstallDirectory([string]$Path) {
             throw 'host_native_install_acl_identity_unresolvable'
         }
         if ($sid -in $unsafeSids -and (([int]$rule.FileSystemRights -band $writeRights) -ne 0)) {
-            throw 'host_native_install_acl_broad_write_forbidden'
+            throw "host_native_install_acl_broad_write_forbidden:$sid:$($rule.FileSystemRights)"
         }
     }
 }
