@@ -81,6 +81,7 @@ test('private qualification is owner-only and Gaming requires the dedicated rent
     api.indexOf("app.post('/qualification/windows-native/booking'"),
   );
   assert.match(api, /function privateQualificationSourceAllowed\([\s\S]*?ownerId !== userId/);
+  assert.match(api, /source\.workspaceSlug !== slug/);
   assert.match(api, /return slug !== 'gaming' \|\| source\.captureBackend === 'console-dedicated'/);
   assert.match(booking, /privateQualificationSourceAllowed\(slug, source, machine\.ownerId, renterId\)/);
   assert.match(booking, /privateQualificationSourceAllowed\(slug, freshSource, fresh\.machine\.ownerId, renterId\)/);
@@ -94,6 +95,8 @@ test('console admission is signed, replay-fenced and independent from public lis
   assert.match(api, /verifyAgentRequestV2/);
   assert.match(api, /verifiedConsoleProof\(b\.privateConsoleProof/);
   assert.match(api, /replaceConsoleProof\(redis,m\.id,verifiedConsole,String\(b\.counter\)\)/);
+  assert.match(source, /schemaVersion: z\.literal\(2\)[\s\S]*workspaceSlug: z\.literal\('gaming'\)/);
+  assert.match(source, /provedWorkspace !== workspaceSlug/);
   assert.match(source, /latestAcceptedCounter/);
   assert.match(source, /CONSOLE_PROOF_TTL_SECONDS = 90/);
   assert.match(source, /private-console-proof:v1:/);

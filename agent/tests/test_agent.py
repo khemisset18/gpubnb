@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from nacl.signing import SigningKey
@@ -226,6 +227,61 @@ class KeyTests(unittest.TestCase):
 
 
 class HeartbeatTests(unittest.TestCase):
+    def test_persisted_gaming_consent_is_sent_as_a_workspace_scoped_signed_proof(self):
+        from gpubnb_agent.private_console_consent import set_private_gaming_consent
+
+        gpu = {
+            "gpuUuid": "GPU-test",
+            "gpuModel": "NVIDIA Test",
+            "vramMiB": 4096,
+            "memoryUsedMiB": 0,
+            "driverVersion": "1",
+            "cudaVersion": "1",
+            "temperatureC": 40,
+            "gpuUtilization": 0,
+            "powerWatts": 1.0,
+            "gpuVendor": "NVIDIA",
+        }
+        posted: list[dict[str, Any]] = []
+
+        class Client:
+            def request(self, path, method="GET", body=None, headers=None, timeout=12):
+                if path.startswith("/agent/challenge/"):
+                    return {"challenge": "challenge-value-long-enough"}
+                posted.append(body)
+                return {"ok": True}
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            os.environ,
+            {"GPUBNB_CONFIG_DIR": directory},
+            clear=False,
+        ):
+            os.environ.pop("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION", None)
+            set_private_gaming_consent(True, confirmed=True)
+            with (
+                patch("gpubnb_agent.client.gpu_inventory", return_value=[gpu]),
+                patch("gpubnb_agent.client.system_inventory", return_value={"machineFingerprint": "abc"}),
+                patch("gpubnb_agent.client.telemetry_snapshot", return_value={"schemaVersion": 2, "accelerators": []}),
+                patch("gpubnb_agent.client.detect_hardware_change", return_value=(False, None)),
+                patch("gpubnb_agent.client.save_machine_fingerprint"),
+                patch("gpubnb_agent.client.load_counter", return_value=0),
+                patch("gpubnb_agent.client.save_counter"),
+                patch(
+                    "gpubnb_agent.windows_native_capability.probe_private_console_capability",
+                    return_value=SimpleNamespace(
+                        available=False,
+                        gpu_uuid=None,
+                        helper_version=None,
+                        hardware_encoder=None,
+                    ),
+                ),
+                patch("gpubnb_agent.windows_agent_process_proof.measure_windows_agent_process", return_value=None),
+            ):
+                heartbeat(Client(), SigningKey.generate(), "machine-id")
+
+        self.assertEqual(posted[0]["privateConsoleProof"]["schemaVersion"], 2)
+        self.assertEqual(posted[0]["privateConsoleProof"]["workspaceSlug"], "gaming")
+
     def test_collects_inventory_before_requesting_short_lived_challenge(self):
         events = []
         gpu = {

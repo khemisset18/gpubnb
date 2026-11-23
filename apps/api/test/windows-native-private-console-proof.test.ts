@@ -7,6 +7,7 @@ import {
   qualificationNativeSource,
   readConsoleProof,
   replaceConsoleProof,
+  signedConsoleProofSchema,
   verifiedConsoleProof,
   type SignedConsoleProof,
 } from '../src/windows-native-private-console-proof.js';
@@ -36,7 +37,9 @@ const context = {
 };
 
 test('signed physical console report accepts only exact GPU, NVENC, version, timing and OS', () => {
-  assert.deepEqual(verifiedConsoleProof(positive, context), { gpuUuid: GPU, agentCommit: SHA });
+  assert.deepEqual(verifiedConsoleProof(positive, context), {
+    gpuUuid: GPU, agentCommit: SHA, workspaceSlug: 'legacy',
+  });
   assert.equal(verifiedConsoleProof(positive, { ...context, approvedCommit: null }), null);
   assert.equal(verifiedConsoleProof(positive, { ...context, operatingSystem: 'Linux' }), null);
   assert.equal(verifiedConsoleProof(positive, { ...context, primaryGpuUuid: 'GPU-11111111-1111-1111-1111-111111111111' }), null);
@@ -53,6 +56,30 @@ test('signed physical console report accepts only exact GPU, NVENC, version, tim
   assert.equal(verifiedConsoleProof({ ...positive, measuredAt: new Date(NOW + 5_001).toISOString() }, context), null);
 });
 
+test('Gaming consent produces a proof that cannot qualify Cloud Desktop', async () => {
+  const gaming = { ...positive, schemaVersion: 2 as const, workspaceSlug: 'gaming' as const };
+  assert.deepEqual(signedConsoleProofSchema.parse(positive), positive);
+  assert.deepEqual(signedConsoleProofSchema.parse(gaming), gaming);
+  assert.throws(() => signedConsoleProofSchema.parse({ ...gaming, workspaceSlug: 'creator' }));
+  assert.throws(() => signedConsoleProofSchema.parse({ ...gaming, schemaVersion: 3 }));
+  const verified = verifiedConsoleProof(gaming, context);
+  assert.deepEqual(verified, { gpuUuid: GPU, agentCommit: SHA, workspaceSlug: 'gaming' });
+
+  const keys = new Map<string, string>();
+  const storage = {
+    set: async (key: string, value: string) => { keys.set(key, value); },
+    get: async (key: string) => keys.get(key) ?? null,
+    del: async (key: string) => { keys.delete(key); },
+  } as unknown as Redis;
+  await replaceConsoleProof(storage, 'machine-test', verified, '21');
+  assert.deepEqual(await qualificationNativeSource(
+    storage, 'machine-test', SHA, false, null, BigInt(21), 'gaming',
+  ), { gpuUuid: GPU, captureBackend: 'console-dedicated', workspaceSlug: 'gaming' });
+  assert.equal(await qualificationNativeSource(
+    storage, 'machine-test', SHA, false, null, BigInt(21), 'cloud-desktop',
+  ), null);
+});
+
 test('console claim is bounded in Redis and revoked by negative heartbeat', async () => {
   const keys = new Map<string, string>();
   const storage = {
@@ -65,16 +92,18 @@ test('console claim is bounded in Redis and revoked by negative heartbeat', asyn
     del: async (key: string) => { keys.delete(key); },
   } as unknown as Redis;
   await replaceConsoleProof(storage, 'machine-test', { gpuUuid: GPU, agentCommit: SHA }, '21');
-  assert.deepEqual(await readConsoleProof(storage, 'machine-test', SHA, '21'), { gpuUuid: GPU, agentCommit: SHA });
+  assert.deepEqual(await readConsoleProof(storage, 'machine-test', SHA, '21'), {
+    gpuUuid: GPU, agentCommit: SHA, workspaceSlug: 'cloud-desktop',
+  });
   assert.equal(await readConsoleProof(storage, 'machine-test', 'a'.repeat(40), '21'), null);
   assert.equal(await readConsoleProof(storage, 'machine-test', SHA, '22'), null, 'stale heartbeat counter must not authorize console');
   assert.deepEqual(await qualificationNativeSource(storage, 'machine-test', SHA, false, null, BigInt(21)), {
-    gpuUuid: GPU, captureBackend: 'console-dedicated',
+    gpuUuid: GPU, captureBackend: 'console-dedicated', workspaceSlug: 'cloud-desktop',
   });
   await replaceConsoleProof(storage, 'machine-test', null, '22');
   assert.equal(await readConsoleProof(storage, 'machine-test', SHA, '21'), null);
   assert.equal(await qualificationNativeSource(storage, 'machine-test', SHA, false, null, BigInt(21)), null);
   assert.deepEqual(await qualificationNativeSource(storage, 'machine-test', null, true, GPU, BigInt(22)), {
-    gpuUuid: GPU, captureBackend: 'iddcx',
+    gpuUuid: GPU, captureBackend: 'iddcx', workspaceSlug: 'cloud-desktop',
   });
 });

@@ -208,15 +208,16 @@ def heartbeat(
         # Separate, physically measured console proof. This is sent only as
         # part of the v2 raw-body signed heartbeat, never as an IddCx claim.
         private_console_proof = None
-        from .private_console_consent import private_console_local_opt_in_enabled
+        from .private_console_consent import private_console_proof_scope
 
-        if private_console_local_opt_in_enabled():
+        proof_scope = private_console_proof_scope()
+        if proof_scope is not None:
             from ._build_info import BUILD_COMMIT
             from .windows_native_capability import probe_private_console_capability
 
             measured = probe_private_console_capability(enabled=True)
             private_console_proof = {
-                "schemaVersion": 1,
+                **proof_scope,
                 "captureBackend": "console-dedicated",
                 "available": bool(measured.available),
                 "gpuUuid": measured.gpu_uuid if measured.available else None,

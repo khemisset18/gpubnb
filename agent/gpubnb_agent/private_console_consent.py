@@ -54,26 +54,37 @@ def read_private_gaming_consent() -> dict[str, Any]:
 
 
 def private_console_environment_opt_in_enabled() -> bool:
-    """Read the legacy explicit opt-in used by non-Gaming console qualification."""
-    return os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "true"
-
-
-def private_console_local_opt_in_enabled() -> bool:
-    """Read explicit test env opt-in or the persisted owner Gaming consent.
-
-    An explicit false environment value denies the path. A persisted owner
-    revocation then takes precedence over any environment opt-in.
-    """
-    environment = os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION")
-    if environment == "false":
+    """Read the legacy opt-in only when no Gaming-specific owner choice exists."""
+    if os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") != "true":
         return False
-    record = _read_consent_record()
-    if record is not None:
-        return record["enabled"] is True
     path = consent_path()
     if path.exists() or path.is_symlink():
         return False
-    return environment == "true"
+    return True
+
+
+def private_console_proof_scope() -> dict[str, Any] | None:
+    """Select the signed heartbeat proof scope from the owner's local decision."""
+    environment = os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION")
+    if environment == "false":
+        return None
+    record = _read_consent_record()
+    if record is not None:
+        return (
+            {"schemaVersion": 2, "workspaceSlug": "gaming"}
+            if record["enabled"] is True else None
+        )
+    path = consent_path()
+    if path.exists() or path.is_symlink():
+        return None
+    if environment == "true":
+        return {"schemaVersion": 1}
+    return None
+
+
+def private_console_local_opt_in_enabled() -> bool:
+    """Whether either supported private-console opt-in is currently active."""
+    return private_console_proof_scope() is not None
 
 
 def private_gaming_workspace_local_opt_in_enabled() -> bool:

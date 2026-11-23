@@ -1,4 +1,5 @@
 import type { Redis } from 'ioredis';
+import { z } from 'zod';
 
 import { WINDOWS_NATIVE_GPU_UUID_RE } from './windows-native-capability.js';
 import { validateWindowsNativeCapability } from './windows-native-capability.js';
@@ -7,8 +8,7 @@ export const CONSOLE_PROOF_TTL_SECONDS = 90;
 const MAX_MEASUREMENT_AGE_MS = 60_000;
 const ALLOWED_FUTURE_SKEW_MS = 5_000;
 
-export type SignedConsoleProof = {
-  schemaVersion: 1;
+type ConsoleProofFields = {
   captureBackend: 'console-dedicated';
   available: boolean;
   gpuUuid: string | null;
@@ -17,6 +17,32 @@ export type SignedConsoleProof = {
   hardwareEncoder: 'nvenc' | null;
   measuredAt: string;
 };
+
+export type SignedConsoleProof =
+  | (ConsoleProofFields & { schemaVersion: 1 })
+  | (ConsoleProofFields & { schemaVersion: 2; workspaceSlug: 'gaming' });
+
+export type ConsoleProofWorkspaceSlug = 'cloud-desktop' | 'gaming';
+type StoredConsoleProofScope = ConsoleProofWorkspaceSlug | 'legacy';
+
+const consoleProofSchemaFields = {
+  captureBackend: z.literal('console-dedicated'),
+  available: z.boolean(),
+  gpuUuid: z.string().regex(WINDOWS_NATIVE_GPU_UUID_RE).nullable(),
+  agentCommit: z.string().regex(/^[0-9a-f]{40}$/i),
+  helperVersion: z.string().min(1).max(100).nullable(),
+  hardwareEncoder: z.enum(['nvenc']).nullable(),
+  measuredAt: z.string().datetime(),
+};
+
+export const signedConsoleProofSchema = z.union([
+  z.object({ schemaVersion: z.literal(1), ...consoleProofSchemaFields }),
+  z.object({
+    schemaVersion: z.literal(2),
+    workspaceSlug: z.literal('gaming'),
+    ...consoleProofSchemaFields,
+  }),
+]);
 
 /**
  * No trust is assigned to this JSON until the caller has verified the v2
@@ -31,11 +57,12 @@ export function verifiedConsoleProof(
     accelerators: unknown;
     nowMs?: number;
   },
-): { gpuUuid: string; agentCommit: string } | null {
+): { gpuUuid: string; agentCommit: string; workspaceSlug: StoredConsoleProofScope } | null {
   const now = context.nowMs ?? Date.now();
   if (!proof || context.approvedCommit === null || proof.available !== true) return null;
   if (
-    proof.schemaVersion !== 1
+    !(proof.schemaVersion === 1 || proof.schemaVersion === 2)
+    || (proof.schemaVersion === 2 && proof.workspaceSlug !== 'gaming')
     || proof.captureBackend !== 'console-dedicated'
     || proof.agentCommit !== context.approvedCommit
     || proof.hardwareEncoder !== 'nvenc'
@@ -55,7 +82,11 @@ export function verifiedConsoleProof(
     rawAccelerators: context.accelerators,
   });
   if (!capability.ok || !capability.available) return null;
-  return { gpuUuid: capability.gpuUuid, agentCommit: proof.agentCommit };
+  return {
+    gpuUuid: capability.gpuUuid,
+    agentCommit: proof.agentCommit,
+    workspaceSlug: proof.schemaVersion === 2 ? 'gaming' : 'legacy',
+  };
 }
 
 function proofKey(machineId: string): string {
@@ -66,14 +97,22 @@ function proofKey(machineId: string): string {
 export async function replaceConsoleProof(
   redis: Redis,
   machineId: string,
-  proof: { gpuUuid: string; agentCommit: string } | null,
+  proof: {
+    gpuUuid: string;
+    agentCommit: string;
+    workspaceSlug?: StoredConsoleProofScope;
+  } | null,
   acceptedCounter: string,
 ): Promise<void> {
   if (proof === null) {
     await redis.del(proofKey(machineId));
     return;
   }
-  await redis.set(proofKey(machineId), JSON.stringify({ ...proof, acceptedCounter }), 'EX', CONSOLE_PROOF_TTL_SECONDS);
+  await redis.set(proofKey(machineId), JSON.stringify({
+    ...proof,
+    workspaceSlug: proof.workspaceSlug ?? 'legacy',
+    acceptedCounter,
+  }), 'EX', CONSOLE_PROOF_TTL_SECONDS);
 }
 
 /** An old claim from a different release or GPU is never usable. */
@@ -82,7 +121,8 @@ export async function readConsoleProof(
   machineId: string,
   approvedCommit: string | null,
   latestAcceptedCounter: string,
-): Promise<{ gpuUuid: string; agentCommit: string } | null> {
+  workspaceSlug: ConsoleProofWorkspaceSlug = 'cloud-desktop',
+): Promise<{ gpuUuid: string; agentCommit: string; workspaceSlug: ConsoleProofWorkspaceSlug } | null> {
   if (approvedCommit === null) return null;
   const raw = await redis.get(proofKey(machineId));
   if (!raw) return null;
@@ -96,7 +136,12 @@ export async function readConsoleProof(
       || typeof x.gpuUuid !== 'string'
       || !WINDOWS_NATIVE_GPU_UUID_RE.test(x.gpuUuid)
     ) return null;
-    return { agentCommit: approvedCommit, gpuUuid: x.gpuUuid };
+    // Legacy/operator proofs remain unscoped for backwards compatibility;
+    // the Host UI's schema-2 consent is restricted to Gaming only.
+    const provedWorkspace = x.workspaceSlug ?? 'legacy';
+    if (provedWorkspace !== 'legacy' && provedWorkspace !== 'cloud-desktop' && provedWorkspace !== 'gaming') return null;
+    if (provedWorkspace !== 'legacy' && provedWorkspace !== workspaceSlug) return null;
+    return { agentCommit: approvedCommit, gpuUuid: x.gpuUuid, workspaceSlug };
   } catch {
     return null;
   }
@@ -110,11 +155,18 @@ export async function qualificationNativeSource(
   legacyAvailable: boolean,
   legacyGpuUuid: string | null,
   latestAcceptedCounter: bigint | undefined,
-): Promise<{ gpuUuid: string; captureBackend: 'console-dedicated' | 'iddcx' } | null> {
-  const console = await readConsoleProof(redis, machineId, approvedCommit, String(latestAcceptedCounter));
-  if (console) return { gpuUuid: console.gpuUuid, captureBackend: 'console-dedicated' };
+  workspaceSlug: ConsoleProofWorkspaceSlug = 'cloud-desktop',
+): Promise<{
+  gpuUuid: string;
+  captureBackend: 'console-dedicated' | 'iddcx';
+  workspaceSlug: ConsoleProofWorkspaceSlug;
+} | null> {
+  const console = await readConsoleProof(
+    redis, machineId, approvedCommit, String(latestAcceptedCounter), workspaceSlug,
+  );
+  if (console) return { gpuUuid: console.gpuUuid, captureBackend: 'console-dedicated', workspaceSlug };
   if (legacyAvailable && legacyGpuUuid && WINDOWS_NATIVE_GPU_UUID_RE.test(legacyGpuUuid)) {
-    return { gpuUuid: legacyGpuUuid, captureBackend: 'iddcx' };
+    return { gpuUuid: legacyGpuUuid, captureBackend: 'iddcx', workspaceSlug: 'cloud-desktop' };
   }
   return null;
 }

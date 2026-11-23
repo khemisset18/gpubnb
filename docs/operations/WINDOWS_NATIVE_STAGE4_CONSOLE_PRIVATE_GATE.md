@@ -27,6 +27,10 @@ This is a *stacked* change on PR #316, not a physical qualification.
   revocation overrides an environment opt-in. The Agent uses `--start-console`
   for `cloud-desktop` qualification or a `gaming` no-payment test attempt,
   and only for `WINDOWS_NATIVE` sessions carrying the server-owned marker.
+  The signed proof uses schema 2 with `workspaceSlug: gaming` for this Host
+  consent; schema 1 remains the unscoped legacy operator/CI override. The API
+  retains the scope in its short-lived proof, and a saved Gaming decision cannot
+  authorize a different Workspace.
   Enabling this local consent does not create a listing, booking, payment or
   server authorization. Host revocation is read at the next Agent desired-state
   reconciliation; the remote STOP path remains the immediate session control.

@@ -11,6 +11,8 @@ from unittest.mock import patch
 from gpubnb_agent.private_console_consent import (
     consent_path,
     private_console_local_opt_in_enabled,
+    private_console_environment_opt_in_enabled,
+    private_console_proof_scope,
     read_private_gaming_consent,
     set_private_gaming_consent,
 )
@@ -60,6 +62,23 @@ class PrivateGamingConsentTests(unittest.TestCase):
         with patch.dict(os.environ, {"GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "true"}):
             self.assertTrue(private_console_local_opt_in_enabled())
 
+    def test_signed_heartbeat_proof_scope_is_separate_for_gaming_and_legacy_desktop(self):
+        self.assertIsNone(private_console_proof_scope())
+        with patch.dict(os.environ, {"GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "true"}):
+            self.assertEqual(private_console_proof_scope(), {"schemaVersion": 1})
+            self.assertTrue(private_console_environment_opt_in_enabled())
+
+            set_private_gaming_consent(True, confirmed=True)
+            self.assertEqual(private_console_proof_scope(), {
+                "schemaVersion": 2,
+                "workspaceSlug": "gaming",
+            })
+            self.assertFalse(private_console_environment_opt_in_enabled())
+
+            set_private_gaming_consent(False)
+            self.assertIsNone(private_console_proof_scope())
+            self.assertFalse(private_console_environment_opt_in_enabled())
+
     def test_disable_persists_revocation_and_disables_local_console_authority(self):
         set_private_gaming_consent(True, confirmed=True)
         result = set_private_gaming_consent(False)
@@ -99,6 +118,11 @@ class PrivateGamingConsentTests(unittest.TestCase):
             "consoleAgentCommit": commit,
         }
         desktop_session = {**gaming_session, "workspaceSlug": "cloud-desktop"}
+        with patch.dict(os.environ, {"GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "true"}):
+            self.assertEqual(
+                selected_capture_backend(desktop_session, build_commit=commit),
+                "console-dedicated",
+            )
         set_private_gaming_consent(True, confirmed=True)
 
         self.assertEqual(
@@ -109,10 +133,8 @@ class PrivateGamingConsentTests(unittest.TestCase):
             selected_capture_backend(desktop_session, build_commit=commit)
 
         with patch.dict(os.environ, {"GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "true"}):
-            self.assertEqual(
-                selected_capture_backend(desktop_session, build_commit=commit),
-                "console-dedicated",
-            )
+            with self.assertRaisesRegex(RuntimeError, "native_console_local_opt_in_required"):
+                selected_capture_backend(desktop_session, build_commit=commit)
 
     def test_cli_requires_owner_confirmation_to_enable(self):
         from gpubnb_agent.cli import parser
