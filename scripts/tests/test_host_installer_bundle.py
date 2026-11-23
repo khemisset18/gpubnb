@@ -54,6 +54,8 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         self.assertNotIn("Get-FileHash", helper)
         self.assertIn("X509Certificate2]::CreateFromSignedFile($Path)", helper)
         self.assertNotIn("Get-AuthenticodeSignature", helper)
+        self.assertIn("[IO.Directory]::GetAccessControl($Path)", helper)
+        self.assertNotIn("Get-Acl", helper)
         self.assertIn("$manifest.installable -cne $false", helper)
         self.assertIn("$manifest.iddDriverIncluded -cne $false", helper)
         self.assertIn("$manifest.publicBookabilityEnabled -cne $false", helper)
