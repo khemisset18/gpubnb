@@ -398,3 +398,33 @@ Aucune modification aux fichiers ou profils de minage n'a été effectuée.
 
 **Checkpoint : PRL_EXCHANGE_OFFLINE_109_PASS /
 REAL_PRL_OFFERS_AND_SETTLEMENT_BLOCKED.**
+
+## New experimental historic-acceptance safety phase (23 November 2026)
+
+Branch: `experiment/pearl-prl-historical-acceptance-guard-20261123`,
+based on PR #393. All changed files must be within
+`asset-exchange/` or `docs/asset-exchange/`.
+
+Historical-offer risk: the previously verified publication gate
+blocks NEW Pearl offers but does not itself block accepting
+previously persisted Pearl records. In the new branch, the
+acceptance service checks the *stored* asset identities first,
+and a separately reviewed, **not executed** additive PostgreSQL
+migration 010 proposes three defensive triggers against direct
+PRL offer insertions, trade insertions and consumption.
+
+**22 new test declarations are pending operator execution**:
+14 historical-acceptance policy, 6 SQL static-contract,
+1 PostgreSQL repository mock and 1 PRL publication-alias.
+Do not count SQL static checks as a real database qualification.
+Other existing Exchange mocks are recommended for regression.
+
+The last actually attested baseline remains **109/109 PASS on
+Ubuntu WSL2 at commit `60a3934`**. No newer local operator
+evidence exists at the time of authoring.
+
+The new migration has **not been applied** and cannot protect
+any deployed database until independently approved and tested.
+Historic idempotent replay and already accepted trades require
+separate policy/audit. No money, node, wallet, signature,
+live API, mining or production deployment.
