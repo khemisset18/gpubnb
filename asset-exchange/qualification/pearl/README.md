@@ -135,9 +135,7 @@ Native SQL correctness remains **unverified**.
 
 New test declarations: **14 historical-acceptance cases +
 6 static migration structure cases + 1 PostgreSQL repository
-lookup case + 1 alias publication case = 22**. No PASS claim
-is made for this new branch yet. The checkpoint previously
-confirmed on the operator WSL2 is **109 tests PASS at `60a3934`**.
+lookup case + 1 alias publication case = 22**. **Operator WSL2 confirmed 143/143 tests PASS** at the exact tested commit `71d419b` (94 Python, 49 Node.js across PRL policy, SQL static contract, registry and Exchange API mock tests). The 6 migration checks inspect SQL text only: no PostgreSQL engine or triggers were executed.
 Also re-run the original offer-service and PostgreSQL repository
 mock test suites before any merge.
 
@@ -145,3 +143,5 @@ See `docs/asset-exchange/PEARL_PRL_HISTORICAL_OFFER_ACCEPTANCE_SECURITY_2026-11-
 PRL stays MARKETPLACE_ONLY / RESTRICTED, `newOffersEnabled=false`,
 `newTradesEnabled=false`, `automaticSettlementSupported=false`.
 No mining changes, API deployment, wallet, signatures or funds.
+
+**Phase 4 operator update:** The isolated Ubuntu WSL2 run of the historical acceptance branch finished with **94 Python PASS + 49 Node.js PASS = 143/143** at commit `71d419b`; the worktree was clean. No live Exchange publishing, real signatures, PostgreSQL migration, blockchain, payments or mining operations were executed. This is not a native SQL or production qualification.
