@@ -6,6 +6,9 @@ const path = (name) => new URL("../../db/migrations/" + name, import.meta.url);
 const original = readFileSync(path("002_atomic_offer_operations.sql"), "utf8");
 const quarantine = readFileSync(path("010_prl_historical_offer_quarantine.sql"), "utf8");
 const replay = readFileSync(path("011_prl_accept_replay_quarantine.sql"), "utf8");
+const scratchRun = readFileSync(new URL("../../db/test/prl_scratch_replay_run.sh", import.meta.url), "utf8");
+const scratchSeed = readFileSync(new URL("../../db/test/prl_scratch_historical_before_010.sql", import.meta.url), "utf8");
+const scratchAssert = readFileSync(new URL("../../db/test/prl_scratch_accept_replay_after_011.sql", import.meta.url), "utf8");
 
 // These are OFFLINE STATIC CONTRACT assertions, not execution of SQL.
 // Native PostgreSQL 16+ testing is still required.
@@ -103,4 +106,47 @@ test("migration does not elevate SQL privileges or mutate historic data", () => 
   assert.doesNotMatch(replay, /\bGRANT\b/);
   assert.doesNotMatch(replay, /\bDELETE FROM\b/);
   assert.match(newFn, /\bSECURITY INVOKER\b/);
+});
+
+
+test("scratch runner requires explicit opt-in and a scratch socket/database", () => {
+  assert.match(scratchRun, /PRL_SCRATCH_ACK/);
+  assert.match(scratchRun, /DISPOSABLE_EXCHANGE_DB_ONLY/);
+  assert.match(scratchRun, /\/tmp\/gpubnb-prl-scratch-/);
+  assert.match(scratchRun, /prl_scratch_/);
+  assert.match(scratchRun, /Exchange schema already exists/);
+  assert.doesNotMatch(scratchRun, /\bsudo\b|\bdocker\b|\bapt-get\b/);
+});
+test("scratch runner uses 001-009, synthetic seed, then quarantines 010-011", () => {
+  const baseline = scratchRun.indexOf("00[1-9]_*.sql");
+  const seed = scratchRun.indexOf("prl_scratch_historical_before_010.sql");
+  const first = scratchRun.indexOf("010_prl_historical_offer_quarantine.sql");
+  const second = scratchRun.indexOf("011_prl_accept_replay_quarantine.sql");
+  const check = scratchRun.indexOf("prl_scratch_accept_replay_after_011.sql");
+  assert.ok(baseline < seed && seed < first && first < second && second < check);
+  assert.match(scratchRun, /ON_ERROR_STOP=1/);
+});
+test("pre-quarantine fixture seeds historic PRL on both sides and nonPRL control", () => {
+  for (const needle of [
+    "prl-old-give-0001", "prl-old-want-0001",
+    "prl-old-other-0001", "prl-old-open-0001",
+    "pearl|mainnet|NATIVE|PRL_NATIVE_UNVERIFIED|8",
+    "bitcoin|regtest|NATIVE|BTC_NATIVE|8"
+  ]) assert.ok(scratchSeed.includes(needle), needle);
+  assert.match(scratchSeed, /PRL_TEST_REQUIRES_DISPOSABLE_DATABASE/);
+});
+test("native test scenario includes PRL replays, nonPRL replay and direct trigger attempts", () => {
+  for (const needle of [
+    "prl-trade-other-0001", "prl-trade-give-0001", "prl-trade-want-0001",
+    "prl-forbidden-trade-1", "prl-forbidden-offer-1",
+    "prl-forbidden-accept-1", "expected consumption trigger refusal"
+  ]) assert.ok(scratchAssert.includes(needle), needle);
+  assert.match(scratchAssert, /PRL_TEST_REQUIRES_DISPOSABLE_DATABASE/);
+});
+test("native scratch assertions rollback and never call a signer, miner or wallet", () => {
+  assert.match(scratchAssert, /^BEGIN;$/m);
+  assert.match(scratchAssert, /^ROLLBACK;$/m);
+  assert.doesNotMatch(scratchAssert, /^COMMIT;$/m);
+  assert.doesNotMatch(scratchAssert, /\bCREATE DATABASE\b|\bDROP DATABASE\b/);
+  assert.doesNotMatch(scratchAssert, /sendrawtransaction|broadcast|walletpassphrase/);
 });
