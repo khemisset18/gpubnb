@@ -16,6 +16,7 @@ class HostInstallerBundleContractTests(unittest.TestCase):
             base["bundle"]["externalBin"],
             ["binaries/gpubnb-agent", "binaries/gpubnb-host-tunnel"],
         )
+        self.assertEqual(preflight["bundle"]["externalBin"], base["bundle"]["externalBin"])
         self.assertEqual(
             preflight["bundle"]["resources"],
             ["stage4/*", "installer/install-stage4-payload.ps1"],
@@ -50,13 +51,13 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         for required in (
             "build-stage4-unsigned-package.ps1",
             "stage4.manifest.json",
-            "Join-Path $out 'gpubnb-agent.exe'",
-            "Stage verified Agent sidecar",
-            "The verified Stage 4 Agent was not staged.",
             "signatureStatus -cne 'unsigned'",
             "installable -cne $false",
             "iddDriverIncluded -cne $false",
             "--config src-tauri/tauri.preflight.conf.json",
+            "Join-Path $out 'gpubnb-agent.exe'",
+            "Stage verified Agent sidecar",
+            "The verified Stage 4 Agent was not staged.",
             "gpubnb-windows-stream.exe",
             "gpubnb-windows-worker.exe",
             "GPUbnbWindowsMedia.dll",
@@ -69,6 +70,7 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         self.assertIn("NOT INSTALLABLE FOR PC1", workflow)
         self.assertIn("signed IddCx driver is not included", workflow)
         self.assertIn("feat/windows-host-unified-installer-*", workflow)
+        self.assertEqual(workflow.count("--config"), 1)
 
 
 if __name__ == "__main__":
