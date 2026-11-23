@@ -65,6 +65,7 @@ class HostInstallerBundleContractTests(unittest.TestCase):
 
         self.assertIn("NOT INSTALLABLE FOR PC1", workflow)
         self.assertIn("signed IddCx driver is not included", workflow)
+        self.assertIn("feat/windows-host-unified-installer-*", workflow)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,28 @@
 name: host-windows-preflight
 
 on:
+  push:
+    branches:
+      - 'feat/windows-host-unified-installer-*'
+    paths:
+      - agent/**
+      - services/edge/**
+      - scripts/build-windows-native-release-candidate.ps1
+      - scripts/build-stage4-unsigned-package.ps1
+      - scripts/verify_stage4_package.py
+      - scripts/verify-stage4-package.ps1
+      - scripts/stage4-package-common.ps1
+      - scripts/stage4-windows-python.lock
+      - scripts/tests/test_host_installer_bundle.py
+      - scripts/windows-native-stage4-failure-qualification.ps1
+      - apps/host-desktop/**
+      - native/windows-media/**
+      - native/windows-worker/**
+      - native/windows-stream-helper/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .github/workflows/host-windows-preflight.yml
   pull_request:
     paths:
       - agent/**
