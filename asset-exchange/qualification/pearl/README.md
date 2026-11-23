@@ -113,3 +113,35 @@ avant tout déploiement. Aucune publication d'offre PRL réelle,
 aucune signature ni aucun règlement n'est autorisé ici.
 
 Voir `docs/asset-exchange/PEARL_PRL_EXCHANGE_ARCHITECTURE_SECURITY_2026-11-23.md`.
+
+## Phase 4 — historical PRL offer acceptance quarantine (draft, no deployment)
+
+New experimental branch:
+`experiment/pearl-prl-historical-acceptance-guard-20261123`.
+This branch touches **Asset Exchange code and Exchange docs only**.
+
+The actual Exchange `acceptOffer` service now obtains both asset
+keys from the stored offer row and rejects PRL (including the
+legacy ambiguous `prl` chain alias) **before external signature
+verification and before repository acceptance writes**.
+The PostgreSQL repository lookup includes both keys.
+
+`db/migrations/010_prl_historical_offer_quarantine.sql` is
+**NOT DEPLOYED**; its three triggers are designed to reject
+new PRL offer inserts, trade inserts against historical PRL
+offers and PRL offer state transitions to `CONSUMED` in
+an Exchange-only database. No SQL migration or node was run.
+Native SQL correctness remains **unverified**.
+
+New test declarations: **14 historical-acceptance cases +
+6 static migration structure cases + 1 PostgreSQL repository
+lookup case + 1 alias publication case = 22**. **Operator WSL2 confirmed 143/143 tests PASS** at the exact tested commit `71d419b` (94 Python, 49 Node.js across PRL policy, SQL static contract, registry and Exchange API mock tests). The 6 migration checks inspect SQL text only: no PostgreSQL engine or triggers were executed.
+Also re-run the original offer-service and PostgreSQL repository
+mock test suites before any merge.
+
+See `docs/asset-exchange/PEARL_PRL_HISTORICAL_OFFER_ACCEPTANCE_SECURITY_2026-11-23.md`.
+PRL stays MARKETPLACE_ONLY / RESTRICTED, `newOffersEnabled=false`,
+`newTradesEnabled=false`, `automaticSettlementSupported=false`.
+No mining changes, API deployment, wallet, signatures or funds.
+
+**Phase 4 operator update:** The isolated Ubuntu WSL2 run of the historical acceptance branch finished with **94 Python PASS + 49 Node.js PASS = 143/143** at commit `71d419b`; the worktree was clean. No live Exchange publishing, real signatures, PostgreSQL migration, blockchain, payments or mining operations were executed. This is not a native SQL or production qualification.

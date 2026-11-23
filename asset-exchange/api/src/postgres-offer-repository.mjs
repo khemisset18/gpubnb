@@ -90,7 +90,8 @@ export function createPostgresOfferRepository({ pool, deploymentId }) {
       const client = await pool.connect();
       try {
         const result = await client.query({
-          text: `SELECT offer_id, maker_subject, state, offer_hash, policy_epoch
+          text: `SELECT offer_id, maker_subject, state, offer_hash, policy_epoch,
+                        give_asset_key, want_asset_key
                  FROM asset_exchange.offers
                  WHERE deployment_id = $1 AND offer_id = $2`,
           values: [scopedDeploymentId, offerId]
@@ -103,7 +104,9 @@ export function createPostgresOfferRepository({ pool, deploymentId }) {
           makerSubject: row.maker_subject,
           state: row.state,
           offerHash: row.offer_hash,
-          policyEpoch: Number(row.policy_epoch)
+          policyEpoch: Number(row.policy_epoch),
+          giveAssetKey: row.give_asset_key,
+          wantAssetKey: row.want_asset_key
         });
       } finally {
         client.release();

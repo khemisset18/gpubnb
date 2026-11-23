@@ -398,3 +398,83 @@ Aucune modification aux fichiers ou profils de minage n'a été effectuée.
 
 **Checkpoint : PRL_EXCHANGE_OFFLINE_109_PASS /
 REAL_PRL_OFFERS_AND_SETTLEMENT_BLOCKED.**
+
+## New experimental historic-acceptance safety phase (23 November 2026)
+
+Branch: `experiment/pearl-prl-historical-acceptance-guard-20261123`,
+based on PR #393. All changed files must be within
+`asset-exchange/` or `docs/asset-exchange/`.
+
+Historical-offer risk: the previously verified publication gate
+blocks NEW Pearl offers but does not itself block accepting
+previously persisted Pearl records. In the new branch, the
+acceptance service checks the *stored* asset identities first,
+and a separately reviewed, **not executed** additive PostgreSQL
+migration 010 proposes three defensive triggers against direct
+PRL offer insertions, trade insertions and consumption.
+
+**22 new test declarations are pending operator execution**:
+14 historical-acceptance policy, 6 SQL static-contract,
+1 PostgreSQL repository mock and 1 PRL publication-alias.
+Do not count SQL static checks as a real database qualification.
+Other existing Exchange mocks are recommended for regression.
+
+The last actually attested baseline remains **109/109 PASS on
+Ubuntu WSL2 at commit `60a3934`**. No newer local operator
+evidence exists at the time of authoring.
+
+The new migration has **not been applied** and cannot protect
+any deployed database until independently approved and tested.
+Historic idempotent replay and already accepted trades require
+separate policy/audit. No money, node, wallet, signature,
+live API, mining or production deployment.
+
+
+## Attestation opérateur WSL2 — PRL historique — 143/143 PASS
+
+Sur Ubuntu WSL2, via le clone séparé
+`$HOME/gpubnb-prl-history-security-lab`, sparse checkout
+`asset-exchange` et `docs/asset-exchange`, l'opérateur a exécuté
+la campagne au **commit exact
+`71d419b7f773d0a70e29855c9ec4102b65ba92db`**.
+
+Extrait du journal opérateur :
+
+```text
+=== TESTS PYTHON PRL ===
+Ran 94 tests in 0.087s
+OK
+=== TESTS NODE EXCHANGE ET SECURITE PRL ===
+ℹ tests 49
+ℹ pass 49
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+=== ETAT GIT ===
+71d419b
+## experiment/pearl-prl-historical-acceptance-guard-20261123...origin/experiment/pearl-prl-historical-acceptance-guard-20261123
+```
+
+**Résultat confirmé : 94 Python + 49 Node.js = 143/143 PASS,
+zéro erreur ni test ignoré, worktree propre.** Les tests ont
+été lancés via `unshare --user --map-root-user --net` et ont
+utilisé le Node.js portable Exchange `v24.22.3`.
+
+Le lot Node comprenait les contrôles PRL de publication, les
+14 tests d'offres historiques, les 6 contrôles de **structure**
+du texte de migration SQL, le registre Exchange, les tests
+API `offer-service` et les tests du repository PostgreSQL
+sur doubles de test. Les mocks et contrôles statiques ne
+constituent **ni une exécution de PostgreSQL, ni une preuve
+d'atomicité native, ni une preuve de sécurité des anciens
+rejouements idempotents en base**.
+
+Aucune migration, base PostgreSQL, route d'échange publique,
+signature cryptographique, wallet, nœud PRL, somme réelle
+ou code de minage n'a été exécuté ou modifié lors de
+cette campagne. Les permissions de publication PRL et
+de règlement automatique restent désactivées.
+
+**Checkpoint : PRL_EXCHANGE_HISTORY_143_OFFLINE_PASS ;
+SQL_NATIVE_AND_PRODUCTION_BLOCKED.**

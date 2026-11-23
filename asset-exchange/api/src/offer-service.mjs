@@ -12,7 +12,7 @@ import { assertSameSubject, createActor, validateIdempotencyKey } from "./authz.
 // and before all repository writes: display metadata is NOT authorization.
 export function assertPearlOfferExposureGate(offer) {
   for (const identity of [offer.giveAsset, offer.wantAsset]) {
-    if (identity.chainId !== "pearl") continue;
+    if (identity.chainId !== "pearl" && identity.chainId !== "prl") continue;
     const record = resolveAssetCatalogByIdentity(identity);
     invariant(
       record !== null &&
@@ -28,6 +28,31 @@ export function assertPearlOfferExposureGate(offer) {
   }
 }
 
+
+// Harden acceptance of offers stored before Pearl's publication gate existed.
+// A database row's canonical asset keys—not a caller-supplied symbol—are the
+// security inputs. Unknown/malformed keys must not bypass this review.
+export function assertStoredOfferAssetPolicy(stored) {
+  invariant(stored && typeof stored === "object" && !Array.isArray(stored),
+    "ACCEPT_OFFER_NOT_FOUND", "stored offer required");
+  for (const field of ["giveAssetKey", "wantAssetKey"]) {
+    const key = stored[field];
+    invariant(typeof key === "string" && key.length > 0 && key.length <= 512,
+      "ACCEPT_ASSET_KEY_MISSING", "stored asset identity missing");
+    const parts = key.split("|");
+    const chain = parts[0].trim().toLowerCase();
+    invariant(chain !== "pearl" && chain !== "prl",
+      "PRL_ACCEPT_UNQUALIFIED", "unqualified Pearl offer acceptance blocked");
+    invariant(parts.length === 5 &&
+      /^[a-z0-9][a-z0-9._:-]{0,63}$/.test(parts[0]) &&
+      /^[a-z0-9][a-z0-9._:-]{0,63}$/.test(parts[1]) &&
+      ["NATIVE", "TOKEN", "NFT"].includes(parts[2]) &&
+      parts[3].length > 0 && parts[3].length <= 256 &&
+      /^(0|[1-9][0-9]{0,2})$/.test(parts[4]) &&
+      Number(parts[4]) <= 255,
+      "ACCEPT_ASSET_KEY_INVALID", "stored asset identity is not canonical");
+  }
+}
 
 function opaqueSignature(signature) {
   const isBuffer = Buffer.isBuffer(signature);
@@ -135,6 +160,21 @@ export function createOfferService({
       invariant(parsedAcceptance.deploymentId === serviceDeploymentId, "DEPLOYMENT_MISMATCH", "acceptance belongs to another deployment");
       validateIdempotencyKey(idempotencyKey);
       opaqueSignature(signature);
+
+      // Read-only preflight: prevent historic PRL offers on BOTH sides
+      // before invoking any external signature verifier or write method.
+      // The DB trade-insert/consumption triggers remain the atomic authority
+      // against direct DB calls and races (migration 010, deployment blocked).
+      const storedOffer = await repository.getOfferById(parsedAcceptance.offerId);
+      invariant(storedOffer !== null && storedOffer !== undefined,
+        "OFFER_NOT_FOUND", "offer not found");
+      assertStoredOfferAssetPolicy(storedOffer);
+      invariant(storedOffer.state === "OPEN",
+        "OFFER_NOT_OPEN", "offer is not open");
+      invariant(storedOffer.offerHash === parsedAcceptance.offerHash,
+        "ACCEPT_OFFER_HASH_MISMATCH", "offer hash mismatch");
+      invariant(storedOffer.policyEpoch === parsedAcceptance.policyEpoch,
+        "ACCEPT_EPOCH_MISMATCH", "policy epoch mismatch");
 
       const currentTime = now();
       invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
