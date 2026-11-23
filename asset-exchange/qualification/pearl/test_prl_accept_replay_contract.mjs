@@ -7,6 +7,7 @@ const original = readFileSync(path("002_atomic_offer_operations.sql"), "utf8");
 const quarantine = readFileSync(path("010_prl_historical_offer_quarantine.sql"), "utf8");
 const replay = readFileSync(path("011_prl_accept_replay_quarantine.sql"), "utf8");
 const scratchRun = readFileSync(new URL("../../db/test/prl_scratch_replay_run.sh", import.meta.url), "utf8");
+const concurrency = readFileSync(new URL("../../db/test/concurrency.sh", import.meta.url), "utf8");
 const scratchSeed = readFileSync(new URL("../../db/test/prl_scratch_historical_before_010.sql", import.meta.url), "utf8");
 const scratchAssert = readFileSync(new URL("../../db/test/prl_scratch_accept_replay_after_011.sql", import.meta.url), "utf8");
 
@@ -36,6 +37,7 @@ test("011 is one additive transaction with no replacement of cancel function", (
 });
 test("010 creates the trusted shared key guard before 011 references it", () => {
   assert.match(quarantine, /CREATE FUNCTION asset_exchange\.reject_unqualified_prl_asset_keys/);
+  assert.match(quarantine, /v_parts\[4\] <> btrim\(v_parts\[4\]\)/);
   assert.match(newFn, /PERFORM asset_exchange\.reject_unqualified_prl_asset_keys/);
 });
 test("replay branch checks request hash before offer lookup", () => {
@@ -43,6 +45,13 @@ test("replay branch checks request hash before offer lookup", () => {
   const read = newFn.indexOf("SELECT o.* INTO v_offer");
   const returned = newFn.indexOf("RETURN QUERY SELECT 'CONSUMED'::text, v_existing.result_ref");
   assert.ok(hash !== -1 && read > hash && returned > read);
+});
+test("replay serializes the same idempotency key across sessions before lookup", () => {
+  const lock = newFn.indexOf("pg_catalog.pg_advisory_xact_lock");
+  const lookup = newFn.indexOf("SELECT * INTO v_existing");
+  assert.ok(lock > -1 && lookup > lock);
+  assert.match(newFn, /hashtext\(v_scope\)/);
+  assert.match(newFn, /hashtext\(p_idempotency_key\)/);
 });
 test("replay identity bound to the exact authenticated scope and idempotency key", () => {
   assert.match(newFn, /v_scope text := 'accept_offer:' \|\| p_deployment_id \|\| ':' \|\| p_taker_subject/);
@@ -117,6 +126,19 @@ test("scratch runner requires explicit opt-in and a scratch socket/database", ()
   assert.match(scratchRun, /Exchange schema already exists/);
   assert.doesNotMatch(scratchRun, /\bsudo\b|\bdocker\b|\bapt-get\b/);
 });
+test("native runners reject libpq host overrides and prove their private socket target", () => {
+  for (const source of [scratchRun, concurrency]) {
+    assert.match(source, /PGHOSTADDR/);
+    assert.match(source, /PRL_SCRATCH_DATA_DIR/);
+    assert.match(source, /inet_server_addr\(\)/);
+    assert.match(source, /unix_socket_directories/);
+    assert.match(source, /PGDATABASE.*prl_scratch_/s);
+  }
+  assert.match(concurrency, /PRL_SCRATCH_ACK/);
+  assert.match(concurrency, /--network none/);
+  assert.doesNotMatch(concurrency, /--network host/);
+  assert.doesNotMatch(concurrency, /PGDATABASE=\$\{PGDATABASE:-asset_exchange\}/);
+});
 test("scratch runner uses 001-009, synthetic seed, then quarantines 010-011", () => {
   const baseline = scratchRun.indexOf("00[1-9]_*.sql");
   const seed = scratchRun.indexOf("prl_scratch_historical_before_010.sql");
@@ -142,6 +164,19 @@ test("native test scenario includes PRL replays, nonPRL replay and direct trigge
     "prl-forbidden-accept-1", "expected consumption trigger refusal"
   ]) assert.ok(scratchAssert.includes(needle), needle);
   assert.match(scratchAssert, /PRL_TEST_REQUIRES_DISPOSABLE_DATABASE/);
+});
+test("native replay scenario separates hash, epoch, signature and malformed-key refusals", () => {
+  for (const needle of [
+    "offer hash", "policy epoch", "acceptance hash", "acceptance signature",
+    "malformed stored asset key", "BTC_NATIVE |8",
+    "idempotency replay offer/trade identity mismatch"
+  ]) assert.ok(scratchAssert.includes(needle), needle);
+});
+test("native concurrency script checks two-session same-key idempotent replay", () => {
+  assert.match(concurrency, /concurrent identical acceptance is durably idempotent/);
+  assert.match(concurrency, /accept-key-concurrent01/);
+  assert.match(concurrency, /idempotency_records WHERE idempotency_key='accept-key-concurrent01'/);
+  assert.match(concurrency, /network none/);
 });
 test("native scratch assertions rollback and never call a signer, miner or wallet", () => {
   assert.match(scratchAssert, /^BEGIN;$/m);

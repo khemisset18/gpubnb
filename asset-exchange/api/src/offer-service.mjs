@@ -48,6 +48,7 @@ export function assertStoredOfferAssetPolicy(stored) {
       /^[a-z0-9][a-z0-9._:-]{0,63}$/.test(parts[1]) &&
       ["NATIVE", "TOKEN", "NFT"].includes(parts[2]) &&
       parts[3].length > 0 && parts[3].length <= 256 &&
+      parts[3] === parts[3].trim() &&
       /^(0|[1-9][0-9]{0,2})$/.test(parts[4]) &&
       Number(parts[4]) <= 255,
       "ACCEPT_ASSET_KEY_INVALID", "stored asset identity is not canonical");
@@ -169,8 +170,13 @@ export function createOfferService({
       invariant(storedOffer !== null && storedOffer !== undefined,
         "OFFER_NOT_FOUND", "offer not found");
       assertStoredOfferAssetPolicy(storedOffer);
-      invariant(storedOffer.state === "OPEN",
-        "OFFER_NOT_OPEN", "offer is not open");
+      // A persisted CONSUMED row may be retried after a process restart. The
+      // atomic repository function must prove that this exact idempotency
+      // scope, offer, trade, hashes, epoch and signature match its stored
+      // evidence before returning the prior result. PRL stays blocked above.
+      invariant(storedOffer.state === "OPEN" || storedOffer.state === "CONSUMED",
+        "OFFER_NOT_OPEN", "offer is not open or replayable");
+      const durableReplay = storedOffer.state === "CONSUMED";
       invariant(storedOffer.offerHash === parsedAcceptance.offerHash,
         "ACCEPT_OFFER_HASH_MISMATCH", "offer hash mismatch");
       invariant(storedOffer.policyEpoch === parsedAcceptance.policyEpoch,
@@ -179,7 +185,12 @@ export function createOfferService({
       const currentTime = now();
       invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
       invariant(parsedAcceptance.acceptedAtUnixMs <= currentTime + maxClockSkewMs, "ACCEPTANCE_FUTURE", "acceptance timestamp is too far in the future");
-      invariant(currentTime < parsedAcceptance.expiryUnixMs, "ACCEPTANCE_EXPIRED", "acceptance expired");
+      // Expiry only gates a new acceptance. A consumed non-PRL offer may be
+      // replayed after restart/expiry, but the SQL function still returns a
+      // result only for the exact persisted idempotency request.
+      if (!durableReplay) {
+        invariant(currentTime < parsedAcceptance.expiryUnixMs, "ACCEPTANCE_EXPIRED", "acceptance expired");
+      }
 
       const verified = await verifyAcceptanceSignature({
         actor: parsedActor,

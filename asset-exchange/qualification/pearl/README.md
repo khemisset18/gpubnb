@@ -12,9 +12,12 @@ connect live offers, wallets or settlement to either catalog.
 
 Contents:
 - `address_guard.py`: public Bech32m witness v1 32-byte `rprl`
-  shape classifier, fails closed for wrong domains, v0/v2, checksum,
-  padding and mutations. **`rprl` is shared by regtest and simnet**;
-  no network identity is proven by parsing an address.
+  shape classifier, fails closed for wrong domains, witness versions
+  outside this Exchange research profile, checksum, padding and mutations.
+  Pearl's upstream consensus code also recognizes P2MR witness v2; this
+  classifier does not validate or qualify that address type. **`rprl` is
+  shared by regtest and simnet**; no network identity is proven by parsing
+  an address.
 - `offline_preflight.py`: public *fictional* PRL/DOGE marketplace
   listing-envelope validator. It cannot post offers or transfer coins.
 - `fixtures/public_prl_offer_v1.json`: entirely fictitious

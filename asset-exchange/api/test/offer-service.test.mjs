@@ -196,6 +196,42 @@ test("acceptance binds taker, offer hash and policy epoch for atomic repository 
   assert.equal(call[1].acceptance.policyEpoch, 7);
 });
 
+test("consumed non-PRL offers reach the atomic repository for durable idempotent replay", async () => {
+  const repo = fakeRepository();
+  const offer = createUnsignedOffer(rawOffer);
+  repo.getOfferById = async (offerId) => ({
+    offerId,
+    makerSubject: actorMaker.subject,
+    state: "CONSUMED",
+    offerHash: offerDigestHex(offer),
+    policyEpoch: offer.policyEpoch,
+    giveAssetKey: offer.giveAssetKey,
+    wantAssetKey: offer.wantAssetKey
+  });
+  const svc = service(repo, { now: () => 3000 });
+  const acceptance = {
+    offerId: offer.offerId,
+    tradeId: "trade-00000001",
+    deploymentId: "ae-test-01",
+    taker: actorTaker.subject,
+    offerHash: offerDigestHex(offer),
+    acceptedAtUnixMs: 1000,
+    expiryUnixMs: 2000,
+    nonce: "QRSTUVWXYZabcdef",
+    policyEpoch: offer.policyEpoch
+  };
+
+  const result = await svc.acceptOffer({
+    actor: actorTaker,
+    acceptance,
+    signature: "sig",
+    idempotencyKey: fixtureRequestId("accept-durable-replay")
+  });
+
+  assert.deepEqual(result, { status: "CONSUMED", tradeId: acceptance.tradeId });
+  assert.equal(repo.calls.filter(([name]) => name === "accept").length, 1);
+});
+
 test("acceptance rejects wrong actor and invalid signature before repository mutation", async () => {
   const repo = fakeRepository();
   const offer = createUnsignedOffer(rawOffer);
