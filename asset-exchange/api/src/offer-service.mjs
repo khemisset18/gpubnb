@@ -12,7 +12,7 @@ import { assertSameSubject, createActor, validateIdempotencyKey } from "./authz.
 // and before all repository writes: display metadata is NOT authorization.
 export function assertPearlOfferExposureGate(offer) {
   for (const identity of [offer.giveAsset, offer.wantAsset]) {
-    if (identity.chainId !== "pearl") continue;
+    if (identity.chainId !== "pearl" && identity.chainId !== "prl") continue;
     const record = resolveAssetCatalogByIdentity(identity);
     invariant(
       record !== null &&
