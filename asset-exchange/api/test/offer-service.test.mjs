@@ -41,7 +41,9 @@ function fakeRepository() {
         makerSubject: actorMaker.subject,
         state: "OPEN",
         offerHash: offerDigestHex(offer),
-        policyEpoch: offer.policyEpoch
+        policyEpoch: offer.policyEpoch,
+        giveAssetKey: offer.giveAssetKey,
+        wantAssetKey: offer.wantAssetKey
       };
     },
     async cancelOfferAtomic(input) { calls.push(["cancel", input]); return { status: "CANCELLED", offerId: input.offerId }; },
