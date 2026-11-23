@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "externalBin": [
+      "binaries/gpubnb-agent",
+      "binaries/gpubnb-host-tunnel"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "./windows/installer-hooks.preflight.nsh"
+      }
+    }
+  }
+}
