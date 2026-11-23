@@ -130,6 +130,13 @@
     CreateDirectory "$INSTDIR\resources\installer"
     SetOutPath "$INSTDIR\resources\installer"
     File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\installer\install-stage4-payload.ps1"
+    SetOutPath "$INSTDIR\resources\stage4"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\gpubnb-windows-stream.exe"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\gpubnb-windows-worker.exe"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\GPUbnbWindowsMedia.dll"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\build-identities.json"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\stage4.manifest.json"
+    SetOutPath "$INSTDIR"
     SetOutPath "$INSTDIR"
     !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer\install-stage4-payload.ps1" -Mode PreflightInstall -PackageDirectory "$INSTDIR\resources\stage4" -ApplicationDirectory "$INSTDIR" -NativeInstallDirectory "$PROGRAMFILES64\GPUbnb"' "The unsigned CI-only Stage 4 payload failed verification"
   !endif
@@ -145,6 +152,13 @@
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service remove' "Unable to remove the GPUbnb Windows service"
   !ifdef GPUBNB_PREFLIGHT_INSTALLER
     !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer\install-stage4-payload.ps1" -Mode PreflightRemove -PackageDirectory "$INSTDIR\resources\stage4" -NativeInstallDirectory "$PROGRAMFILES64\GPUbnb"' "Unable to remove the verified CI-only Stage 4 payload"
+    Delete "$INSTDIR\resources\stage4\gpubnb-windows-stream.exe"
+    Delete "$INSTDIR\resources\stage4\gpubnb-windows-worker.exe"
+    Delete "$INSTDIR\resources\stage4\GPUbnbWindowsMedia.dll"
+    Delete "$INSTDIR\resources\stage4\build-identities.json"
+    Delete "$INSTDIR\resources\stage4\stage4.manifest.json"
+    RMDir "$INSTDIR\resources\stage4"
     Delete "$INSTDIR\resources\installer\install-stage4-payload.ps1"
+    RMDir "$INSTDIR\resources\installer"
   !endif
 !macroend
