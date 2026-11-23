@@ -32,16 +32,18 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         self.assertIn(r'File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\installer\install-stage4-payload.ps1"', hooks)
         self.assertIn(r'SetOutPath "$INSTDIR\resources\installer"', hooks)
         self.assertIn(r'Delete "$INSTDIR\resources\installer\install-stage4-payload.ps1"', hooks)
-        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
-        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
-        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
-        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
-        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
-        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
-        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
-        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
-        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
-        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
+        stage4_source_root = r'${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4'
+        stage4_files = (
+            "gpubnb-windows-stream.exe",
+            "gpubnb-windows-worker.exe",
+            "GPUbnbWindowsMedia.dll",
+            "build-identities.json",
+            "stage4.manifest.json",
+        )
+        for name in stage4_files:
+            with self.subTest(stage4_file=name):
+                self.assertIn(f'File "{stage4_source_root}\\{name}"', hooks)
+                self.assertIn(f'Delete "$INSTDIR\\resources\\stage4\\{name}"', hooks)
         self.assertIn(r'RMDir "$INSTDIR\resources\stage4"', hooks)
         self.assertIn("GPUbnbRequireDisposableCiRunner", hooks)
         self.assertIn("GPUbnbAssertNativeWorkersStopped", hooks)
