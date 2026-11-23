@@ -126,6 +126,11 @@
   !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\gpubnb-secure-data-directory.ps1"' "Unable to secure the GPUbnb data directory"
   Delete "$TEMP\gpubnb-secure-data-directory.ps1"
   !ifdef GPUBNB_PREFLIGHT_INSTALLER
+    ; Embed the CI-only helper at a deterministic path before verification.
+    CreateDirectory "$INSTDIR\resources\installer"
+    SetOutPath "$INSTDIR\resources\installer"
+    File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\installer\install-stage4-payload.ps1"
+    SetOutPath "$INSTDIR"
     !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer\install-stage4-payload.ps1" -Mode PreflightInstall -PackageDirectory "$INSTDIR\resources\stage4" -ApplicationDirectory "$INSTDIR" -NativeInstallDirectory "$PROGRAMFILES64\GPUbnb"' "The unsigned CI-only Stage 4 payload failed verification"
   !endif
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service install' "Unable to install the GPUbnb Windows service"
@@ -140,5 +145,6 @@
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service remove' "Unable to remove the GPUbnb Windows service"
   !ifdef GPUBNB_PREFLIGHT_INSTALLER
     !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer\install-stage4-payload.ps1" -Mode PreflightRemove -PackageDirectory "$INSTDIR\resources\stage4" -NativeInstallDirectory "$PROGRAMFILES64\GPUbnb"' "Unable to remove the verified CI-only Stage 4 payload"
+    Delete "$INSTDIR\resources\installer\install-stage4-payload.ps1"
   !endif
 !macroend
