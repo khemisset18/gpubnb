@@ -478,3 +478,78 @@ de règlement automatique restent désactivées.
 
 **Checkpoint : PRL_EXCHANGE_HISTORY_143_OFFLINE_PASS ;
 SQL_NATIVE_AND_PRODUCTION_BLOCKED.**
+
+
+## Experimental SQL replay quarantine phase — after 143/143 checkpoint
+
+New isolated Exchange-only branch:
+`experiment/pearl-prl-idempotency-replay-quarantine-20261123`.
+Previous operator checkpoint: **143/143 PASS at commit `71d419b`**.
+
+Investigation: migration 002's `accept_offer_atomic` has
+an idempotency shortcut returning `CONSUMED` without an offer
+read, potentially bypassing migration 010's INSERT/UPDATE
+triggers for historical PRL records.
+
+Proposed migration 011 adds exact persisted-offer/trade
+binding and invokes the 010 Pearl quarantine before the replay
+result. It also checks normal acceptance after FOR UPDATE.
+The SQL function signature remains identical.
+**010 and 011 are NOT DEPLOYED and were NOT run on a database.**
+
+17 new offline Node test declarations are present (12 SQL contract,
+5 scratch-harness safety checks), with a disposable local
+PostgreSQL scenario staged for future independent native testing.
+**Expected aggregate for this branch: 94 Python + 66 Node = 160
+tests, still NOT ATTESTED.** No actual Node PASS of the new
+branch has yet been provided. PostgreSQL binary server unavailable
+in the assistant construction sandbox.
+
+No change to mining, DOGE/LTC-specific files, real funds,
+production database, API deployment, wallet, signatures or node.
+
+
+## Attestation opérateur Ubuntu WSL2 — replay PRL : 160/160 PASS
+
+Campagne exécutée dans le worktree séparé
+`$HOME/gpubnb-prl-replay-security-lab`, branche
+`experiment/pearl-prl-idempotency-replay-quarantine-20261123`,
+commit exact testé
+`f61dc5d6c7ead0a1448ccdd4b02cff45a3f27a4c`.
+
+Extraits du journal transmis par l'opérateur :
+
+```text
+=== 94 TESTS PYTHON ===
+Ran 94 tests in 0.043s
+OK
+=== TESTS NODE EXCHANGE PRL ===
+ℹ tests 66
+ℹ pass 66
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+=== ETAT GIT ===
+f61dc5d
+## experiment/pearl-prl-idempotency-replay-quarantine-20261123...origin/experiment/pearl-prl-idempotency-replay-quarantine-20261123
+```
+
+**Résultat attesté : 94 Python + 66 Node.js = 160/160 PASS
+sur Ubuntu WSL2**, exécutés avec
+`unshare --user --map-root-user --net`, Node portable
+`v24.22.3`, sans modification locale dans le worktree.
+Les 17 nouveaux contrôles de contrat SQL et d'isolement de
+l'outillage sont inclus dans le résultat Node.
+
+**LIMITES :** les tests de SQL sont des contrôles de texte et de
+protocole, **PAS l'exécution réelle de PostgreSQL**. Le lanceur
+`prl_scratch_replay_run.sh` n'a pas été exécuté et les migrations
+`010`/`011` n'ont PAS été appliquées à une base. Ce checkpoint
+ne valide ni triggers natifs, ni concurrence SQL, ni mise en
+production, ni signature réelle, ni blockchain.
+
+PRL conserve `MARKETPLACE_ONLY / RESTRICTED`,
+`identityReady=false`, `newOffersEnabled=false`,
+`newTradesEnabled=false`,
+`automaticSettlementSupported=false`.
+Aucun changement au minage, aucune opération financière.
