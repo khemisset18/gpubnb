@@ -104,7 +104,7 @@ function Assert-ProtectedInstallDirectory([string]$Path) {
             throw 'host_native_install_acl_identity_unresolvable'
         }
         if ($sid -in $unsafeSids -and (([int]$rule.FileSystemRights -band $writeRights) -ne 0)) {
-            throw "host_native_install_acl_broad_write_forbidden:$sid:$($rule.FileSystemRights)"
+            throw ('host_native_install_acl_broad_write_forbidden:' + $sid + ':' + $rule.FileSystemRights)
         }
     }
 }
