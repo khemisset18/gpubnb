@@ -184,7 +184,7 @@ fn random_runtime_identity() -> Result<(u64, [u8; 16]), AuthorityError> {
     Ok((generation, nonce))
 }
 
-fn runtime_config<'a>(
+struct RuntimeConfigRequest<'a> {
     session_id: &'a str,
     workspace: crate::lifecycle::WorkspaceKind,
     backend: RuntimeDisplayBackend,
@@ -193,7 +193,19 @@ fn runtime_config<'a>(
     lease: &'a crate::renter_lease::RenterSessionLease,
     generation: u64,
     display_nonce: [u8; 16],
-) -> ServiceRuntimeConfig<'a> {
+}
+
+fn runtime_config<'a>(request: RuntimeConfigRequest<'a>) -> ServiceRuntimeConfig<'a> {
+    let RuntimeConfigRequest {
+        session_id,
+        workspace,
+        backend,
+        gpu_uuid,
+        application_path,
+        lease,
+        generation,
+        display_nonce,
+    } = request;
     ServiceRuntimeConfig {
         session_id,
         generation,
@@ -427,16 +439,16 @@ fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestRepor
             .map_err(|_| AuthorityError::LeaseGpuMismatch)?;
         let session_id = format!("selftest-{}", std::process::id());
         let (generation, display_nonce) = random_runtime_identity()?;
-        let config = runtime_config(
-            &session_id,
-            crate::lifecycle::WorkspaceKind::CloudDesktop,
+        let config = runtime_config(RuntimeConfigRequest {
+            session_id: &session_id,
+            workspace: crate::lifecycle::WorkspaceKind::CloudDesktop,
             backend,
-            &lease.gpu_uuid,
-            None,
-            &lease,
+            gpu_uuid: &lease.gpu_uuid,
+            application_path: None,
+            lease: &lease,
             generation,
             display_nonce,
-        );
+        });
         let mut runtime = match backend {
             RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
             RuntimeDisplayBackend::DedicatedConsole => {
@@ -912,16 +924,16 @@ fn run_authority_child_backend(
 
         let lease = verified_lease(gpu_uuid)?;
         let (generation, display_nonce) = random_runtime_identity()?;
-        let config = runtime_config(
+        let config = runtime_config(RuntimeConfigRequest {
             session_id,
-            workspace_kind,
+            workspace: workspace_kind,
             backend,
             gpu_uuid,
             application_path,
-            &lease,
+            lease: &lease,
             generation,
             display_nonce,
-        );
+        });
         let runtime = match backend {
             RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
             RuntimeDisplayBackend::DedicatedConsole => {
