@@ -125,3 +125,9 @@ aucune signature cryptographique.
 Ce lot n'est ni à fusionner, ni à déployer, ni à utiliser
 pour l'acceptation d'offres réelles avant tests PostgreSQL
 indépendants et revue complète de la politique financière.
+
+### Mesure supplémentaire : alias de chaîne PRL
+
+Le contrôle des **nouvelles** publications a également été étendu pour refuser la chaîne non canonique `prl` comme alias historique de `pearl`, avant toute vérification externe. Un **onzième** test a été ajouté à `test_prl_exchange_gate.mjs`. L'identité canonique Pearl n'est pas activée par cet ajout.
+
+Les 22 nouvelles déclarations de tests de ce lot correspondent à : **14** historiques, **6** contrats SQL statiques, **1** lecture du repository PostgreSQL et **1** alias de publication. Leur réussite n'est pas encore attestée sur Ubuntu WSL2.
