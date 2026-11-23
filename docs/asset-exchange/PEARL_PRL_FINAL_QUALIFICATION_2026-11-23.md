@@ -4,7 +4,7 @@
 **Dépôt :** `khemisset18/gpubnb`  
 **Référence auditée :** `experiment/pearl-prl-idempotency-replay-quarantine-20261123`  
 **Commit de référence :** `056e28ff34e4bbdb071d832ff83443adc9be1c68`  
-**Commit du code et des tests de cette proposition :** `b29b8490a896cc33c427f9619abe04c688d2fe01`  
+**Commit du code et des tests de cette proposition :** `c7bf2788f2672cb7fc19267ae31ea52d7ce02a50`  
 **PR de référence :** [#396](https://github.com/khemisset18/gpubnb/pull/396), ouverte, brouillon, non fusionnée au moment de la vérification.
 
 ## Décisions
@@ -93,19 +93,19 @@ Tant que cette campagne n'a pas eu lieu, la qualification PostgreSQL native est 
 
 ## Campagnes de test
 
-Les tests logiciels ont été exécutés sur le commit de code `b29b8490a896cc33c427f9619abe04c688d2fe01` (fichiers identiques à ceux testés localement avant le commit). Versions disponibles : Node `v24.22.3`, npm `11.19.1`, Python `3.12.14`, GNU Bash `5.2.37`. PostgreSQL et Docker/Podman absents.
+La dernière campagne a été exécutée sur le contenu correspondant au commit de code `c7bf2788f2672cb7fc19267ae31ea52d7ce02a50`, après les corrections de validation de `request_hash` et la mise à jour du pin Pearl. Le workspace fourni n'inclut pas de métadonnées Git; branche et fichiers de PR vérifiés via GitHub. Versions disponibles : Node `v24.22.3`, npm `11.19.1`, Python `3.12.14`, GNU Bash `5.2.37`. PostgreSQL et Docker/Podman absents.
 
 | Campagne | Commande | Résultat | Ignorés | Limites |
 |---|---|---:|---:|---|
 | Suite Node déclarée du package | `npm test` | PASS — 167/167 | 0 | N'inclut pas les nouveaux fichiers `qualification/pearl/test_prl*.mjs`. Avertissement npm sur `http-proxy` inconnu dans la configuration d'environnement. |
-| Suite Node complète y compris PRL | `TMPDIR="$PWD/.test-tmp" node --test core/test/*.test.mjs api/test/*.test.mjs worker/test/*.test.mjs chain-watchers/test/*.test.mjs recovery/test/*.test.mjs settlement/test/*.test.mjs qualification/pearl/test_prl*.mjs` | PASS — 219/219 | 0 | L'arborescence temporaire privée a été supprimée à la fin. Les contrats SQL sont statiques; pas de serveur PostgreSQL. |
+| Suite Node complète y compris PRL | `mkdir -m 700 -p .test-tmp-all && TMPDIR="$PWD/.test-tmp-all" node --test core/test/*.test.mjs api/test/*.test.mjs worker/test/*.test.mjs chain-watchers/test/*.test.mjs recovery/test/*.test.mjs settlement/test/*.test.mjs qualification/pearl/test_prl*.mjs` | PASS — 219/219 | 0 | Le répertoire temporaire privé est créé sous `asset-exchange/` puis supprimé. Les contrats SQL sont statiques; pas de serveur PostgreSQL. |
 | Suite Python Pearl | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s qualification/pearl -p 'test_*.py'` | PASS — 94/94 | 0 | Tests locaux hors ligne, sans moteur Pearl ni validation de réseau. |
-| Syntaxe des scripts SQL-lab shell | `bash -n db/test/prl_scratch_replay_run.sh db/test/concurrency.sh` | PASS | — | Vérifie la syntaxe shell uniquement. |
-| Refus de garde du lanceur PRL | Lanceur sans ACK; puis `PGHOSTADDR=198.51.100.10` avec noms scratch factices | PASS — code 2 refusé avant `psql` | — | Vérifie des refus de configuration, pas une connexion DB. |
-| Refus de garde de concurrence | `PG_IMAGE=postgres:16 PRL_SCRATCH_ACK= bash db/test/concurrency.sh` | PASS — code 2 refusé avant Docker | — | Vérifie le garde d'entrée uniquement. |
+| Syntaxe des scripts SQL-lab shell | `bash -n asset-exchange/db/test/prl_scratch_replay_run.sh asset-exchange/db/test/concurrency.sh` | PASS | — | Vérifie la syntaxe shell uniquement. |
+| Refus de garde du lanceur PRL | Variables scratch synthétiques complètes + `PGHOSTADDR=198.51.100.10`, puis refus sans configuration adéquate | PASS — code 2 avant `psql` | — | Vérifie les gardes d'entrée, pas une connexion DB. |
+| Refus de garde de concurrence | `PG_IMAGE=postgres:16 PRL_SCRATCH_ACK= bash asset-exchange/db/test/concurrency.sh`; puis variables scratch synthétiques + `PGHOSTADDR=198.51.100.10` | PASS — code 2 avant Docker | — | Vérifie les gardes d'entrée uniquement. |
 | PostgreSQL natif 16+ | Non exécuté | **BLOCKED** | N/A | Outils et serveur isolé absents; aucune migration ni requête DB exécutée. |
 
-Deux tentatives initiales reflétaient des limites du miroir/environnement, pas des défauts de code : avant reconstitution locale de quatre modules Recovery présents au commit de référence, `npm test` avait échoué sur fichiers manquants; après récupération non modifiée de ces fichiers depuis `056e28f`, `npm test` a réussi 167/167. La première exécution combinée Node échouait parce que `/tmp` n'existait pas dans le bac à sable; la relance avec `TMPDIR` sous `asset-exchange/` a réussi 219/219 et supprimé son répertoire temporaire.
+Des tentatives initiales reflétaient les limites de l'environnement : avant reconstitution locale de quatre modules Recovery présents au commit de référence, `npm test` échouait sur fichiers manquants; après récupération non modifiée de ces fichiers depuis `056e28f`, `npm test` a réussi 167/167. Une première exécution combinée Node avec `TMPDIR` pointant vers un répertoire absent a donné 215 PASS et 4 FAIL `ENOENT` sur `mkdtemp`; après création du répertoire privé sous `asset-exchange/`, la relance a réussi 219/219. Les données temporaires de test ont été supprimées.
 
 ## Revue STRIDE et inventaire des risques
 
@@ -118,6 +118,8 @@ Deux tentatives initiales reflétaient des limites du miroir/environnement, pas 
 | R5 — Sécurité du harnais / redirection de cible | **ÉLEVÉE pour l'intégrité des tests** | L'ancien lanceur de concurrence utilisait une cible TCP par défaut et réinitialisait les fixtures; `PGHOSTADDR` pouvait rediriger une cible de socket apparente. Reproduction lab : activer `PGHOSTADDR` et vérifier le refus avant le client. | Variables d'override libpq/URL partagée refusées, socket et `PGDATA` privés imposés, confirmations de cible; Docker isolé `--network none`. Les refus d'entrée passent; aucun serveur n'a été démarré. |
 | R6 — Élévation par accès direct DB / changement de politique | **ÉLEVÉE — non résolue** | Les migrations n'installent pas de rôles, GRANT/REVOKE ou RLS. Le propriétaire ou superutilisateur peut modifier `operator_state`, remplacer/désactiver des fonctions ou désactiver des triggers. Aucun test de rôle ne peut être fait sans cible DB et modèle de rôles. | Précondition production : rôle migration propriétaire séparé du rôle API, rôle API non propriétaire/non superutilisateur avec privilèges minimaux, accès réseau restreint et procédure approuvée de migration. Définir et tester les droits exacts avant déploiement; pas de correctif arbitraire ajouté faute de configuration de déploiement. |
 | R7 — Falsification de réseau via HRP partagé `rprl` | **ÉLEVÉE pour toute intégration de fonds** | Regtest et simnet partagent `rprl` et leurs valeurs genesis peuvent être identiques. Un contrôle de préfixe seul pourrait classifier le mauvais réseau. | README et tests précisent que l'HRP n'est pas une identité réseau; les profils source dérivés exigent tous les champs/réseaux. Aucun routage PRL n'est activé. L'identité d'un nœud réel reste non prouvée. |
+| R8 — Rejeu d'acceptation avec hash de requête nul/malformé | **MOYENNE** | Dans 011, la comparaison `request_hash <> NULL` donne UNKNOWN en logique SQL; l'ancienne branche de rejeu pouvait donc restituer un résultat existant sans hash de requête valide. Reproduction laboratoire : rappeler la fonction avec la même clé et un hash NULL ou de 63 caractères. | 011 rejette maintenant les valeurs nulles et les chaînes qui ne sont pas 64 caractères hexadécimaux minuscules avant la lecture d'idempotence; tests SQL de scénario et contrat statique ajoutés. Tests logiciels PASS; exécution PostgreSQL **BLOCKED**. |
+| R9 — Rejeux idempotents non uniformes dans publication, annulation et signatures de termes | **MOYENNE** | Les fonctions des migrations 003, 007 et 009 comparent `request_hash` avec `<>` sans rejet préalable de NULL; la comparaison UNKNOWN peut laisser passer un rejeu existant. Elles ne sérialisent pas non plus la première utilisation d'une même clé avant la lecture du registre d'idempotence; deux sessions peuvent produire une erreur de contrainte ou d'état au lieu d'un résultat stable. | Résiduel non corrigé dans cette proposition. Ajouter une validation stricte du hash et un verrou/recontrôle par portée-clé dans ces fonctions, puis couvrir les mêmes tests sur PostgreSQL 16+ avant qualification de production. |
 
 ### Contrôles observés dans le code Exchange
 
@@ -138,9 +140,10 @@ Deux tentatives initiales reflétaient des limites du miroir/environnement, pas 
 4. Qualifier l'observation de chaîne, les reorgs, les confirmations, la preuve de dépense, le chemin signer, la récupération, le refus des mauvais réseaux et les tests adversariaux sans fonds réels. Aucune capacité n'est couverte par cette proposition.
 5. Passer une revue de sécurité indépendante du déploiement, des clés SSO, de TLS, des secrets, des logs, des alertes, des sauvegardes/restaurations, des dépendances et du plan d'incident.
 6. Conserver les restrictions du registre tant que toutes les portes ci-dessus ne sont pas PASS et qu'une autorisation explicite distincte ne permet pas de changer les permissions PRL.
+7. Corriger et tester les rejeux et la concurrence de request_hash dans les fonctions SQL 003, 007 et 009; obtenir une preuve PostgreSQL native pour chacune.
 
 ## Risque résiduel et conclusion
 
-Le logiciel Exchange hors ligne passe ses tests. Les corrections de rejeu, de concurrence et de cible du harnais sont présentes dans la branche proposée. Elles ne constituent pas une preuve que les migrations PostgreSQL compilent ou fonctionnent comme prévu. Les actifs réels, l'identité d'un nœud Pearl en activité, les rôles de déploiement et les opérations de règlement restent hors preuve.
+Le logiciel Exchange hors ligne passe ses tests. Les corrections de rejeu d'acceptation, de concurrence de la clé 011 et de cible du harnais sont présentes dans la branche proposée. Le défaut de validation request_hash a été corrigé dans 011; des gaps similaires restent dans 003, 007 et 009. Ces éléments ne prouvent pas que les migrations PostgreSQL compilent ou fonctionnent comme prévu. Les actifs réels, l'identité d'un nœud Pearl en activité, les rôles de déploiement et les opérations de règlement restent hors preuve.
 
 **Conclusion :** la qualification de spécification native Pearl est vérifiée; la qualification opérationnelle PRL et la qualification PostgreSQL sont **BLOCKED**. La publication d'offres PRL reste **INTERDITE**, le règlement automatique PRL reste **INTERDIT**, et la sécurité de production est **NON QUALIFIÉE**. Ne pas fusionner, déployer ou modifier les capacités du registre sur la base des seuls tests hors ligne.
