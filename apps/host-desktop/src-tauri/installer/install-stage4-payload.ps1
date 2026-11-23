@@ -14,6 +14,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-Sha256Hex([string]$Path) {
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $algorithm.Dispose()
+    }
+}
+
 $nativeNames = @(
     'gpubnb-windows-stream.exe',
     'gpubnb-windows-worker.exe',
@@ -107,7 +121,7 @@ function Read-PreflightPackage {
     }
     $identityPath = Join-Path $package 'build-identities.json'
     if (-not (Test-Path -LiteralPath $identityPath -PathType Leaf) -or
-        (Get-FileHash -LiteralPath $identityPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+        (Get-Sha256Hex $identityPath) -cne
             $manifest.buildIdentitiesSha256) {
         throw 'host_native_preflight_build_identity_mismatch'
     }
@@ -120,7 +134,7 @@ function Read-PreflightPackage {
         if ($name -cne 'gpubnb-agent.exe') {
             $path = Join-Path $package $name
             if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
-                (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+                (Get-Sha256Hex $path) -cne
                     $record[0].sha256) {
                 throw "host_native_preflight_component_hash_mismatch:$name"
             }
@@ -148,7 +162,7 @@ switch ($Mode) {
         $app = Get-CanonicalDirectory $ApplicationDirectory 'host_native_application_directory_invalid'
         $sidecar = Join-Path $app 'gpubnb-agent.exe'
         if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf) -or
-            (Get-FileHash -LiteralPath $sidecar -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+            (Get-Sha256Hex $sidecar) -cne
                 $bundle.Records['gpubnb-agent.exe'].sha256) {
             throw 'host_native_preflight_agent_mismatch'
         }
@@ -171,7 +185,7 @@ switch ($Mode) {
         foreach ($name in $nativeNames) {
             $target = Join-Path $destination $name
             if (Test-Path -LiteralPath $target -PathType Leaf) {
-                $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+                $actual = (Get-Sha256Hex $target)
                 if ($actual -cne $bundle.Records[$name].sha256) {
                     throw "host_native_preflight_update_requires_reviewed_rollback:$name"
                 }
@@ -186,7 +200,7 @@ switch ($Mode) {
                 if (Test-Path -LiteralPath $target -PathType Leaf) { continue }
                 $staged = Join-Path $staging $name
                 Copy-Item -LiteralPath (Join-Path $bundle.Root $name) -Destination $staged
-                if ((Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+                if ((Get-Sha256Hex $staged) -cne
                     $bundle.Records[$name].sha256) {
                     throw "host_native_preflight_staged_hash_mismatch:$name"
                 }
@@ -201,7 +215,7 @@ switch ($Mode) {
             foreach ($path in $created) {
                 if (Test-Path -LiteralPath $path -PathType Leaf) {
                     $name = [IO.Path]::GetFileName($path)
-                    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                    if ((Get-Sha256Hex $path) -ceq
                         $bundle.Records[$name].sha256) {
                         Remove-Item -LiteralPath $path -Force
                     }
@@ -229,7 +243,7 @@ switch ($Mode) {
         foreach ($name in $nativeNames) {
             $target = Join-Path $destination $name
             if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { continue }
-            if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+            if ((Get-Sha256Hex $target) -cne
                 $bundle.Records[$name].sha256) {
                 throw "host_native_preflight_remove_hash_mismatch:$name"
             }
