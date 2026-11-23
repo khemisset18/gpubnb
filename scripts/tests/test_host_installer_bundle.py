@@ -17,10 +17,7 @@ class HostInstallerBundleContractTests(unittest.TestCase):
             ["binaries/gpubnb-agent", "binaries/gpubnb-host-tunnel"],
         )
         self.assertEqual(preflight["bundle"]["externalBin"], base["bundle"]["externalBin"])
-        self.assertEqual(
-            preflight["bundle"]["resources"],
-            ["stage4/*"],
-        )
+        self.assertNotIn("resources", preflight["bundle"])
         self.assertEqual(
             preflight["bundle"]["windows"]["nsis"]["installerHooks"],
             "./windows/installer-hooks.preflight.nsh",
@@ -35,6 +32,17 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         self.assertIn(r'File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\installer\install-stage4-payload.ps1"', hooks)
         self.assertIn(r'SetOutPath "$INSTDIR\resources\installer"', hooks)
         self.assertIn(r'Delete "$INSTDIR\resources\installer\install-stage4-payload.ps1"', hooks)
+        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
+        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
+        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
+        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
+        self.assertIn(r'File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\${n}"', hooks)
+        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
+        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
+        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
+        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
+        self.assertIn(r'Delete "$INSTDIR\resources\stage4\${n}"', hooks)
+        self.assertIn(r'RMDir "$INSTDIR\resources\stage4"', hooks)
         self.assertIn("GPUbnbRequireDisposableCiRunner", hooks)
         self.assertIn("GPUbnbAssertNativeWorkersStopped", hooks)
         self.assertIn("$env:GITHUB_ACTIONS -cne 'true'", helper)
