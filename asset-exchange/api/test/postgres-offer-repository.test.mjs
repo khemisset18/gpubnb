@@ -154,3 +154,29 @@ test("repository cancel call persists signed cancellation evidence as parameters
   assert.equal(query.values[3], hash);
   assert.equal(Buffer.isBuffer(query.values[4]), true);
 });
+
+
+test("repository returns the canonical stored asset keys for acceptance preflight", async () => {
+  const pool = fakePool([{ rows: [{
+    offer_id: "offer-historical-0001",
+    maker_subject: "maker:test:001",
+    state: "OPEN",
+    offer_hash: "a".repeat(64),
+    policy_epoch: "7",
+    give_asset_key: "pearl|mainnet|NATIVE|PRL_UNVERIFIED|8",
+    want_asset_key: "dogecoin|mainnet|NATIVE|DOGE_NATIVE|8"
+  }] }]);
+  const repository = createPostgresOfferRepository({
+    pool, deploymentId: "ae-test-01"
+  });
+  const row = await repository.getOfferById("offer-historical-0001");
+  assert.equal(row.giveAssetKey, "pearl|mainnet|NATIVE|PRL_UNVERIFIED|8");
+  assert.equal(row.wantAssetKey, "dogecoin|mainnet|NATIVE|DOGE_NATIVE|8");
+  const query = pool.calls.find(
+    call => typeof call === "object" && call?.text?.includes("FROM asset_exchange.offers")
+  );
+  assert.ok(query);
+  assert.match(query.text, /give_asset_key,\s*want_asset_key/);
+  assert.deepEqual(query.values, ["ae-test-01", "offer-historical-0001"]);
+  assert.equal(Object.isFrozen(row), true);
+});
