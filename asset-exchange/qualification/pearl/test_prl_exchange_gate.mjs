@@ -158,3 +158,19 @@ test("PRL guard is pure and leaves canonical public data unchanged", () => {
   assert.throws(() => assertPearlOfferExposureGate(candidate), blocked);
   assert.equal(JSON.stringify(candidate), original);
 });
+
+
+test("legacy PRL chain alias cannot bypass publication guard", async () => {
+  const calls = { db: 0, verify: 0 };
+  const pseudoAlias = { ...pearl("mainnet"), chainId: "prl" };
+  await assert.rejects(
+    () => guardedService(calls).publishOffer({
+      actor,
+      offer: offer(pseudoAlias, doge),
+      signature: undefined,
+      idempotencyKey: "prl-alias-block-00000001"
+    }),
+    blocked
+  );
+  assert.deepEqual(calls, { db: 0, verify: 0 });
+});
