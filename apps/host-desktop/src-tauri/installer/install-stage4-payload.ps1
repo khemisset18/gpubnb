@@ -91,7 +91,7 @@ function Assert-ProtectedInstallDirectory([string]$Path) {
         [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
         [Security.AccessControl.FileSystemRights]::ChangePermissions -bor
         [Security.AccessControl.FileSystemRights]::TakeOwnership)
-    foreach ($rule in (Get-Acl -LiteralPath $Path -ErrorAction Stop).Access) {
+    foreach ($rule in ([IO.Directory]::GetAccessControl($Path)).Access) {
         if ($rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
         try {
             $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
