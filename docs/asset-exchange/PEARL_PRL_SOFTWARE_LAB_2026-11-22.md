@@ -478,3 +478,32 @@ de règlement automatique restent désactivées.
 
 **Checkpoint : PRL_EXCHANGE_HISTORY_143_OFFLINE_PASS ;
 SQL_NATIVE_AND_PRODUCTION_BLOCKED.**
+
+
+## Experimental SQL replay quarantine phase — after 143/143 checkpoint
+
+New isolated Exchange-only branch:
+`experiment/pearl-prl-idempotency-replay-quarantine-20261123`.
+Previous operator checkpoint: **143/143 PASS at commit `71d419b`**.
+
+Investigation: migration 002's `accept_offer_atomic` has
+an idempotency shortcut returning `CONSUMED` without an offer
+read, potentially bypassing migration 010's INSERT/UPDATE
+triggers for historical PRL records.
+
+Proposed migration 011 adds exact persisted-offer/trade
+binding and invokes the 010 Pearl quarantine before the replay
+result. It also checks normal acceptance after FOR UPDATE.
+The SQL function signature remains identical.
+**010 and 011 are NOT DEPLOYED and were NOT run on a database.**
+
+17 new offline Node test declarations are present (12 SQL contract,
+5 scratch-harness safety checks), with a disposable local
+PostgreSQL scenario staged for future independent native testing.
+**Expected aggregate for this branch: 94 Python + 66 Node = 160
+tests, still NOT ATTESTED.** No actual Node PASS of the new
+branch has yet been provided. PostgreSQL binary server unavailable
+in the assistant construction sandbox.
+
+No change to mining, DOGE/LTC-specific files, real funds,
+production database, API deployment, wallet, signatures or node.
