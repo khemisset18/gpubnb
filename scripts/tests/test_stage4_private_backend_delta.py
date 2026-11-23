@@ -109,6 +109,8 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
         self.assertIn("--expect-web-source-changed", workflow)
         self.assertIn("--expect-web-source-unchanged", workflow)
         self.assertIn('CANDIDATE_BRANCH" = "feat/gaming-end-to-end-20261122"', workflow)
+        self.assertIn("CANDIDATE_BASE: " + "$"+"{{ github.event.pull_request.base.ref || '' }}", workflow)
+        self.assertIn('CANDIDATE_BASE" = "feat/gaming-end-to-end-20261122"', workflow)
         self.assertNotIn("32ffdc72ec7041310c4b07e286ac4c4c2818906c", workflow)
         self.assertEqual(len(pins[0]), 40)
 
