@@ -5,9 +5,6 @@
       "binaries/gpubnb-agent",
       "binaries/gpubnb-host-tunnel"
     ],
-    "resources": [
-      "stage4/*"
-    ],
     "windows": {
       "nsis": {
         "installMode": "perMachine",
