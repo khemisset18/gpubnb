@@ -87,8 +87,7 @@ ou d'offre PRL déjà publiée.
 
 **Checkpoint confirmé du poste : 109 tests hors ligne PASS sur
 le commit `60a3934` de la branche PR #393.**
-**Cette branche introduit 21 nouveaux tests au total mais
-aucun résultat PASS WSL2 n'est encore revendiqué pour ceux-ci.**
+**Actualisation opérateur : 22 nouvelles déclarations de tests présentes dans la branche. La campagne de validation WSL2 a réussi : 94 tests Python + 49 tests Node.js, soit 143/143 PASS au commit `71d419b` (détail et limites en fin de document).**
 
 ### Commandes de qualification opérateur (réseau isolé)
 
@@ -130,4 +129,10 @@ indépendants et revue complète de la politique financière.
 
 Le contrôle des **nouvelles** publications a également été étendu pour refuser la chaîne non canonique `prl` comme alias historique de `pearl`, avant toute vérification externe. Un **onzième** test a été ajouté à `test_prl_exchange_gate.mjs`. L'identité canonique Pearl n'est pas activée par cet ajout.
 
-Les 22 nouvelles déclarations de tests de ce lot correspondent à : **14** historiques, **6** contrats SQL statiques, **1** lecture du repository PostgreSQL et **1** alias de publication. Leur réussite n'est pas encore attestée sur Ubuntu WSL2.
+Les 22 nouvelles déclarations de tests de ce lot correspondent à : **14** historiques, **6** contrats SQL statiques, **1** lecture du repository PostgreSQL et **1** alias de publication. Leur exécution est désormais attestée dans la campagne Node.js 49/49 PASS sur Ubuntu WSL2 au commit `71d419b`. Les six contrôles SQL restent uniquement statiques.
+
+### Attestation de campagne opérateur, Ubuntu WSL2
+
+Journal : `Ran 94 tests in 0.087s / OK`, suivi de `tests 49 / pass 49 / fail 0 / skipped 0` pour Node.js, puis `git rev-parse --short HEAD = 71d419b` et un worktree sans changement local. Exécution Python et Node sous `unshare --user --map-root-user --net`, Node portable Exchange `v24.22.3`.
+
+**Bilan : 143/143 tests logiciels hors ligne réussis sur le commit testé `71d419b7f773d0a70e29855c9ec4102b65ba92db`.** Cette attestation ne prouve ni l'installation ni l'exécution des triggers de la migration 010 sur PostgreSQL. La PR reste non déployable et en brouillon ; les droits PRL sont désactivés.
