@@ -6,8 +6,17 @@ on:
       - agent/**
       - services/edge/**
       - scripts/build-windows-native-release-candidate.ps1
+      - scripts/build-stage4-unsigned-package.ps1
+      - scripts/verify_stage4_package.py
+      - scripts/verify-stage4-package.ps1
+      - scripts/stage4-package-common.ps1
+      - scripts/stage4-windows-python.lock
+      - scripts/tests/test_host_installer_bundle.py
       - scripts/windows-native-stage4-failure-qualification.ps1
       - apps/host-desktop/**
+      - native/windows-media/**
+      - native/windows-worker/**
+      - native/windows-stream-helper/**
       - Cargo.toml
       - Cargo.lock
       - rust-toolchain.toml
@@ -23,11 +32,12 @@ concurrency:
 
 jobs:
   windows-installer:
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Parse Stage 4 native release-candidate builder
@@ -40,6 +50,38 @@ jobs:
           }
           if ($source -match 'physical-qualification') {
             throw 'Stage 4 native candidate builder must never use the physical-qualification gate.'
+          }
+
+      - name: Parse the CI-only Host payload helper
+        shell: pwsh
+        run: |
+          $path = 'apps/host-desktop/src-tauri/installer/install-stage4-payload.ps1'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $path,
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'CI-only Host payload helper contains PowerShell parse errors.'
+          }
+          $source = Get-Content $path -Raw
+          foreach ($required in @(
+            "'CheckNoActiveNative'",
+            "'PreflightInstall'",
+            "'PreflightRemove'",
+            'host_native_preflight_release_or_installable_payload_rejected',
+            'host_native_preflight_signed_component_rejected',
+            'host_native_preflight_update_requires_reviewed_rollback'
+          )) {
+            if ($source -notmatch [regex]::Escape($required)) {
+              throw "Host payload helper is missing fail-closed contract: $required"
+            }
+          }
+          if ($source -match 'Start-Process.*gpubnb-windows-stream|Start-Process.*gpubnb-windows-worker|InstallDriver|pnputil') {
+            throw 'CI preflight helper must not start media components or install a driver.'
           }
 
       - name: Parse Stage 4 physical failure harness
@@ -96,9 +138,15 @@ jobs:
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: agent/pyproject.toml
+          python-version: '3.13.7'
+          architecture: x64
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: FFmpeg/nv-codec-headers
+          ref: e844e5b26f46bb77479f063029595293aa8f812d
+          path: .deps/nv-codec-headers
+          persist-credentials: false
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -113,6 +161,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: .
+
+      - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        with:
+          msbuild-architecture: x64
 
       - name: Materialize Windows bundle icon
         shell: pwsh
@@ -130,27 +182,49 @@ jobs:
         working-directory: apps/host-desktop
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Install agent and PyInstaller
+      - name: Install hash-locked Stage 4 build dependencies and Agent
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ./agent pyinstaller==6.16.0
+          python -m pip install --require-hashes -r scripts/stage4-windows-python.lock
+          python -m pip install --no-deps --no-build-isolation ./agent
 
-      - name: Stamp Agent build provenance
+      - name: Verify unified installer policy contract
+        run: python -m unittest scripts/tests/test_host_installer_bundle.py -v
+
+      - name: Build and stage the complete unsigned native payload
         shell: pwsh
         run: |
           $commit = '${{ github.event.pull_request.head.sha || github.sha }}'
-          if ($commit -notmatch '^[0-9a-f]{40}$') {
-            throw "Unexpected source commit: $commit"
+          $publisher = '3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619'
+          $out = Join-Path $env:RUNNER_TEMP 'stage4-host-payload'
+          & ./scripts/build-stage4-unsigned-package.ps1 `
+            -ExpectedCommit $commit `
+            -PublisherSha256 $publisher `
+            -NvCodecHeadersDir "$env:GITHUB_WORKSPACE/.deps/nv-codec-headers/include/ffnvcodec" `
+            -OutputDirectory $out
+          if (-not $?) { throw 'Unified Host native payload build failed.' }
+          $manifest = Get-Content (Join-Path $out 'stage4.manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.sourceCommit -cne $commit -or
+              $manifest.signatureStatus -cne 'unsigned' -or
+              $manifest.installable -cne $false -or
+              $manifest.iddDriverIncluded -cne $false -or
+              $manifest.publicBookabilityEnabled -cne $false -or
+              @($manifest.files).Count -ne 4) {
+            throw 'The Host preflight must carry the exact four-file unsigned, non-installable policy.'
           }
-          $sourceCommit = $commit
-          $path = 'agent/gpubnb_agent/_build_info.py'
-          $content = Get-Content $path -Raw
-          $updated = [regex]::Replace($content, 'BUILD_COMMIT = "[^"]+"', "BUILD_COMMIT = `"$sourceCommit`"")
-          if ($updated -eq $content) {
-            throw 'Unable to stamp Agent BUILD_COMMIT.'
+          $payload = 'apps/host-desktop/src-tauri/stage4'
+          New-Item -ItemType Directory -Force $payload | Out-Null
+          foreach ($name in @(
+            'gpubnb-agent.exe',
+            'gpubnb-windows-stream.exe',
+            'gpubnb-windows-worker.exe',
+            'GPUbnbWindowsMedia.dll',
+            'build-identities.json',
+            'stage4.manifest.json'
+          )) {
+            Copy-Item -LiteralPath (Join-Path $out $name) -Destination (Join-Path $payload $name)
           }
-          Set-Content $path $updated -Encoding utf8
-          Write-Host "Stamped Agent build commit $sourceCommit"
+          $hash = (Get-FileHash (Join-Path $payload 'stage4.manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Unsigned Stage 4 manifest SHA-256: $hash"
 
       - name: Test agent CLI
         shell: pwsh
@@ -170,12 +244,14 @@ jobs:
       - name: Build standalone agent
         shell: pwsh
         run: |
-          pyinstaller --clean --noconfirm --onefile --name gpubnb-agent --hidden-import=_cffi_backend --hidden-import=encodings.idna --hidden-import=servicemanager --hidden-import=win32event --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32timezone --collect-all cffi --collect-all nacl agent/gpubnb_agent/__main__.py
-          if (-not (Test-Path dist/gpubnb-agent.exe)) { throw 'Standalone agent was not generated.' }
+          $source = 'apps/host-desktop/src-tauri/stage4/gpubnb-agent.exe'
+          if (-not (Test-Path $source -PathType Leaf)) { throw 'The pinned Stage 4 Agent was not staged.' }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $source dist/gpubnb-agent.exe
           $target = (rustc -vV | Select-String '^host:' | ForEach-Object { ($_ -split ':', 2)[1].Trim() })
           if (-not $target) { throw 'Rust target triple could not be determined.' }
           New-Item -ItemType Directory -Force apps/host-desktop/src-tauri/binaries | Out-Null
-          Copy-Item dist/gpubnb-agent.exe "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
+          Copy-Item $source "apps/host-desktop/src-tauri/binaries/gpubnb-agent-$target.exe"
 
       - name: Build Windows Host tunnel sidecar
         shell: pwsh
@@ -226,7 +302,7 @@ jobs:
 
       - name: Build Windows installer with embedded agent and Host tunnel
         working-directory: apps/host-desktop
-        run: npm run tauri:build -- --bundles nsis --config src-tauri/tauri.sidecar.conf.json
+        run: npm run tauri:build -- --bundles nsis --config src-tauri/tauri.sidecar.conf.json --config src-tauri/tauri.preflight.conf.json
         env:
           GPUBNB_RELEASE_CHANNEL: development
           RUST_BACKTRACE: '1'
@@ -255,6 +331,7 @@ jobs:
 
           $installedSidecar = Join-Path $installDirectory 'gpubnb-agent.exe'
           $installedTunnel = Join-Path $installDirectory 'gpubnb-host-tunnel.exe'
+          $nativeInstallDirectory = Join-Path $env:ProgramFiles 'GPUbnb'
           if (-not (Test-Path $installedSidecar -PathType Leaf)) {
             throw 'The installed application does not contain the gpubnb-agent sidecar.'
           }
@@ -272,6 +349,25 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'The installed agent sidecar is not executable.' }
           if ($installedAgentVersion -ne $expectedAgentVersion) {
             throw "Installed Agent version mismatch: expected $expectedAgentVersion, got $installedAgentVersion."
+          }
+
+          $payloadRoot = Join-Path $installDirectory 'resources/stage4'
+          $payloadManifest = Get-Content (Join-Path $payloadRoot 'stage4.manifest.json') -Raw | ConvertFrom-Json
+          if ($payloadManifest.installable -ne $false -or
+              $payloadManifest.signatureStatus -cne 'unsigned' -or
+              $payloadManifest.iddDriverIncluded -ne $false -or
+              $payloadManifest.publicBookabilityEnabled -ne $false) {
+            throw 'The disposable installer smoke must remain explicitly non-installable.'
+          }
+          foreach ($name in @('gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')) {
+            $record = @($payloadManifest.files | Where-Object { $_.name -ceq $name })
+            $installedNative = Join-Path $nativeInstallDirectory $name
+            if ($record.Count -ne 1 -or -not (Test-Path $installedNative -PathType Leaf)) {
+              throw "Unified installer did not install native component $name."
+            }
+            if ((Get-FileHash $installedNative -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record[0].sha256) {
+              throw "Installed native component hash mismatch: $name"
+            }
           }
           $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'
           $installedBuildInfo = (& $installedSidecar build-info | Out-String) | ConvertFrom-Json
@@ -384,6 +480,11 @@ jobs:
           if (Test-Path $installedTunnel) {
             throw 'The uninstaller left the Host tunnel sidecar behind.'
           }
+          foreach ($name in @('gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')) {
+            if (Test-Path (Join-Path $nativeInstallDirectory $name)) {
+              throw "The uninstaller left native component $name behind."
+            }
+          }
           if (Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'") {
             throw 'The uninstaller left the GPUbnbAgent service registered.'
           }
@@ -393,6 +494,11 @@ jobs:
           Copy-Item $installer.FullName $artifactDirectory
           Copy-Item dist/gpubnb-agent.exe (Join-Path $artifactDirectory 'gpubnb-agent.exe')
           Copy-Item services/edge/target/release/gpubnb-host-tunnel.exe (Join-Path $artifactDirectory 'gpubnb-host-tunnel.exe')
+          @'
+          CI PREFLIGHT ONLY — NOT INSTALLABLE FOR PC1.
+          The bundled Stage 4 binaries are unsigned and the signed IddCx driver is not included.
+          No PC1 installation, account connection, GPU session, or streaming test has been performed.
+          '@ | Set-Content (Join-Path $artifactDirectory 'INSTALLATION_STATUS.txt') -Encoding utf8
 
           $payloads = Get-ChildItem $artifactDirectory -File
           $checksums = $payloads | Get-FileHash -Algorithm SHA256 |
@@ -402,7 +508,7 @@ jobs:
       - name: Upload Windows preflight artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: gpubnb-host-windows-preflight-${{ github.event.pull_request.head.sha || github.sha }}
+          name: gpubnb-host-windows-preflight-noninstallable-${{ github.event.pull_request.head.sha || github.sha }}
           path: apps/host-desktop/dist-windows/**
           if-no-files-found: error
           retention-days: 14

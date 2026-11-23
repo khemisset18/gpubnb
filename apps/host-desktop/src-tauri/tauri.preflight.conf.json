@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": [
+      "stage4/*",
+      "installer/install-stage4-payload.ps1"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "./windows/installer-hooks.preflight.nsh"
+      }
+    }
+  }
+}
