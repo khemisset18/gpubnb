@@ -98,6 +98,8 @@ function Assert-ProtectedInstallDirectory([string]$Path) {
     )
     foreach ($rule in ([IO.Directory]::GetAccessControl($Path)).Access) {
         if ($rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { continue }
+        $rights = [int]$rule.FileSystemRights
+        if (($rights -band $writeRights) -eq 0) { continue }
         try {
             $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
         } catch {
