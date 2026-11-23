@@ -161,17 +161,51 @@ The proposed **UNDEPLOYED** SQL migration 011 checks the actual
 stored offer/trade identity and the PRL quarantine before such a return,
 while keeping the original function signature.
 
-`test_prl_accept_replay_contract.mjs` contains **17 new offline
-static / harness tests**. These have **NOT yet run on WSL2**.
-The previous confirmed operator baseline is **143/143 PASS** at
-commit `71d419b`; the full new-scope expectation is 94 Python
-plus 66 Node tests = **160 tests expected, NOT ATTESTED**.
+`test_prl_accept_replay_contract.mjs` contains **17 offline
+static / harness tests**. Operator WSL2 confirmed **160/160 PASS**
+at commit `f61dc5d6c7ead0a1448ccdd4b02cff45a3f27a4c` (94 Python,
+66 Node). These static SQL checks do not execute migration 010/011
+or establish PostgreSQL behavior.
 
 A strictly scratch-only native PostgreSQL harness is in
-`asset-exchange/db/test/prl_scratch_replay_run.sh`, but it
-has not been executed and is not an installation script.
-Do not direct it to any existing database. The API's non-PRL
-consumed-offer retry behaviour remains a separate review gate.
+`asset-exchange/db/test/prl_scratch_replay_run.sh`; it has not
+been executed and is not an installation script. Do not direct it
+to any existing database. The final qualification branch adds API
+retry handling for non-PRL consumed offers, and code-level tests pass;
+the required SQL behavior remains unverified until native PostgreSQL.
 
 All PRL publishing and settlement permissions stay false.
 No mining files, wallets, keys, funds or live exchange operations.
+
+## Phase 6 — finale logicielle et durcissement idempotent (draft, non déployé)
+
+Branche : `experiment/pearl-prl-final-qualification-20261123`,
+PR brouillon #397, issue de la référence PR #396.
+
+Le contrôle du code a découvert des replays insuffisamment liés au
+résultat persistant dans les fonctions SQL de publication, annulation
+et signatures de termes (migrations 003/007/009). La migration additive
+012 ajoute la validation des hash/clé, la sérialisation transactionnelle,
+et la vérification des identifiants et preuves stockés avant tout résultat
+de rejeu. Les retries exacts après expiration n'ont plus besoin de l'horloge
+applicative; les nouvelles écritures expirées restent refusées par l'API
+et/ou la fonction atomique selon l'opération.
+
+Les fichiers de test ajoutent un scénario PostgreSQL transactionnel
+annulé pour les replays publication/annulation/termes et trois courses
+à deux sessions dans `db/test/concurrency.sh`. Ces scénarios sont écrits,
+mais **pas exécutés** : aucun binaire PostgreSQL ou moteur isolé n'est
+disponible dans cette campagne. Les contrats Node sont statiques et ne
+remplacent pas l'exécution sur PostgreSQL 16+.
+
+Résultats logiciels finaux : `npm test` **171/171**, Node avec tous les
+tests de qualification Pearl **231/231**, Python Pearl **94/94**, contrôle
+JavaScript **83 modules PASS**, `bash -n` **PASS**. Les tests exécutés
+n'incluent aucune chaîne active, wallet, signature réelle, transaction,
+ni migration SQL native.
+
+La qualification PostgreSQL native et la sécurité de production restent
+**BLOCKED / NON QUALIFIÉE**. PRL reste `MARKETPLACE_ONLY / RESTRICTED`,
+`identityReady=false`, `newOffersEnabled=false`, `newTradesEnabled=false`,
+`automaticSettlementSupported=false`; la publication d'offres et le
+règlement automatique restent interdits.
