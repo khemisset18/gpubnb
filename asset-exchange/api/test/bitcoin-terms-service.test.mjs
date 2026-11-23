@@ -160,5 +160,12 @@ test("wrong party, invalid signature, or lineage mismatch cannot persist terms",
     idempotencyKey: "terms-badline-key-01"
   }));
 
+  await assert.rejects(() => svc.submitSignature({
+    actor: maker,
+    terms: createBitcoinSettlementTerms({ ...termsInput, policyEpoch: termsInput.policyEpoch + 1 }),
+    signature: "sig",
+    idempotencyKey: "terms-badepoch-key01"
+  }), error => error.code === "TERMS_EPOCH_MISMATCH");
+
   assert.equal(repo.calls.length, 0);
 });
