@@ -94,10 +94,6 @@ export function createOfferService({
       validateIdempotencyKey(idempotencyKey);
       opaqueSignature(signature);
 
-      const currentTime = now();
-      invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
-      invariant(currentTime < parsedOffer.expiryUnixMs, "OFFER_EXPIRED", "cannot publish expired offer");
-
       const verified = await verifyOfferSignature({
         actor: parsedActor,
         offer: parsedOffer,
@@ -127,14 +123,22 @@ export function createOfferService({
       const stored = await repository.getOfferById(parsedCancellation.offerId);
       invariant(stored !== null && stored !== undefined, "OFFER_NOT_FOUND", "offer not found");
       assertSameSubject(parsedActor, stored.makerSubject);
-      invariant(stored.state === "OPEN", "OFFER_NOT_OPEN", "offer is not open");
+      invariant(stored.state === "OPEN" || stored.state === "CANCELLED",
+        "OFFER_NOT_OPEN", "offer is not open or replayable");
+      const durableReplay = stored.state === "CANCELLED";
       invariant(stored.offerHash === parsedCancellation.offerHash, "CANCEL_OFFER_HASH_MISMATCH", "cancellation offer hash mismatch");
       invariant(stored.policyEpoch === parsedCancellation.policyEpoch, "CANCEL_EPOCH_MISMATCH", "cancellation policy epoch mismatch");
 
-      const currentTime = now();
-      invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
-      invariant(parsedCancellation.cancelledAtUnixMs <= currentTime + maxClockSkewMs, "CANCEL_FUTURE", "cancellation timestamp is too far in the future");
-      invariant(currentTime < parsedCancellation.expiryUnixMs, "CANCEL_EXPIRED", "cancellation expired");
+      // Expiry gates a new cancellation. For a cancelled row, only the
+      // atomic SQL idempotency record plus its persisted hash/signature can
+      // authorize a retry after expiry; any different key/proof is rejected
+      // by that repository operation.
+      if (!durableReplay) {
+        const currentTime = now();
+        invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
+        invariant(parsedCancellation.cancelledAtUnixMs <= currentTime + maxClockSkewMs, "CANCEL_FUTURE", "cancellation timestamp is too far in the future");
+        invariant(currentTime < parsedCancellation.expiryUnixMs, "CANCEL_EXPIRED", "cancellation expired");
+      }
 
       const digestHex = cancellationDigestHex(parsedCancellation);
       const verified = await verifyCancellationSignature({
@@ -182,13 +186,14 @@ export function createOfferService({
       invariant(storedOffer.policyEpoch === parsedAcceptance.policyEpoch,
         "ACCEPT_EPOCH_MISMATCH", "policy epoch mismatch");
 
-      const currentTime = now();
-      invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
-      invariant(parsedAcceptance.acceptedAtUnixMs <= currentTime + maxClockSkewMs, "ACCEPTANCE_FUTURE", "acceptance timestamp is too far in the future");
       // Expiry only gates a new acceptance. A consumed non-PRL offer may be
       // replayed after restart/expiry, but the SQL function still returns a
       // result only for the exact persisted idempotency request.
+      let currentTime = parsedAcceptance.acceptedAtUnixMs;
       if (!durableReplay) {
+        currentTime = now();
+        invariant(Number.isSafeInteger(currentTime), "CLOCK_VALUE", "clock must return integer milliseconds");
+        invariant(parsedAcceptance.acceptedAtUnixMs <= currentTime + maxClockSkewMs, "ACCEPTANCE_FUTURE", "acceptance timestamp is too far in the future");
         invariant(currentTime < parsedAcceptance.expiryUnixMs, "ACCEPTANCE_EXPIRED", "acceptance expired");
       }
 
