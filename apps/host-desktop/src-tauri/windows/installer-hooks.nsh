@@ -129,7 +129,7 @@
     ; Embed the CI-only helper at a deterministic path before verification.
     CreateDirectory "$INSTDIR\resources\installer"
     SetOutPath "$INSTDIR\resources\installer"
-    File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\installer\install-stage4-payload.ps1"
+    File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\installer\install-stage4-payload.ps1"
     SetOutPath "$INSTDIR"
     !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer\install-stage4-payload.ps1" -Mode PreflightInstall -PackageDirectory "$INSTDIR\resources\stage4" -ApplicationDirectory "$INSTDIR" -NativeInstallDirectory "$PROGRAMFILES64\GPUbnb"' "The unsigned CI-only Stage 4 payload failed verification"
   !endif
