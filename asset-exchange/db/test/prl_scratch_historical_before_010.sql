@@ -70,4 +70,20 @@ VALUES
   ('accept_offer:ae-test-01:taker:test:other',
    'prl-scratch-other-key', repeat('e',64), 'prl-trade-other-0001');
 
+-- A legacy OPEN Pearl offer is also staged before the quarantine triggers.
+INSERT INTO offers (
+  offer_id, deployment_id, maker_subject, offer_hash, signed_offer,
+  signature, signature_scheme, give_asset_key, give_amount_atomic,
+  want_asset_key, want_amount_atomic, nonce, policy_epoch,
+  fee_policy_id, fee_policy_version, expires_at, state
+) VALUES (
+  'prl-old-open-0001', 'ae-test-01', 'maker:test:prl', repeat('9',64),
+  decode('00','hex'), decode('01','hex'), 'NOT_A_SIGNATURE',
+  'pearl|mainnet|NATIVE|PRL_NATIVE_UNVERIFIED|8', 100,
+  'bitcoin|regtest|NATIVE|BTC_NATIVE|8', 250,
+  'ABCDEFGHIJKLMNOP', 7, 'prl-scratch-policy', 1,
+  clock_timestamp() + interval '1 day', 'OPEN'
+);
+
+
 COMMIT;
