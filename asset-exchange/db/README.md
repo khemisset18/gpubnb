@@ -108,3 +108,24 @@ A later migration should enforce append-only privileges/triggers after deploymen
 - RLS decision (service authz remains mandatory either way).
 
 This migration is not authorized for production yet.
+
+## PRL historical-offer quarantine — migration 010 (NOT DEPLOYED)
+
+`migrations/010_prl_historical_offer_quarantine.sql` introduces
+three **proposed** triggers: (1) reject direct SQL PRL offer
+insertion, (2) reject a trade referencing an old PRL offer based
+on the offer's **stored asset keys** in either direction, and
+(3) reject transition of a PRL offer to `CONSUMED`.
+
+The script is **additive but has NOT been executed**. Text-based
+contract checks cannot establish correct PostgreSQL trigger
+behaviour, race freedom, privileges, idempotency or migration
+compatibility. Do not run it on the Core database, a live
+Exchange database, or any system handling real funds.
+A separately approved disposable Exchange-only PostgreSQL test
+environment and independent SQL review are required.
+
+An idempotent replay can return an earlier accepted result
+without a new insert; this migration does not rewrite history.
+Deployment roles, key-identity attestation and recovery gates
+remain blocked. No mining files or settings are involved.
