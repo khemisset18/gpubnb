@@ -40,6 +40,31 @@ BEGIN
     RAISE EXCEPTION 'nonPRL historical replay regression';
   END IF;
 
+  -- NULL or malformed request hashes must not exploit SQL's three-valued
+  -- comparison semantics in the existing-idempotency-record branch.
+  BEGIN
+    PERFORM asset_exchange.accept_offer_atomic(
+      'ae-test-01', 'prl-old-other-0001', 'prl-trade-other-0001',
+      'taker:test:other', repeat('c',64), 7,
+      repeat('d',64), decode('11','hex'),
+      'prl-scratch-other-key', NULL
+    );
+    RAISE EXCEPTION 'expected NULL request hash refusal';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    NULL;
+  END;
+  BEGIN
+    PERFORM asset_exchange.accept_offer_atomic(
+      'ae-test-01', 'prl-old-other-0001', 'prl-trade-other-0001',
+      'taker:test:other', repeat('c',64), 7,
+      repeat('d',64), decode('11','hex'),
+      'prl-scratch-other-key', repeat('e',63)
+    );
+    RAISE EXCEPTION 'expected malformed request hash refusal';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    NULL;
+  END;
+
   -- The same idempotency key/hash for a different trade MUST NOT replay.
   BEGIN
     PERFORM asset_exchange.accept_offer_atomic(
@@ -66,6 +91,55 @@ BEGIN
     RAISE EXCEPTION 'expected request hash mismatch refusal';
   EXCEPTION WHEN SQLSTATE '23505' THEN
     NULL;
+  END;
+
+  -- Each persisted field that binds the accepted trade is independently
+  -- checked on replay: offer hash, epoch, acceptance hash and signature.
+  FOR v_case IN
+    SELECT * FROM (VALUES
+      ('offer hash', repeat('f',64)::text, 7::bigint,
+       repeat('d',64)::text, decode('11','hex')),
+      ('policy epoch', repeat('c',64)::text, 8::bigint,
+       repeat('d',64)::text, decode('11','hex')),
+      ('acceptance hash', repeat('c',64)::text, 7::bigint,
+       repeat('1',64)::text, decode('11','hex')),
+      ('acceptance signature', repeat('c',64)::text, 7::bigint,
+       repeat('d',64)::text, decode('12','hex'))
+    ) AS x(label,offer_hash,policy_epoch,acceptance_hash,signature)
+  LOOP
+    BEGIN
+      PERFORM asset_exchange.accept_offer_atomic(
+        'ae-test-01', 'prl-old-other-0001', 'prl-trade-other-0001',
+        'taker:test:other', v_case.offer_hash, v_case.policy_epoch,
+        v_case.acceptance_hash, v_case.signature,
+        'prl-scratch-other-key', repeat('e',64)
+      );
+      RAISE EXCEPTION 'expected % replay mismatch refusal', v_case.label;
+    EXCEPTION WHEN SQLSTATE '55000' THEN
+      IF position('idempotency replay offer/trade identity mismatch' IN SQLERRM) = 0 THEN
+        RAISE;
+      END IF;
+    END;
+  END LOOP;
+
+  -- Stored identifiers must be canonical even for non-PRL rows.
+  BEGIN
+    PERFORM asset_exchange.reject_unqualified_prl_asset_keys(
+      'bitcoin|regtest|NATIVE||8',
+      'litecoin|regtest|NATIVE|LTC_NATIVE|8'
+    );
+    RAISE EXCEPTION 'expected malformed asset identity refusal';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF position('malformed stored asset key' IN SQLERRM) = 0 THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM asset_exchange.reject_unqualified_prl_asset_keys(
+      'bitcoin|regtest|NATIVE|BTC_NATIVE |8',
+      'litecoin|regtest|NATIVE|LTC_NATIVE|8'
+    );
+    RAISE EXCEPTION 'expected non-canonical asset identifier refusal';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF position('malformed stored asset key' IN SQLERRM) = 0 THEN RAISE; END IF;
   END;
 
   -- Historical PRL acceptances must not be returned via the old replay path.

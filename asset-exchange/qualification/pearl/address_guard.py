@@ -74,7 +74,10 @@ def classify_public_prl_v1_shape(value: str) -> dict:
         raise AddressRefused("invalid bech32m checksum")
     payload = data[:-6]
     if not payload or payload[0] != 1:
-        raise AddressRefused("only witness v1 allowed; no segwit v0 or P2MR v2")
+        raise AddressRefused(
+            "this Exchange research profile only qualifies witness v1; "
+            "other witness versions are unsupported here"
+        )
     program = _unpack_5bit(payload[1:])
     if len(program) != 32:
         raise AddressRefused("witness v1 program must be 32 bytes")

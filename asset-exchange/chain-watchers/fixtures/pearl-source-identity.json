@@ -1,10 +1,10 @@
 {
   "repository": "pearl-research-labs/pearl",
-  "commit": "0dbdb2ffd8b81193a5079bb67a59aecc10ad501c",
+  "commit": "09cb165b1fbafe75288ffe89b351ba1e05197636",
   "scope": "source identity only; default signet; no native or address qualification",
   "files": {
     "node/chaincfg/genesis.go": "690beb8be3c87bd3d16ec58925ad5663f8086192d1ac81974615192949b723f6",
-    "node/chaincfg/params.go": "5c4f989e4e8310dac98b8a6fe19119e7864c5e4055303a5bc3432d5ec8e8c107",
+    "node/chaincfg/params.go": "56d025874ba90a09d05765a5a0cd2652242136e1911683aa1deb8dd13a2b85a3",
     "node/chaincfg/chainhash/hash.go": "d72e41b74b8e320b00a200df444db73723b6db0dc722f34c7a0270e4b82fa2b6",
     "node/wire/protocol.go": "0451888b812af4bafdb71e94e00c007c1c4578a1d18cae4b6aaa10e6acb4685c"
   },

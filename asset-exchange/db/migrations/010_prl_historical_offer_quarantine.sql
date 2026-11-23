@@ -41,6 +41,7 @@ BEGIN
        OR v_parts[2] !~ '^[a-z0-9][a-z0-9._:-]{0,63}$'
        OR v_parts[3] NOT IN ('NATIVE', 'TOKEN', 'NFT')
        OR length(v_parts[4]) NOT BETWEEN 1 AND 256
+       OR v_parts[4] <> btrim(v_parts[4])
        OR v_parts[5] !~ '^(0|[1-9][0-9]{0,2})$' THEN
       RAISE EXCEPTION 'malformed stored asset key'
         USING ERRCODE = '55000';

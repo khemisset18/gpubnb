@@ -74,7 +74,8 @@ test("malformed stored identities fail closed",async()=>{
   const bad=["","|regtest|NATIVE|BTC|8","bitcoin|regtest|NATIVE|BTC",
     "bitcoin|regtest|NATIVE|BTC|08","bitcoin|regtest|NATIVE|BTC|256",
     "BITCOIN|regtest|NATIVE|BTC|8","bitcoin|regtest|NATIVE|BTC|8|EXTRA",
-    "bitcoin|regtest|NATIVE||8","bitcoin|regtest|NATIVE|BTC|8".repeat(120)];
+    "bitcoin|regtest|NATIVE||8","bitcoin|regtest|NATIVE| BTC|8",
+    "bitcoin|regtest|NATIVE|BTC |8","bitcoin|regtest|NATIVE|BTC|8".repeat(120)];
   for(const key of bad)
     await rejectBeforeVerifier(stored(key,LTC),
       key.length>512||key===""?"ACCEPT_ASSET_KEY_MISSING":"ACCEPT_ASSET_KEY_INVALID");
@@ -87,8 +88,8 @@ test("existing non PRL verifier still reached, but no signing or write",async()=
   }),err=>err?.code==="ACCEPT_SIGNATURE_INVALID");
   assert.deepEqual(calls,{get:1,verify:1,accept:0});
 });
-test("closed historical offer cannot be accepted",async()=>{
-  await rejectBeforeVerifier({...stored(),state:"CONSUMED"},"OFFER_NOT_OPEN");
+test("cancelled historical offer cannot be accepted",async()=>{
+  await rejectBeforeVerifier({...stored(),state:"CANCELLED"},"OFFER_NOT_OPEN");
 });
 test("stored offer hash mismatch is refused",async()=>{
   await rejectBeforeVerifier({...stored(),offerHash:"b".repeat(64)},

@@ -32,6 +32,25 @@ BEGIN
     RAISE EXCEPTION 'acceptance signature required' USING ERRCODE = '22023';
   END IF;
 
+  IF p_request_hash IS NULL
+     OR p_request_hash::text !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'valid request hash required' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_idempotency_key IS NULL
+     OR p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128}$' THEN
+    RAISE EXCEPTION 'invalid idempotency key' USING ERRCODE = '22023';
+  END IF;
+
+  -- Serialize the same idempotency scope/key across database sessions before
+  -- checking for an existing record. Without this transaction-scoped lock,
+  -- simultaneous first requests could both miss the record and the loser
+  -- would see an unrelated uniqueness or consumed-offer error.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext(v_scope),
+    pg_catalog.hashtext(p_idempotency_key)
+  );
+
   SELECT * INTO v_existing
   FROM asset_exchange.idempotency_records
   WHERE scope = v_scope AND idempotency_key = p_idempotency_key;
