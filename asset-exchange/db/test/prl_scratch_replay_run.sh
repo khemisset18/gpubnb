@@ -32,7 +32,8 @@ if ! command -v psql >/dev/null 2>&1; then
   echo "REFUSED: PostgreSQL psql unavailable; no package install is attempted." >&2
   exit 2
 fi
-if [[ ! -f asset-exchange/db/migrations/011_prl_accept_replay_quarantine.sql ]]; then
+if [[ ! -f asset-exchange/db/migrations/011_prl_accept_replay_quarantine.sql ]] ||
+   [[ ! -f asset-exchange/db/migrations/012_idempotency_replay_hardening.sql ]]; then
   echo "REFUSED: run only from the Exchange PRL replay lab checkout." >&2
   exit 2
 fi
@@ -116,11 +117,14 @@ done
 echo "[PRL scratch] Seeding fake historical records BEFORE quarantine"
 psql_scratch -f asset-exchange/db/test/prl_scratch_historical_before_010.sql >/dev/null
 
-echo "[PRL scratch] Applying migrations 010/011 ONLY in this disposable DB"
+echo "[PRL scratch] Applying migrations 010/011/012 ONLY in this disposable DB"
 psql_scratch -f asset-exchange/db/migrations/010_prl_historical_offer_quarantine.sql >/dev/null
 psql_scratch -f asset-exchange/db/migrations/011_prl_accept_replay_quarantine.sql >/dev/null
+psql_scratch -f asset-exchange/db/migrations/012_idempotency_replay_hardening.sql >/dev/null
 
 echo "[PRL scratch] Checking PRL replay, SQL triggers and non-PRL behaviour"
 psql_scratch -f asset-exchange/db/test/prl_scratch_accept_replay_after_011.sql
+echo "[PRL scratch] Checking PostgreSQL-native publication, cancellation and terms replay"
+psql_scratch -f asset-exchange/db/test/idempotency_replay_after_012.sql
 echo "[PRL scratch] Completed without a production connection."
 echo "[PRL scratch] Dispose of scratch cluster/database independently."
