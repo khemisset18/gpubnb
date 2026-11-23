@@ -12,6 +12,20 @@ process.env.INTERNAL_SERVICE_TOKEN ??= 'offline-preflight-service-secret-0123456
 process.env.PLATFORM_WALLET ??= '11111111111111111111111111111111';
 const { config } = await import('../src/config.js');
 const { registerDesktopWorkspaceRoutes } = await import('../src/desktop-workspace-routes.js');
+const PRIVATE_CONSOLE_SHA='f664a07ec500c57bf9a508838f51b7c0305ba92d';
+
+function usePrivateConsoleProof(state:{consoleProof:boolean}):()=>void {
+  const keys=['GPUBNB_PRIVATE_CONSOLE_QUALIFICATION','GPUBNB_PRIVATE_CONSOLE_AGENT_COMMIT',
+    'GPUBNB_RELEASE_SHA','BETA_TEST_DEV_BYPASS','ESCROW_PROGRAM_ID'] as const;
+  const previous=Object.fromEntries(keys.map(key=>[key,process.env[key]])) as Record<typeof keys[number],string|undefined>;
+  process.env.GPUBNB_PRIVATE_CONSOLE_QUALIFICATION='true';
+  process.env.GPUBNB_PRIVATE_CONSOLE_AGENT_COMMIT=PRIVATE_CONSOLE_SHA;
+  process.env.GPUBNB_RELEASE_SHA=PRIVATE_CONSOLE_SHA;
+  process.env.BETA_TEST_DEV_BYPASS='true';
+  process.env.ESCROW_PROGRAM_ID='NOT_DEPLOYED_YET';
+  state.consoleProof=true;
+  return ()=>{for(const key of keys){const value=previous[key];if(value===undefined)delete process.env[key];else process.env[key]=value;}};
+}
 
 const host = () => ({id:'private-listing', hourlyLamports:3600n,
   machine:{id:'private-machine', ownerId:'renter', operatingSystem:'Windows 11', operational:'AVAILABLE', lastHeartbeatAt:new Date(Date.now()-1_000),
@@ -26,12 +40,17 @@ async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; he
     commercialRentals:config.WINDOWS_NATIVE_RENTALS_ENABLED};
   config.BETA_TEST_DEV_BYPASS='true';config.ESCROW_PROGRAM_ID='NOT_DEPLOYED_YET';
   config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='false';config.WINDOWS_NATIVE_RENTALS_ENABLED='false';
-  const state={authenticated:true,reads:0,candidates:[] as any[], listingReads:0,firstReadOnly:false,session:null as any,redisWrites:0};
+  const state={authenticated:true,reads:0,candidates:[] as any[], listingReads:0,firstReadOnly:false,session:null as any,redisWrites:0,consoleProof:false};
   const db={gpuListing:{findMany:async()=>{state.reads++;state.listingReads++;return state.firstReadOnly&&state.listingReads===1?[host()]:state.candidates;}},
     booking:{count:async()=>{state.reads++;return 0;},findFirst:async()=>{state.reads++;return null;}},
     workspaceSession:{findFirst:async()=>state.session}} as unknown as PrismaClient;
   // Deliberately no create/update/delete/transaction method: any write is a test failure.
-  const redis={get:async()=>state.authenticated?JSON.stringify({userId:'renter',wallet:'',createdAt:new Date().toISOString(),lastSeenAt:new Date().toISOString()}):null,
+  const redis={get:async(key:string)=>{
+      if(key==='private-console-proof:v1:private-machine'&&state.consoleProof){
+        return JSON.stringify({gpuUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',agentCommit:'f664a07ec500c57bf9a508838f51b7c0305ba92d',acceptedCounter:'21'});
+      }
+      return state.authenticated?JSON.stringify({userId:'renter',wallet:'',createdAt:new Date().toISOString(),lastSeenAt:new Date().toISOString()}):null;
+    },
     del:async()=>1,set:async()=>{state.redisWrites++;return 'OK';}} as unknown as Redis;
   const app=Fastify();await app.register(cookie);registerDesktopWorkspaceRoutes(app,db,redis);
   try {await run({app,state,headers:{cookie:`${config.SESSION_COOKIE_NAME}=offline-fixture-token`}});}
@@ -68,7 +87,15 @@ test('physically eligible preflight remains read-only but refuses unqualified br
 }));
 
 test('private Gaming is owner-bound, uses its own block reason and rejects direct booking/session bypasses',async()=>fixture(async({app,state,headers})=>{
+  const restoreConsole=usePrivateConsoleProof(state);
+  try {
   state.candidates=[host()];
+  state.consoleProof=false;
+  const fallback=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+  assert.equal(fallback.json().allowed,false);
+  assert.equal(fallback.json().code,'PRIVATE_WINDOWS_HOST_NOT_READY',
+    'Gaming must not fall back to the legacy IddCx proof');
+  state.consoleProof=true;
   const preflight=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
   assert.equal(preflight.statusCode,200);assert.equal(preflight.json().privateNoPaymentMode,true);
   assert.equal(preflight.json().allowed,false);
@@ -83,9 +110,12 @@ test('private Gaming is owner-bound, uses its own block reason and rejects direc
   assert.equal(session.json().error,'windows_native_private_gaming_test_attempt_disabled');
   assert.equal(state.reads,readsBefore,'unqualified Gaming must stop before booking or allocation lookups');
   assert.equal(state.redisWrites,0,'unqualified Gaming cannot create access or session grants');
+  } finally {restoreConsole();}
 }));
 
 test('explicit private Gaming attempt permits only an owner test and never records qualification or public eligibility',async()=>fixture(async({app,state,headers})=>{
+  const restoreConsole=usePrivateConsoleProof(state);
+  try {
   config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
   state.candidates=[host()];
   const gaming=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
@@ -99,9 +129,12 @@ test('explicit private Gaming attempt permits only an owner test and never recor
   assert.equal(desktop.json().allowed,false);
   assert.equal(desktop.json().code,'windows_native_audio_not_qualified');
   assert.equal(state.redisWrites,0);
+  } finally {restoreConsole();}
 }));
 
 test('private Gaming attempt is rejected whenever commercial Windows rentals are enabled',async()=>fixture(async({app,state,headers})=>{
+  const restoreConsole=usePrivateConsoleProof(state);
+  try {
   config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
   config.WINDOWS_NATIVE_RENTALS_ENABLED='true';
   state.candidates=[host()];
@@ -109,6 +142,7 @@ test('private Gaming attempt is rejected whenever commercial Windows rentals are
   assert.equal(response.json().allowed,false);
   assert.equal(response.json().code,'windows_native_private_gaming_test_attempt_disabled');
   assert.equal(state.redisWrites,0);
+  } finally {restoreConsole();}
 }));
 
 test('Gaming session status and access require the private attempt gate and never report public eligibility',async()=>fixture(async({app,state,headers})=>{

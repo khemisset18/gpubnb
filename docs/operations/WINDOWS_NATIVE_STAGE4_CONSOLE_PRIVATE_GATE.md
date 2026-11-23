@@ -20,10 +20,27 @@ This is a *stacked* change on PR #316, not a physical qualification.
   listing metadata, mutable gateway registration data or a user-selectable URL.
   It is transmitted only by the authenticated Agent desired-session route.
 - An Agent compiled from the **exact pinned SHA** also requires local
-  `GPUBNB_PRIVATE_CONSOLE_QUALIFICATION=true`; it uses `--start-console`
-  only for `cloud-desktop`, `WINDOWS_NATIVE` sessions authorized this way.
+  owner consent; on Windows, GPUbnb Host records it from the
+  **Cloud Gaming → Essai privé sans paiement** control in the protected local
+  Agent data directory. The explicit `GPUBNB_PRIVATE_CONSOLE_QUALIFICATION`
+  environment variable remains an operator/CI override. A saved local
+  revocation overrides an environment opt-in. The Agent uses `--start-console`
+  for `cloud-desktop` qualification or a `gaming` no-payment test attempt,
+  and only for `WINDOWS_NATIVE` sessions carrying the server-owned marker.
+  The signed proof uses schema 2 with `workspaceSlug: gaming` for this Host
+  consent; schema 1 remains the unscoped legacy operator/CI override. The API
+  retains the scope in its short-lived proof, and a saved Gaming decision cannot
+  authorize a different Workspace.
+  Enabling this local consent does not create a listing, booking, payment or
+  server authorization. Host revocation is read at the next Agent desired-state
+  reconciliation; the remote STOP path remains the immediate session control.
   Missing markers remain IddCx, invalid/stale markers reject, and a live backend
   change stops the stream. Default public and other workspaces do not change.
+- The Gaming console attempt is constrained to the allowlisted Steam path, the
+  exact leased NVIDIA GPU, a distinct pre-provisioned renter SID, the active
+  unlocked renter console, one physical monitor at 1920x1080@60, process-scoped
+  WASAPI audio, and epoch-fenced browser input. It does not add an IddCx driver,
+  mutate display settings, or enable commercial/public eligibility.
 
 ## This does NOT yet permit a 300-second physical test
 

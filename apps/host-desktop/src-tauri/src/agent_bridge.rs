@@ -10,6 +10,7 @@ const STATUS_TIMEOUT: Duration = Duration::from_secs(10);
 const MUTATION_TIMEOUT: Duration = Duration::from_secs(30);
 const SETUP_TIMEOUT: Duration = Duration::from_secs(120);
 const PROTECTION_TIMEOUT: Duration = Duration::from_secs(120);
+const PRIVATE_GAMING_CONSENT_TIMEOUT: Duration = Duration::from_secs(10);
 // A single nvidia-smi query, generous enough for a loaded machine without
 // blocking the UI indefinitely if the GPU tooling itself is unresponsive.
 const GPU_PROCESS_LIST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -46,6 +47,15 @@ pub struct ProtectionStatus {
     pub storage_protected: bool,
     pub network_filtered: bool,
     pub cleanup_verified: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivateGamingConsentStatus {
+    pub enabled: bool,
+    pub consented_at: Option<String>,
+    #[serde(default)]
+    pub environment_blocked: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -172,6 +182,7 @@ fn command_timeout(arguments: &[&str]) -> Duration {
     match arguments {
         ["setup", ..] => SETUP_TIMEOUT,
         ["protections", "verify", ..] => PROTECTION_TIMEOUT,
+        ["private-gaming-consent", ..] => PRIVATE_GAMING_CONSENT_TIMEOUT,
         ["link", ..] | ["start", ..] => MUTATION_TIMEOUT,
         ["gpu-processes", "list", ..] => GPU_PROCESS_LIST_TIMEOUT,
         ["gpu-processes", "close", ..] => GPU_PROCESS_CLOSE_TIMEOUT,
@@ -276,6 +287,33 @@ pub fn protections() -> ProtectionStatus {
         .filter(|output| output.status.success())
         .and_then(|output| serde_json::from_slice(&output.stdout).ok())
         .unwrap_or_default()
+}
+
+pub fn private_gaming_consent_status() -> Result<PrivateGamingConsentStatus, String> {
+    let output = run_agent(&["private-gaming-consent", "status"]).map_err(str::to_owned)?;
+    if !output.status.success() {
+        return Err(classify_agent_failure(&output).into());
+    }
+    serde_json::from_slice(&output.stdout).map_err(|_| "agent_response_invalid".to_owned())
+}
+
+pub fn set_private_gaming_consent(
+    enabled: bool,
+    consent_confirmed: bool,
+) -> Result<PrivateGamingConsentStatus, String> {
+    if enabled && !consent_confirmed {
+        return Err("private_gaming_owner_consent_required".into());
+    }
+    let output = if enabled {
+        run_agent(&["private-gaming-consent", "enable", "--confirmed"])
+    } else {
+        run_agent(&["private-gaming-consent", "disable"])
+    }
+    .map_err(str::to_owned)?;
+    if !output.status.success() {
+        return Err(classify_agent_failure(&output).into());
+    }
+    serde_json::from_slice(&output.stdout).map_err(|_| "agent_response_invalid".to_owned())
 }
 
 fn valid_pid(pid: u32) -> bool {
@@ -479,6 +517,14 @@ mod tests {
         };
 
         (directory, executable)
+    }
+
+    #[test]
+    fn private_gaming_consent_requires_an_explicit_owner_confirmation() {
+        assert_eq!(
+            set_private_gaming_consent(true, false).unwrap_err(),
+            "private_gaming_owner_consent_required"
+        );
     }
 
     #[test]

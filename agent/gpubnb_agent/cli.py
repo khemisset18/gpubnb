@@ -1173,6 +1173,23 @@ def command_service(args: argparse.Namespace) -> int:
     return manage_service(args.service_action)
 
 
+def command_private_gaming_consent(args: argparse.Namespace) -> int:
+    from .private_console_consent import (
+        private_gaming_consent_status,
+        set_private_gaming_consent,
+    )
+
+    if args.consent_action == "status":
+        print_json(private_gaming_consent_status())
+        return 0
+    if args.consent_action == "enable":
+        result = set_private_gaming_consent(True, confirmed=args.confirmed)
+    else:
+        result = set_private_gaming_consent(False)
+    print_json(result)
+    return 0
+
+
 def command_build_info(_: argparse.Namespace) -> int:
     print_json({
         "agentVersion": __version__,
@@ -1295,6 +1312,24 @@ def parser() -> argparse.ArgumentParser:
         "service_action", choices=["install", "remove", "start", "stop", "restart", "status"]
     )
     service.set_defaults(handler=command_service)
+    private_gaming_consent = commands.add_parser(
+        "private-gaming-consent",
+        help="autoriser ou révoquer localement un essai Gaming privé sans paiement",
+    )
+    consent_commands = private_gaming_consent.add_subparsers(
+        dest="consent_action", required=True,
+    )
+    consent_commands.add_parser("status", help="lire le consentement local").set_defaults(
+        handler=command_private_gaming_consent,
+        confirmed=False,
+    )
+    enable_gaming = consent_commands.add_parser("enable", help="autoriser l'essai privé")
+    enable_gaming.add_argument("--confirmed", action="store_true")
+    enable_gaming.set_defaults(handler=command_private_gaming_consent)
+    consent_commands.add_parser("disable", help="révoquer l'autorisation locale").set_defaults(
+        handler=command_private_gaming_consent,
+        confirmed=False,
+    )
     commands.add_parser("_service").set_defaults(
         handler=lambda _: __import__(
             "gpubnb_agent.windows_service", fromlist=["dispatch_service"]

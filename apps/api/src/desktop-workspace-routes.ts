@@ -81,10 +81,10 @@ function privateQualificationSourceAllowed(
   ownerId: string,
   userId: string,
 ): boolean {
-  if (!source || ownerId !== userId) return false;
-  // Gaming must use a separate IddCx renter surface; it may never borrow the
-  // owner's interactive console, even for the private no-payment test.
-  return slug !== 'gaming' || source.captureBackend === 'iddcx';
+  if (!source || ownerId !== userId || source.workspaceSlug !== slug) return false;
+  // Gaming's private attempt uses the dedicated renter console only. It must
+  // never fall back to IddCx or capture the provider's interactive session.
+  return slug !== 'gaming' || source.captureBackend === 'console-dedicated';
 }
 
 function windowsNativePrivateAttemptEnabled(slug: WindowsNativePrivateWorkspaceSlug): boolean {
@@ -533,7 +533,7 @@ async function createWindowsNativeQualificationBooking(
     source: await qualificationNativeSource(
       redis, listing.machine.id, privateConsoleAgentCommit(),
       listing.machine.nativeDesktopStreamingAvailable,
-      listing.machine.nativeDesktopStreamingGpuUuid, listing.machine.lastCounter,
+      listing.machine.nativeDesktopStreamingGpuUuid, listing.machine.lastCounter, slug,
     )
   })));
   const eligible = candidatesWithSource.filter(({ listing, source }) => {
@@ -670,7 +670,7 @@ async function createWindowsNativeQualificationBooking(
 
       const freshSource = await qualificationNativeSource(
         redis, fresh.machineId, privateConsoleAgentCommit(),
-        fresh.machine.nativeDesktopStreamingAvailable, fresh.machine.nativeDesktopStreamingGpuUuid, fresh.machine.lastCounter,
+        fresh.machine.nativeDesktopStreamingAvailable, fresh.machine.nativeDesktopStreamingGpuUuid, fresh.machine.lastCounter, slug,
       );
       const nativeGpuUuid = freshSource?.gpuUuid ?? '';
       const accelerator = fresh.accelerators[0]?.accelerator;
@@ -822,7 +822,7 @@ async function createWindowsNativeQualificationSession(
       const machine = booking.listing.machine;
       const qualifiedSource = await qualificationNativeSource(
         redis, booking.listing.machineId, privateConsoleAgentCommit(),
-        machine.nativeDesktopStreamingAvailable, machine.nativeDesktopStreamingGpuUuid, machine.lastCounter,
+        machine.nativeDesktopStreamingAvailable, machine.nativeDesktopStreamingGpuUuid, machine.lastCounter, slug,
       );
       const nativeGpuUuid = qualifiedSource?.gpuUuid ?? '';
       const os = machine.operatingSystem?.trim().toLowerCase() ?? '';
@@ -1449,7 +1449,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
       source: await qualificationNativeSource(
         redis, listing.machine.id, privateConsoleAgentCommit(),
         listing.machine.nativeDesktopStreamingAvailable,
-        listing.machine.nativeDesktopStreamingGpuUuid, listing.machine.lastCounter,
+        listing.machine.nativeDesktopStreamingGpuUuid, listing.machine.lastCounter, slug,
       ),
     })));
     const eligible = candidatesWithSource.filter(({ listing, source }) => {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import unittest
 from types import SimpleNamespace
@@ -12,7 +13,7 @@ def session(**changes):
     s = {
         "id": "sess-1",
         "runtimeBackend": "WINDOWS_NATIVE",
-        "workspaceSlug": "cloud-desktop",
+        "workspaceSlug": "gaming",
         "status": "READY",
         "expiresAt": "2099-01-01T00:00:00Z",
         "connectionMetadata": {},
@@ -53,10 +54,16 @@ class ConsoleGatewayTests(unittest.TestCase):
             captureBackend="console-dedicated",
             consoleAgentCommit="f664a07ec500c57bf9a508838f51b7c0305ba92d",
         ))
-        with patch.object(gateway, "selected_capture_backend", return_value="console-dedicated"):
+        with (
+            patch.dict(os.environ, {
+                "GPUBNB_WINDOWS_NATIVE_EXTENDED_LOCAL_OPT_IN": "true",
+                "GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "true",
+            }),
+            patch.object(gateway, "selected_capture_backend", return_value="console-dedicated"),
+        ):
             obj._reconcile_native_sessions()
         obj._start_native_runtime.assert_called_once_with(
-            "sess-1", "cloud-desktop", private_console_qualification=True,
+            "sess-1", "gaming", private_console_qualification=True,
         )
 
     def test_bad_authority_is_not_started(self):

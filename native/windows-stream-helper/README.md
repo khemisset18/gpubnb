@@ -1,7 +1,8 @@
 # GPUbnb Windows stream helper
 
 This directory contains the native user-mode authority boundary for the Windows
-Cloud Desktop backend and the fail-closed contract for Creator, CAD and Gaming.
+Cloud Desktop backend, the private Gaming qualification attempt, and the
+fail-closed contract for Creator and CAD.
 
 ## Current status
 
@@ -16,7 +17,12 @@ Cloud Desktop now has a Stage 3 candidate authority implementation:
 - `--status`, `--suspend`, `--resume` and `--stop` use a local named pipe
   whose DACL is restricted to the authority-launching Windows identity;
 - no media token or privileged runtime object is serialized to disk;
-- Creator, CAD and Gaming still fail closed at the authority boundary.
+- Creator and CAD still fail closed at the authority boundary.
+- Gaming still fails closed for commercial rentals. A server-marked,
+  no-payment private test may use the dedicated-console backend with Steam only;
+  that path requires one 1920x1080@60 physical monitor and a pre-provisioned,
+  distinct renter account. It never falls back to the provider session or
+  changes the physical display mode.
 
 This remains **not release-ready** until the physical Windows qualification
 passes. Native Windows bookability must remain disabled.
@@ -107,6 +113,8 @@ session.
 
 ## Application policy boundary
 
-Cloud Desktop rejects every application argument. Creator, CAD and Gaming keep
-their explicit Program Files allowlists, but their authority/runtime promotion
-is intentionally still fail-closed pending their later physical gates.
+Cloud Desktop rejects every application argument. Creator and CAD keep their
+explicit Program Files allowlists but remain fail-closed. Gaming is allowlisted
+for IddCx at 1280x720@60, and for the dedicated-console backend only when the
+server-issued private qualification marker selected that backend; this console
+attempt is not public eligibility or commercial qualification.

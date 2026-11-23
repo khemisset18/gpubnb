@@ -184,15 +184,28 @@ fn random_runtime_identity() -> Result<(u64, [u8; 16]), AuthorityError> {
     Ok((generation, nonce))
 }
 
-fn runtime_config<'a>(
+struct RuntimeConfigRequest<'a> {
     session_id: &'a str,
     workspace: crate::lifecycle::WorkspaceKind,
+    backend: RuntimeDisplayBackend,
     gpu_uuid: &'a str,
     application_path: Option<&'a str>,
     lease: &'a crate::renter_lease::RenterSessionLease,
     generation: u64,
     display_nonce: [u8; 16],
-) -> ServiceRuntimeConfig<'a> {
+}
+
+fn runtime_config<'a>(request: RuntimeConfigRequest<'a>) -> ServiceRuntimeConfig<'a> {
+    let RuntimeConfigRequest {
+        session_id,
+        workspace,
+        backend,
+        gpu_uuid,
+        application_path,
+        lease,
+        generation,
+        display_nonce,
+    } = request;
     ServiceRuntimeConfig {
         session_id,
         generation,
@@ -203,15 +216,17 @@ fn runtime_config<'a>(
         renter_user_sid: &lease.renter_user_sid,
         provider_user_sid: &lease.provider_user_sid,
         display_nonce,
-        width: if matches!(workspace, crate::lifecycle::WorkspaceKind::Gaming) {
-            1280
-        } else {
-            1920
+        // The IddCx Gaming monitor is a controlled virtual 720p surface.
+        // The private console qualification backend must match the one real
+        // physical monitor it is allowed to capture; its self-test qualifies
+        // a 1080p60 console mode and performs no display mutation.
+        width: match (workspace, backend) {
+            (crate::lifecycle::WorkspaceKind::Gaming, RuntimeDisplayBackend::IddCx) => 1280,
+            _ => 1920,
         },
-        height: if matches!(workspace, crate::lifecycle::WorkspaceKind::Gaming) {
-            720
-        } else {
-            1080
+        height: match (workspace, backend) {
+            (crate::lifecycle::WorkspaceKind::Gaming, RuntimeDisplayBackend::IddCx) => 720,
+            _ => 1080,
         },
         refresh_hz: 60,
     }
@@ -224,13 +239,16 @@ fn validate_runtime_workspace(
 ) -> Result<crate::lifecycle::WorkspaceKind, AuthorityError> {
     match (workspace, application_path, backend) {
         ("cloud-desktop", None, _) => Ok(crate::lifecycle::WorkspaceKind::CloudDesktop),
-        ("gaming", Some(path), RuntimeDisplayBackend::IddCx)
-            if [
-                r"C:\Program Files (x86)\Steam\steam.exe",
-                r"C:\Program Files\Steam\steam.exe",
-            ]
-            .iter()
-            .any(|candidate| candidate.eq_ignore_ascii_case(path)) =>
+        (
+            "gaming",
+            Some(path),
+            RuntimeDisplayBackend::IddCx | RuntimeDisplayBackend::DedicatedConsole,
+        ) if [
+            r"C:\Program Files (x86)\Steam\steam.exe",
+            r"C:\Program Files\Steam\steam.exe",
+        ]
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(path)) =>
         {
             Ok(crate::lifecycle::WorkspaceKind::Gaming)
         }
@@ -262,13 +280,21 @@ mod runtime_workspace_tests {
                 Some(r"C:\Program Files (x86)\Steam\steam.exe"),
                 RuntimeDisplayBackend::DedicatedConsole
             ),
-            Err(AuthorityError::UnsupportedWorkspace)
+            Ok(crate::lifecycle::WorkspaceKind::Gaming)
         );
         assert_eq!(
             validate_runtime_workspace(
                 "gaming",
                 Some(r"C:\Users\Owner\Downloads\steam.exe"),
                 RuntimeDisplayBackend::IddCx
+            ),
+            Err(AuthorityError::UnsupportedWorkspace)
+        );
+        assert_eq!(
+            validate_runtime_workspace(
+                "gaming",
+                Some(r"C:\Users\Owner\Downloads\steam.exe"),
+                RuntimeDisplayBackend::DedicatedConsole
             ),
             Err(AuthorityError::UnsupportedWorkspace)
         );
@@ -413,15 +439,16 @@ fn run_self_test_backend(backend: RuntimeDisplayBackend) -> Result<SelfTestRepor
             .map_err(|_| AuthorityError::LeaseGpuMismatch)?;
         let session_id = format!("selftest-{}", std::process::id());
         let (generation, display_nonce) = random_runtime_identity()?;
-        let config = runtime_config(
-            &session_id,
-            crate::lifecycle::WorkspaceKind::CloudDesktop,
-            &lease.gpu_uuid,
-            None,
-            &lease,
+        let config = runtime_config(RuntimeConfigRequest {
+            session_id: &session_id,
+            workspace: crate::lifecycle::WorkspaceKind::CloudDesktop,
+            backend,
+            gpu_uuid: &lease.gpu_uuid,
+            application_path: None,
+            lease: &lease,
             generation,
             display_nonce,
-        );
+        });
         let mut runtime = match backend {
             RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
             RuntimeDisplayBackend::DedicatedConsole => {
@@ -897,15 +924,16 @@ fn run_authority_child_backend(
 
         let lease = verified_lease(gpu_uuid)?;
         let (generation, display_nonce) = random_runtime_identity()?;
-        let config = runtime_config(
+        let config = runtime_config(RuntimeConfigRequest {
             session_id,
-            workspace_kind,
+            workspace: workspace_kind,
+            backend,
             gpu_uuid,
             application_path,
-            &lease,
+            lease: &lease,
             generation,
             display_nonce,
-        );
+        });
         let runtime = match backend {
             RuntimeDisplayBackend::IddCx => start_qualified_graphics_runtime(config),
             RuntimeDisplayBackend::DedicatedConsole => {

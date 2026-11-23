@@ -957,8 +957,8 @@ fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntim
             .iter()
             .any(|candidate| candidate.eq_ignore_ascii_case(path));
             qualified_steam_path
-                && config.width == 1280
-                && config.height == 720
+                && ((config.width == 1280 && config.height == 720)
+                    || (config.width == 1920 && config.height == 1080))
                 && config.refresh_hz == 60
         }
         _ => false,
@@ -973,6 +973,28 @@ fn validate_config(config: ServiceRuntimeConfig<'_>) -> Result<(), ServiceRuntim
         return Err(ServiceRuntimeError::InvalidConfiguration);
     }
     Ok(())
+}
+
+fn validate_config_for_backend(
+    config: ServiceRuntimeConfig<'_>,
+    backend: RuntimeDisplayBackend,
+) -> Result<(), ServiceRuntimeError> {
+    validate_config(config)?;
+    let valid_mode = match (config.workspace, backend) {
+        (WorkspaceKind::CloudDesktop, _) => config.width >= 1920 && config.height >= 1080,
+        (WorkspaceKind::Gaming, RuntimeDisplayBackend::IddCx) => {
+            config.width == 1280 && config.height == 720
+        }
+        (WorkspaceKind::Gaming, RuntimeDisplayBackend::DedicatedConsole) => {
+            config.width == 1920 && config.height == 1080
+        }
+        _ => false,
+    };
+    if valid_mode {
+        Ok(())
+    } else {
+        Err(ServiceRuntimeError::InvalidConfiguration)
+    }
 }
 
 // Preserve the exact physical IddCx failure class through the self-test boundary.
@@ -1017,7 +1039,7 @@ fn start_graphics_runtime(
     config: ServiceRuntimeConfig<'_>,
     backend: RuntimeDisplayBackend,
 ) -> Result<QualifiedGraphicsRuntime, ServiceRuntimeError> {
-    validate_config(config)?;
+    validate_config_for_backend(config, backend)?;
 
     let signer = worker_signer()?;
     let renter = query_renter_session_token(
@@ -1389,7 +1411,7 @@ mod tests {
     }
 
     #[test]
-    fn gaming_runtime_requires_qualified_steam_and_720p60() {
+    fn gaming_runtime_requires_qualified_steam_and_backend_specific_mode() {
         let gaming = ServiceRuntimeConfig {
             workspace: WorkspaceKind::Gaming,
             application_path: Some(r"C:\Program Files (x86)\Steam\steam.exe"),
@@ -1398,6 +1420,28 @@ mod tests {
             ..test_config()
         };
         assert_eq!(validate_config(gaming), Ok(()));
+        assert_eq!(
+            validate_config_for_backend(gaming, RuntimeDisplayBackend::IddCx),
+            Ok(())
+        );
+        let console_gaming = ServiceRuntimeConfig {
+            width: 1920,
+            height: 1080,
+            ..gaming
+        };
+        assert_eq!(validate_config(console_gaming), Ok(()));
+        assert_eq!(
+            validate_config_for_backend(console_gaming, RuntimeDisplayBackend::DedicatedConsole),
+            Ok(())
+        );
+        assert_eq!(
+            validate_config_for_backend(gaming, RuntimeDisplayBackend::DedicatedConsole),
+            Err(ServiceRuntimeError::InvalidConfiguration)
+        );
+        assert_eq!(
+            validate_config_for_backend(console_gaming, RuntimeDisplayBackend::IddCx),
+            Err(ServiceRuntimeError::InvalidConfiguration)
+        );
         assert_eq!(
             validate_config(ServiceRuntimeConfig {
                 application_path: None,
@@ -1408,14 +1452,6 @@ mod tests {
         assert_eq!(
             validate_config(ServiceRuntimeConfig {
                 application_path: Some(r"C:\Users\Owner\Downloads\steam.exe"),
-                ..gaming
-            }),
-            Err(ServiceRuntimeError::InvalidConfiguration)
-        );
-        assert_eq!(
-            validate_config(ServiceRuntimeConfig {
-                width: 1920,
-                height: 1080,
                 ..gaming
             }),
             Err(ServiceRuntimeError::InvalidConfiguration)

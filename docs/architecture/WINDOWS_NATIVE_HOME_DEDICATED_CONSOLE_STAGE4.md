@@ -115,8 +115,11 @@ The Windows Media DLL now exposes a **separate, non-default console capture ABI 
 - Agent `windows_native_desktop_preflight(..., capture_backend="console-dedicated")`
   and `launch_windows_native_workspace(..., private_console_qualification=True)`
   are explicitly opt-in for a controlled, **non-bookable** private campaign.
-  Default Agent/Gateway launches still use IddCx. Gateway readiness, usage and
-  reconnect recheck the exact backend on each active runtime.
+  The API can select this backend for a Gaming test attempt only through its
+  server-owned no-payment marker. That Steam path requires a distinct renter
+  account and one 1920x1080@60 physical monitor; the IddCx Gaming path remains
+  1280x720@60. Default Agent/Gateway launches still use IddCx. Gateway
+  readiness, usage and reconnect recheck the exact backend on each active runtime.
 - The existing same-origin browser GBNM/H.264 + GBNI input transport is reused.
   PC2 needs no installed client or extension.
 
@@ -129,10 +132,9 @@ of a genuine trusted physical screen; device identity needs further qualificatio
 ## Remaining gates before driverless rental can be qualified
 
 1. The console ABI, worker and Helper are wired for **private qualification**.
-   Make a separately authenticated, server-scoped and non-bookable test
-   orchestration path only after full code/signing provenance and explicit
-   authorization. Never silently select this backend for an ordinary listing
-   or merge its evidence into the IddCx `virtualDisplay` schema.
+   The no-payment Gaming attempt must remain separately authenticated,
+   server-scoped and non-bookable. Never silently select this backend for an
+   ordinary listing or merge its evidence into the IddCx `virtualDisplay` schema.
 2. Ensure any app/monitor capture always runs as the renter, never as the
    privileged service or provider; validate the user/window-station/desktop
    source and abort on any ambiguous topology transition.
