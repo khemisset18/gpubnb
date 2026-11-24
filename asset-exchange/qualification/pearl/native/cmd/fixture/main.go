@@ -149,6 +149,15 @@ func main() {
 	wrongDestination.TxOut[0].PkScript = source
 	badTimelock := buildSpend(refundLeaf, refundKey, p.Height-1, contractValue-1500, false, 0xfffffffe)
 	fundingOut := parent.TxOut[0]
+	// At the pinned node's default 1,000 grains/kvB policy the fee in
+	// grains equals vsize for this fixed-size witness. P2TR output dust
+	// uses three times output size plus the discounted spend estimate.
+	base := claim.SerializeSizeStripped()
+	feeFloor := int64(base + (claim.SerializeSize()-base+3)/4)
+	dustFloor := 3 * int64(claim.TxOut[0].SerializeSize()+41+(107+3)/4)
+	claimWithValue := func(value int64) string {
+		return checked(buildSpend(claimLeaf, claimKey, 0, value, true, 0xfffffffe), fundingOut)
+	}
 	for name, tx := range map[string]*wire.MsgTx{"wrong-secret": badSecret, "changed-destination": wrongDestination, "short-lock": badTimelock} {
 		if verify(tx, fundingOut) == nil {
 			panic(fmt.Sprintf("VM accepted %s", name))
@@ -159,10 +168,13 @@ func main() {
 		"destination": hex.EncodeToString(dest), "refund": checked(refund, fundingOut), "refundTxid": refund.TxHash().String(),
 		"claim": checked(claim, fundingOut), "claimTxid": claim.TxHash().String(), "badSecret": encode(badSecret),
 		"badDestination": encode(wrongDestination), "shortLock": encode(badTimelock),
-		"rbfBase":   checked(buildSpend(claimLeaf, claimKey, 0, contractValue-500, true, 0xfffffffd), fundingOut),
-		"rbfLower":  checked(buildSpend(claimLeaf, claimKey, 0, contractValue-400, true, 0xfffffffd), fundingOut),
-		"rbfHigher": checked(buildSpend(claimLeaf, claimKey, 0, contractValue-4000, true, 0xfffffffd), fundingOut),
-		"dust":      checked(buildSpend(claimLeaf, claimKey, 0, 1, true, 0xfffffffe), fundingOut),
-		"zeroFee":   checked(buildSpend(claimLeaf, claimKey, 0, contractValue, true, 0xfffffffe), fundingOut),
+		"rbfBase":        checked(buildSpend(claimLeaf, claimKey, 0, contractValue-500, true, 0xfffffffd), fundingOut),
+		"rbfLower":       checked(buildSpend(claimLeaf, claimKey, 0, contractValue-400, true, 0xfffffffd), fundingOut),
+		"rbfHigher":      checked(buildSpend(claimLeaf, claimKey, 0, contractValue-4000, true, 0xfffffffd), fundingOut),
+		"dust":           checked(buildSpend(claimLeaf, claimKey, 0, 1, true, 0xfffffffe), fundingOut),
+		"zeroFee":        checked(buildSpend(claimLeaf, claimKey, 0, contractValue, true, 0xfffffffe), fundingOut),
+		"feeFloorGrains": feeFloor, "dustFloorGrains": dustFloor,
+		"belowFee": claimWithValue(contractValue - feeFloor + 1), "atFee": claimWithValue(contractValue - feeFloor),
+		"belowDust": claimWithValue(dustFloor - 1), "atDust": claimWithValue(dustFloor),
 	})
 }

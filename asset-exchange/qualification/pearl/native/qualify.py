@@ -49,7 +49,7 @@ def check_recovery(verifier, capsule, expected, *, valid=True):
         require(result.returncode != 0, "changed public recovery intent accepted")
 
 
-def assess(binary, verifier, material, network, temp, expected_commitment, fee_bump):
+def assess(binary, verifier, material, network, temp, expected_commitment, fee_bump, fee_boundaries):
     f = json.loads((material / "fixture.json").read_text())
     require(f["network"] == network and f["magic"] == MAGIC[network], "wrong network fixture")
     capsule = recovery_input(f)
@@ -88,6 +88,18 @@ def assess(binary, verifier, material, network, temp, expected_commitment, fee_b
             reject(a, f["badSecret"], "wrong-preimage", ("script", "verify"))
             reject(a, f["dust"], "dust", ("dust",))
             reject(a, f["zeroFee"], "zero-fee-admission", ("fee",))
+            if fee_boundaries:
+                fee, dust = f["feeFloorGrains"], f["dustFloorGrains"]
+                reject(a, f["belowFee"], "one-grain-under-relay-floor",
+                       (f"has {fee-1} fees which is under the required amount of {fee}",))
+                reject(a, f["belowDust"], "one-grain-under-dust-floor", (f"payment is dust: {dust-1}",))
+                at_fee, at_dust = accept(a, f["atFee"]), accept(a, f["atDust"])
+                require(at_fee["allowed"] and at_fee["vsize"] == fee and
+                        at_fee["fees"]["base"] * 100_000_000 == fee, "exact relay floor not admitted")
+                require(at_dust["allowed"] and at_dust["fees"]["base"] * 100_000_000 == 1_000_000-dust,
+                        "exact P2TR dust floor not admitted")
+                record("exact-policy-boundaries", fee_grains=fee, vsize=at_fee["vsize"],
+                       dust_grains=dust, fee_txid=at_fee["txid"], dust_txid=at_dust["txid"])
             valid_claim = accept(a, f["claim"])
             require(valid_claim["allowed"], "claim refused")
             claim_id = f["claimTxid"]
@@ -186,12 +198,14 @@ if __name__ == "__main__":
     parser.add_argument("--verify-refund", type=Path, required=True)
     parser.add_argument("--commitment", required=True, help="SHA-256 retained separately at preparation")
     parser.add_argument("--fee-bump", action="store_true", help="exercise opt-in replacement using the prepared fee variants")
+    parser.add_argument("--fee-boundaries", action="store_true", help="require the one-grain fee and dust boundary fixtures")
     parser.add_argument("--material", type=Path, required=True)
     parser.add_argument("--network", choices=tuple(MAGIC), required=True)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="prl-observers-") as root:
         directory = Path(root).resolve()
         assess(args.pearld.resolve(strict=True), args.verify_refund.resolve(strict=True),
-               args.material.resolve(strict=True), args.network, directory, args.commitment, args.fee_bump)
+               args.material.resolve(strict=True), args.network, directory, args.commitment,
+               args.fee_bump, args.fee_boundaries)
     require(not directory.exists(), "node directories still present")
     record("qualification-run-complete", network=args.network, data_removed=True)
