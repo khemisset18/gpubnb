@@ -1,0 +1,44 @@
+=== RUN   TestDescendantsBounded
+=== PAUSE TestDescendantsBounded
+=== RUN   TestRBFSpendsParentBeyondAncestorCap
+=== PAUSE TestRBFSpendsParentBeyondAncestorCap
+=== RUN   TestRBF
+=== PAUSE TestRBF
+=== RUN   TestStaticFeeFloor
+=== PAUSE TestStaticFeeFloor
+=== RUN   TestCalcMinRequiredTxRelayFee
+--- PASS: TestCalcMinRequiredTxRelayFee (0.00s)
+=== RUN   TestDust
+--- PASS: TestDust (0.00s)
+=== CONT  TestDescendantsBounded
+=== CONT  TestRBF
+=== RUN   TestRBF/non-replaceable_parent
+=== CONT  TestStaticFeeFloor
+=== CONT  TestRBFSpendsParentBeyondAncestorCap
+--- PASS: TestStaticFeeFloor (0.02s)
+=== RUN   TestRBF/reject_replacement_policy
+=== RUN   TestRBF/exceeds_maximum_conflicts
+--- PASS: TestRBFSpendsParentBeyondAncestorCap (0.17s)
+--- PASS: TestDescendantsBounded (0.18s)
+=== RUN   TestRBF/maximum_direct_conflicts
+=== RUN   TestRBF/exceeds_maximum_direct_conflicts
+=== RUN   TestRBF/replacement_spends_parent_transaction
+=== RUN   TestRBF/insufficient_fee_rate
+=== RUN   TestRBF/insufficient_absolute_fee
+=== RUN   TestRBF/spends_new_unconfirmed_input
+=== RUN   TestRBF/higher_fee
+=== RUN   TestRBF/inherited_replacement
+--- PASS: TestRBF (0.61s)
+    --- PASS: TestRBF/non-replaceable_parent (0.02s)
+    --- PASS: TestRBF/reject_replacement_policy (0.00s)
+    --- PASS: TestRBF/exceeds_maximum_conflicts (0.22s)
+    --- PASS: TestRBF/maximum_direct_conflicts (0.16s)
+    --- PASS: TestRBF/exceeds_maximum_direct_conflicts (0.18s)
+    --- PASS: TestRBF/replacement_spends_parent_transaction (0.00s)
+    --- PASS: TestRBF/insufficient_fee_rate (0.00s)
+    --- PASS: TestRBF/insufficient_absolute_fee (0.01s)
+    --- PASS: TestRBF/spends_new_unconfirmed_input (0.00s)
+    --- PASS: TestRBF/higher_fee (0.01s)
+    --- PASS: TestRBF/inherited_replacement (0.01s)
+PASS
+ok  	github.com/pearl-research-labs/pearl/node/mempool	0.636s
