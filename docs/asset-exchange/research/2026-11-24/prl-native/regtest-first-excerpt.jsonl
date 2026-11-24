@@ -1,0 +1,8 @@
+{"case": "independent-verifier-before-funding", "receipt_sha256": "32320777d50ac39a594dec130b8b133ae1ead63819aa2cb66f93c646e360d3f6", "refund": "b3e0cc75d13b6e47deb1e33f65627b33c346d1738e112557388ba6f24f7c11dc", "wrong_amount_rejected": true, "wrong_destination_rejected": true, "wrong_magic_rejected": true}
+{"case": "two-independently-validated-chains", "height": 100, "tip": "61bfa7f892de105a002c93f8f37db8025d5eedce05660079ac74025599e40f36"}
+{"block": "eb812dc3ee42d819ea1333fa2a46373fe03e606cfa8a176573fc8da93f801221", "case": "funding-confirmed", "txid": "ae55a9bfd5a59cd2bd1f2b6a07f70fff5ee8a7507a6fb90e89310e8de8c5ac32", "value_grains": 1000000}
+{"a_tip": "2dacd3db6a2fbe6f24e18b2c56aab0f31381fd51c62aa97085144ec5b2eb0cd2", "b_tip": "eb812dc3ee42d819ea1333fa2a46373fe03e606cfa8a176573fc8da93f801221", "case": "claim-confirmed-observers-disagree", "claim": "d9ee5f9b2a32dcd1f330061d4ab390ad4c97e804d1b253eb290e4dd9bbe24560"}
+{"archived_tip": "456a101932db81414c334c9d34a087573ce8807744e6214f7f8fc15f7436196d", "case": "crash-recovery", "recovered_height": 0, "revalidated_blocks": 104}
+{"block": "0b077267b648697442a9f37262e6ff342414e26cab6fa8dfa4fcf268eceaae4f", "case": "recovered-after-restart", "fee_grains": 1500, "height": 105, "paid_grains": 998500, "refund": "b3e0cc75d13b6e47deb1e33f65627b33c346d1738e112557388ba6f24f7c11dc"}
+{"agreed_tip": "0b077267b648697442a9f37262e6ff342414e26cab6fa8dfa4fcf268eceaae4f", "canonical_refund": "b3e0cc75d13b6e47deb1e33f65627b33c346d1738e112557388ba6f24f7c11dc", "case": "longer-fork-disconnects-claim", "orphan": "2dacd3db6a2fbe6f24e18b2c56aab0f31381fd51c62aa97085144ec5b2eb0cd2", "peers": 0}
+{"case": "qualification-run-complete", "data_removed": true, "network": "regtest"}

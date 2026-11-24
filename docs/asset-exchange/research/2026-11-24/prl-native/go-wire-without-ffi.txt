@@ -1,0 +1,52 @@
+go: downloading github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
+go: downloading golang.org/x/crypto v0.58.0
+go: downloading github.com/stretchr/testify v1.12.1
+go: downloading github.com/btcsuite/btclog v1.0.0
+go: downloading github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
+go: downloading github.com/decred/dcrd/crypto/blake256 v1.1.0
+go: downloading go.yaml.in/yaml/v3 v3.0.5
+go: downloading golang.org/x/sys v0.49.0
+ok  	github.com/pearl-research-labs/pearl/node/txscript	1.238s
+--- FAIL: TestCertificateV2_SerializeDeserialize (0.00s)
+    certificate_test.go:62: 
+        	Error Trace:	/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:49
+        	            				/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:62
+        	Error:      	Received unexpected error:
+        	            	zkpow: build with -tags zkpow to enable mining
+        	Test:       	TestCertificateV2_SerializeDeserialize
+        	Messages:   	mining should succeed
+--- FAIL: TestCertificateV2_Verify (0.00s)
+    certificate_test.go:85: 
+        	Error Trace:	/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:49
+        	            				/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:85
+        	Error:      	Received unexpected error:
+        	            	zkpow: build with -tags zkpow to enable mining
+        	Test:       	TestCertificateV2_Verify
+        	Messages:   	mining should succeed
+--- FAIL: TestCertificateV1_VerifyErrors (0.00s)
+    certificate_test.go:94: 
+        	Error Trace:	/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:49
+        	            				/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:94
+        	Error:      	Received unexpected error:
+        	            	zkpow: build with -tags zkpow to enable mining
+        	Test:       	TestCertificateV1_VerifyErrors
+        	Messages:   	mining should succeed
+--- FAIL: TestMsgCertificate_MoE_RoundTrip (0.00s)
+    certificate_test.go:161: 
+        	Error Trace:	/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:49
+        	            				/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:161
+        	Error:      	Received unexpected error:
+        	            	zkpow: build with -tags zkpow to enable mining
+        	Test:       	TestMsgCertificate_MoE_RoundTrip
+        	Messages:   	mining should succeed
+--- FAIL: TestCertificateV3_MineVerifyRoundTrip (0.00s)
+    certificate_test.go:192: 
+        	Error Trace:	/workspace/scratch/3285715d1c94/runtime/pearl-src/node/wire/certificate_test.go:192
+        	Error:      	Received unexpected error:
+        	            	zkpow: build with -tags zkpow to enable mining
+        	Test:       	TestCertificateV3_MineVerifyRoundTrip
+        	Messages:   	V3 mining should succeed
+FAIL
+FAIL	github.com/pearl-research-labs/pearl/node/wire	0.238s
+ok  	github.com/pearl-research-labs/pearl/node/chaincfg	0.003s
+FAIL

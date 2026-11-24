@@ -1,0 +1,16 @@
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c53", "network": "simnet", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "recovery-intent-commitment", "network": "simnet", "sha256": "37da1c739efe5965c7a953e6c7a0943d7a67c87720db0082c0c4135a1594e672"}
+{"case": "refund-verified-before-funding", "funding": "6b7154e0fdb320ac57b1ff170d95cfdf77a92c1e739eb388e60b5a7eaa6b27c3", "network": "simnet", "refund": "6db9b99f563ae670513699a84ebb6e73bd879ba013791c137f4e899923e73a43", "signer_exited": 0, "submitted": false}
+{"block": "8922fd57ad4a2f180c6e8f6924182f57c083131a7904ab270c98698947f6734a", "case": "generated", "height": 1, "network": "simnet"}
+{"block": "842aca7fb3feee6ffc32b29e4d152daf64855052ac93518b174bfbdb7198068c", "case": "generated", "height": 10, "network": "simnet"}
+{"block": "809ec4e9ea26149b525dca537e48a782f8141814a4169010dcb1a2ed3bc40ae2", "case": "generated", "height": 20, "network": "simnet"}
+{"block": "723984650caae78d2ddcc58947f30df794f8565ec00bb2c1a77a8605bafe0abf", "case": "generated", "height": 30, "network": "simnet"}
+{"block": "159045bd9fa8d2d48f1a34d0f3a03f8c13a29905a643872c1107a05c776dde31", "case": "generated", "height": 40, "network": "simnet"}
+{"block": "93df27b255434265d5c19a97651cd86ecbd51b1c110713bcab85a2af526830c6", "case": "generated", "height": 50, "network": "simnet"}
+{"block": "b561227f3562eb1c673be630bc7094f1758c98f45f0abc36bb8cbf157e875950", "case": "generated", "height": 60, "network": "simnet"}
+{"block": "f8ad6f456efa4581a88c63061fd2504ade3929d9939386e1196b001ef204542f", "case": "generated", "height": 70, "network": "simnet"}
+{"block": "b3f996362740c20a6599850bc52286994b0715588f76482102dba95d39f60384", "case": "generated", "height": 80, "network": "simnet"}
+{"block": "7031e52b2a17d8693e3d2c0b1df4628b446f7a2b3bf748826e557aaff465c489", "case": "generated", "height": 90, "network": "simnet"}
+{"block": "3b36d843772c0c6f37d5e341052b550b0014aad158bd416b753674357a9348c8", "case": "generated", "height": 100, "network": "simnet"}
+{"case": "node-stopped", "exit": 0, "network": "simnet"}
+{"case": "preparation-complete", "data_removed": true, "network": "simnet"}

@@ -1,0 +1,71 @@
+initdb postgres (PostgreSQL) 16.16 system_identifier=7711834024547172369 database=prl_scratch_f2df10ebaff2cc40 mode=700
+Owned loopback + SCRAM; empty template0 database; non-superuser schema owner
+[PRL scratch] Applying 001..009 in the private disposable DB
+  asset-exchange/db/migrations/001_foundation.sql
+  asset-exchange/db/migrations/002_atomic_offer_operations.sql
+  asset-exchange/db/migrations/003_atomic_offer_publish.sql
+  asset-exchange/db/migrations/004_exchange_sessions.sql
+  asset-exchange/db/migrations/005_sso_replay.sql
+  asset-exchange/db/migrations/006_admin_fee_policy.sql
+  asset-exchange/db/migrations/007_signed_cancellation.sql
+  asset-exchange/db/migrations/008_financial_immutability.sql
+  asset-exchange/db/migrations/009_trade_terms_signatures.sql
+[PRL scratch] Seeding fake historical records BEFORE quarantine
+[PRL scratch] Applying migrations 010/011/012 ONLY in this disposable DB
+[PRL scratch] Checking PRL replay, SQL triggers and non-PRL behaviour
+BEGIN
+SET
+SET
+SET
+DO
+DO
+ROLLBACK
+[PRL scratch] Checking PostgreSQL-native publication, cancellation and terms replay
+BEGIN
+SET
+SET
+SET
+DO
+DO
+ROLLBACK
+BEGIN
+SET
+DO
+ALTER TABLE
+UPDATE 1
+ status |     offer_id     
+--------+------------------
+ OPEN   | atomic-offer-001
+(1 row)
+
+DO
+ROLLBACK
+[PRL scratch] Replay and atomicity assertions passed.
+BEGIN
+DO
+GRANT
+GRANT
+SET
+ reader_visible_offers 
+-----------------------
+                     4
+(1 row)
+
+DO
+ROLLBACK
+[1/10] accept-vs-accept
+[2/10] accept-vs-cancel
+[3/10] idempotent retry
+[4/10] concurrent identical acceptance is durably idempotent
+[5/10] idempotency key mismatch fails
+[6/10] transition epoch blocks new acceptance
+[7/10] financial immutability guards
+[8/10] concurrent identical publication is durably idempotent
+[9/10] concurrent identical cancellation is durably idempotent
+[10/10] concurrent identical terms signature is durably idempotent
+All PostgreSQL concurrency/idempotency/immutability tests passed.
+PASS 010 repeat rejected atomically (42723); 011 and 012 replay; catalogue/row SHA256=127301d41e3a591ed9d563ca3c4d309ee593635433c0f29dbb43130abb8f8f75
+PASS client loss before COMMIT and retry after discarded committed reply
+postmaster stopped, exit=0
+disposing owned temporary directory prl-fresh-qi_522_s
+PASS private cluster and synthetic credentials removed
