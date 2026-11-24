@@ -77,3 +77,19 @@ python3 "$REPO_ROOT/asset-exchange/db/test/prl_disposable.py" --pg-bin "$LAB/pg/
 ```
 
 Les tests de politique amont construisent leur propre état UTXO. Leurs résultats et ceux du RPC de vrai nœud sont consignés séparément. Les commandes Node et Python figurent dans le [rapport PostgreSQL et API](../../../PEARL_PRL_POSTGRES_NATIVE_2026-11-24.md).
+
+## Bibliothèque ZK amont et tests wire
+
+Avec Rust et Cargo 1.100.0 et le compilateur C du système, la campagne a construit la bibliothèque amont avec les deux caches de circuits requis par cette révision. Le premier essai de `wire` en mode Go portable avait cinq échecs dans les tests de certificats. La campagne avec le tag `zkpow` exécute la suite complète de ce paquet. La politique de frais et les deux tests TLS sont comptés séparément. [Compilation des circuits](upstream-zk-build-cache.txt) · [Compilation FFI](upstream-zk-build-ffi.txt) · [Test natif amont](upstream-wire-zkpow.txt) · [Empreintes](upstream-zk-tools.txt)
+
+```bash
+(cd "$LAB/pearl/zk-pow" && cargo run --locked --release --bin build_cache \
+    src/circuit/v2_cache.bin src/v1/v1_cache.bin)
+(cd "$LAB/pearl/zk-pow/bindings/go" && cargo build --locked --release)
+(cd "$LAB/pearl" && CGO_ENABLED=1 RAYON_NUM_THREADS=4 \
+    go test -mod=readonly -count=1 -timeout=18m -tags zkpow ./node/wire)
+(cd "$LAB/pearl" && CGO_ENABLED=0 go test -mod=readonly -count=1 \
+    -skip '^Test(NewTLSCertPair|WriteTLSCertPair)$' ./node/btcutil)
+(cd "$LAB/pearl" && CGO_ENABLED=0 go test -mod=readonly -count=1 \
+    -run '^Test(NewTLSCertPair|WriteTLSCertPair)$' ./node/btcutil)
+```

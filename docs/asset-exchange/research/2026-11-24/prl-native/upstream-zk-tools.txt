@@ -1,0 +1,8 @@
+rustc 1.100.0 (0ef1bc386 2026-11-09)
+cargo 1.100.0 (3acc79c0c 2026-11-05)
+7e29ce07d7c6e92d1826870575ba27d57fff6cb3e754aa57d99099cb88fab35d  runtime/rust-native/pkg/cargo-1.100.0-x86_64-unknown-linux-gnu.tar.xz
+4591b6486594ded52ecd6135db95bf9355bbd3ca7a380888b141528bbcf9a5d4  runtime/rust-native/pkg/rust-std-1.100.0-x86_64-unknown-linux-gnu.tar.xz
+f1d0b1dec81dab6f523cd098507763487b0d4bd7fd2c87582f154128719be03b  runtime/rust-native/pkg/rustc-1.100.0-x86_64-unknown-linux-gnu.tar.xz
+565d107bfbbae2931a9ad3feaf2deba25b4cc8c77ae620e85af8e7257fdf35ff  runtime/rust-native/target/release/libzk_pow_ffi.a
+787bfef40d8d3671cb126c8994fa9e8967bc01bcdbfe3998e69345b149ad1d3d  runtime/rust-native/src/zk-pow/src/circuit/v2_cache.bin
+cc8b29a9cc91da2cda6fb29dc7ea74de132363556120310c9d59e5abd8e51d0d  runtime/rust-native/src/zk-pow/src/v1/v1_cache.bin

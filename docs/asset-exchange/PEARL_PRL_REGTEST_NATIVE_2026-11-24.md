@@ -36,6 +36,10 @@ L'arbre Taproot utilise le point interne NUMS de BIP341. La feuille claim exige 
 
 **Avant toute soumission de financement**, le signataire exécute le refund dans la VM Pearl et quitte. Le vérificateur Go distinct, sans portefeuille, clé ni RPC, contrôle la chaîne, le prevout, la destination, les montants, le type de sighash, la feuille de refund, le bloc de contrôle et la signature. L'empreinte SHA-256 de l'intention et des transactions publiques est conservée séparément. Le harnais la relit avant financement et après panne. Une copie de la capsule ou un script changé ne constitue pas sa propre racine de confiance. Les capsules publiées contiennent le financement et le remboursement déjà signés pour ces seuls UTXO fictifs. [Vérificateur](../../asset-exchange/qualification/pearl/native/cmd/verifyrefund/main.go) · [Capsule du premier Regtest](research/2026-11-24/prl-native/regtest-material-refund.json)
 
+Le financement du premier scénario provenait du signataire initial, SHA-256 `1e97ff1ae0c836b07f022630ec15ebaca79edfa68f53c05a6c08872fd03b84cf`. Le signataire des scénarios aux seuils a l'empreinte `840984dc2f335707dc61390654ab7614aba0622c280ba43ec9f8a4066614fe0f`. Le vérificateur de remboursement est identique pour ces exécutions, `4ef30d28fdf3fcaa6545ff4f865b6580e793e4a8ac7fd73fb133dc5ca90ffa8b`.
+
+La preuve de récupération s'arrête à l'UTXO confirmé sur la destination choisie avant financement. La clé de cette destination était elle aussi éphémère. La campagne ne démontre donc pas une dépense ultérieure par un bénéficiaire réel, la garde de sa clé, ni la disponibilité d'un dépositaire d'archives indépendant. Le contrôle de la feuille refund ne reconstruit pas à lui seul la feuille claim cachée dans la preuve de Merkle. Le nœud valide séparément le claim complet sur l'autre branche.
+
 ## Résultats natifs
 
 Dans la première campagne Regtest, les deux nœuds ont validé la même histoire de 100 blocs avant le premier financement. A a confirmé le claim. B a conservé l'UTXO sur sa branche. Au tip 103, le refund était prématuré. Au tip 104, il était admissible pour le prochain bloc. Après SIGKILL, B a retrouvé son genesis sur disque, a revalidé 104 blocs d'une archive de données publiques et a récupéré le même UTXO. L'envoi des octets présignés a payé 998 500 grains au destinataire convenu. Le bloc 105 a emporté la réorganisation de A. L'UTXO du claim a disparu et le refund est devenu canonique pour les deux processus. [Transactions et hash des blocs](research/2026-11-24/prl-native/regtest-first-excerpt.jsonl)
@@ -43,6 +47,21 @@ Dans la première campagne Regtest, les deux nœuds ont validé la même histoir
 L'admission native a refusé un refund prématuré, une mauvaise préimage, une séquence temporelle insuffisante dans la transaction, une destination changée après signature, une sortie de 1 grain, des frais nuls et une dépense concurrente. L'appel RPC demandé à une hauteur future a renvoyé le code `-1`. Ces motifs sont contrôlés dans le harnais. La politique standard est explicitement activée par `--rejectnonstd`. Une exécution de diagnostic avec la politique Simnet par défaut a accepté le refund prématuré en mempool. Ce résultat à lui seul ne prouve aucune inclusion dans un bloc valable. [Diagnostic Simnet](research/2026-11-24/prl-native/default-simnet-policy.txt) · [Contrôles d'admission](../../asset-exchange/qualification/pearl/native/qualify.py)
 
 En Simnet, le nœud a rejeté 154 grains de frais et admis 155 pour un claim de 155 vbytes. Sur une sortie P2TR il a rejeté 332 grains et admis 333. Un remplacement à 400 grains a échoué contre une transaction à 500. Celui à 4 000 grains a évincé la transaction originale et a été confirmé. Les cas aux seuils sont soumis à `testmempoolaccept`. Le remplacement positif est aussi soumis à `sendrawtransaction` puis recherché dans le bloc. [Journal Simnet complet](research/2026-11-24/prl-native/simnet.jsonl) · [Politique mempool amont](https://github.com/pearl-research-labs/pearl/blob/3db05e0de0ca90c3a043abd927b968cf53bcd4c8/node/mempool/policy.go)
+
+Les trois paquets Go de la version amont, `txscript`, `chaincfg` et `mempool`, passent. Les cas de politique couvrent le graphe d'ancêtres, les conflits directs maximaux, les entrées non confirmées et le plancher de frais sur un état UTXO de test. Les deux tests amont de génération de certificats TLS, `TestNewTLSCertPair` et `TestWriteTLSCertPair`, échouent ici lors de l'énumération des interfaces par Netlink. Le reste de `btcutil` passe. Le RPC du laboratoire utilise un mot de passe éphémère sur loopback. La validation TLS de production demeure ouverte. [Paquets Go](research/2026-11-24/prl-native/upstream-selected.txt) · [Cas de frais amont](research/2026-11-24/prl-native/upstream-fee-policy.txt) · [Échecs TLS](research/2026-11-24/prl-native/upstream-tls.txt) · [Autres cas btcutil](research/2026-11-24/prl-native/upstream-btcutil-portable.txt)
+
+La suite intégrale `node/wire` passe aussi avec la bibliothèque Rust ZK compilée depuis la même révision et les caches de circuits v2 et v1. Les cinq tests de certificats initialement en échec sans la FFI ont donc été réexécutés avec leur dépendance native. [Échec sans FFI](research/2026-11-24/prl-native/go-wire-without-ffi.txt) · [Résultat avec FFI](research/2026-11-24/prl-native/upstream-wire-zkpow.txt)
+
+## Nature des vérifications
+
+| Catégorie | Exécution et portée |
+|---|---|
+| Statique | Syntaxe de 110 modules, lecture des migrations et des paramètres de consensus, vérification des chemins du diff. |
+| Unitaire | Suites Go de Pearl et tests de validation d'Asset Exchange. |
+| Doubles de test | Les 343 tests Node incluent des doubles de dépôts et de vérificateurs. Les 94 tests Python d'Exchange utilisent des fixtures hors ligne. |
+| PostgreSQL natif | Processus PostgreSQL 16.16, transactions avec des clients séparés et rôles PostgreSQL réels. |
+| Blockchain native | `pearld` v1.5.8 sur Regtest, avec PoUW, et séparément sur Simnet, avec le certificat simplifié du protocole. |
+| Matériel physique | BLOCKED. Aucun appareil ou écran de confiance testé pour le contrat PRL. |
 
 ## Matrice de décision
 

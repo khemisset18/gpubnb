@@ -2,7 +2,9 @@
 
 **PASS en laboratoire pour les migrations 010–012, l'atomicité et les contrôles détaillés ci-dessous.** PostgreSQL 16.16 a créé un cluster neuf, exécuté les 12 migrations et détruit ses données et identifiants. Les demandes d'offre et de règlement PRL restent fermées dans Asset Exchange. [Journal PostgreSQL](research/2026-11-24/prl-native/postgres-final.txt) · [Rapport blockchain et matrice P0–P9](PEARL_PRL_REGTEST_NATIVE_2026-11-24.md)
 
-La branche `qual/prl-postgres-native-397` part de `19055e1a47296d611a950a20361341cc0e7b29f7`. Le code SQL et les suites Exchange ont été exécutés à `7dbe541356f59b26e253bbe9e8326194e720d10e`. La PR cible la branche expérimentale de #397. [PR #397](https://github.com/khemisset18/gpubnb/pull/397) · [PR brouillon #399](https://github.com/khemisset18/gpubnb/pull/399)
+La branche `qual/prl-postgres-native-397` part de `19055e1a47296d611a950a20361341cc0e7b29f7`. Le code SQL et les suites Exchange ont été exécutés à `7dbe541356f59b26e253bbe9e8326194e720d10e`. Le commit du harnais natif étendu, `a595d3cf6f6a1ba1ddb112b0de4cdbb4b7bece65`, a également repassé les 343 tests Node, les 94 tests Python, le contrôle de syntaxe et la campagne PostgreSQL complète. [SQL sur ce commit](research/2026-11-24/prl-native/postgres-edges.txt) · [Node](research/2026-11-24/prl-native/node-edges.txt) · [Python](research/2026-11-24/prl-native/python-edges.txt) · [Syntaxe](research/2026-11-24/prl-native/syntax-edges.txt)
+
+La PR cible la branche expérimentale de #397. [PR #397](https://github.com/khemisset18/gpubnb/pull/397) · [PR brouillon #399](https://github.com/khemisset18/gpubnb/pull/399)
 
 ## Isolation constatée
 
@@ -31,7 +33,7 @@ Un ancien test attendait `23505` quand la preuve d'annulation changeait à empre
 | Syntaxe | 110 modules JavaScript contrôlés. [Journal](research/2026-11-24/prl-native/syntax-final.txt) |
 | CI GitHub au commit SQL testé | Fondation Exchange, concurrence PostgreSQL et CI générale réussies. [Fondation](https://github.com/khemisset18/gpubnb/actions/runs/45355140919) · [PostgreSQL](https://github.com/khemisset18/gpubnb/actions/runs/45355140807) · [CI](https://github.com/khemisset18/gpubnb/actions/runs/45355141087) |
 
-Le manifeste d'inventaire d'octobre attendait l'ancienne empreinte du registre. La différence entre les deux révisions porte sur le symbole et la quarantaine PRL ainsi que le paramètre qui applique cette quarantaine. Une comparaison profonde a retrouvé les 25 autres entrées identiques. Le manifeste conserve les deux empreintes. Les deux valeurs synthétiques d'idempotence signalées par Gitleaks sont désormais générées pendant les tests. [Manifeste](research/2026-10-30/SIX_CHAIN_READINESS.json) · [CI après correction](https://github.com/khemisset18/gpubnb/actions/runs/45355141087)
+Le manifeste d'inventaire d'octobre attendait l'ancienne empreinte du registre. La différence entre les deux révisions porte sur le symbole et la quarantaine PRL ainsi que le paramètre qui applique cette quarantaine. Une comparaison profonde a retrouvé les 25 autres entrées identiques. Le manifeste conserve les deux empreintes. Les deux valeurs synthétiques d'idempotence signalées par Gitleaks sont désormais générées pendant les tests. [Comparaison du registre](research/2026-11-24/prl-native/registry-comparison.txt) · [Manifeste](research/2026-10-30/SIX_CHAIN_READINESS.json) · [CI après correction](https://github.com/khemisset18/gpubnb/actions/runs/45355141087)
 
 ## Commandes de reproduction
 
