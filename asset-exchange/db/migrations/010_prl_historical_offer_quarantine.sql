@@ -18,6 +18,8 @@ DECLARE
   v_key text;
   v_chain text;
   v_parts text[];
+  -- Match ECMAScript String.trim() used by the Exchange API, independently of LC_CTYPE.
+  v_trim_chars CONSTANT text := U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF';
 BEGIN
   FOREACH v_key IN ARRAY ARRAY[p_give_asset_key, p_want_asset_key] LOOP
     IF v_key IS NULL
@@ -41,7 +43,7 @@ BEGIN
        OR v_parts[2] !~ '^[a-z0-9][a-z0-9._:-]{0,63}$'
        OR v_parts[3] NOT IN ('NATIVE', 'TOKEN', 'NFT')
        OR length(v_parts[4]) NOT BETWEEN 1 AND 256
-       OR v_parts[4] <> btrim(v_parts[4])
+       OR v_parts[4] <> btrim(v_parts[4], v_trim_chars)
        OR v_parts[5] !~ '^(0|[1-9][0-9]{0,2})$' THEN
       RAISE EXCEPTION 'malformed stored asset key'
         USING ERRCODE = '55000';

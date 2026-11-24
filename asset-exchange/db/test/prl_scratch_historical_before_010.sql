@@ -85,5 +85,8 @@ INSERT INTO offers (
   clock_timestamp() + interval '1 day', 'OPEN'
 );
 
+-- Historical, genuinely matching maker terms and replay identity from before quarantine.
+SELECT * FROM submit_trade_terms_signature_atomic('ae-test-01','prl-trade-want-0001',
+  'maker:test:prl','MAKER',repeat('6',64),decode('aa','hex'),'legacy-prl-terms-01',repeat('8',64));
 
 COMMIT;

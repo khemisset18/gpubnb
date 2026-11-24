@@ -1,5 +1,6 @@
 """Run the Pearl SQL campaign against a cluster created and destroyed by this process."""
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import secrets
@@ -14,6 +15,69 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def run(argv, env, **options):
     return subprocess.run(argv, env=env, cwd=ROOT, text=True, check=True, **options)
+
+
+def migration_replay_cases(env):
+    cli = ["psql", "-XwAtq", "-v", "ON_ERROR_STOP=1"]
+    catalogue = """
+      SELECT pg_get_functiondef(oid) FROM pg_proc WHERE pronamespace='asset_exchange'::regnamespace ORDER BY oid;
+      SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid IN
+        (SELECT oid FROM pg_class WHERE relnamespace='asset_exchange'::regnamespace) ORDER BY oid;
+      SELECT to_jsonb(o) FROM asset_exchange.offers o ORDER BY offer_id;
+      SELECT to_jsonb(t) FROM asset_exchange.trades t ORDER BY trade_id;
+      SELECT to_jsonb(e) FROM asset_exchange.trade_events e ORDER BY event_id;
+      SELECT to_jsonb(i) FROM asset_exchange.idempotency_records i ORDER BY scope,idempotency_key;"""
+    before = run(cli, env, input=catalogue, capture_output=True).stdout
+    migrations = ROOT / "asset-exchange/db/migrations"
+    once = next(migrations.glob("010_*.sql"))
+    repeat = subprocess.run([*cli, "-v", "VERBOSITY=verbose", "-f", once], env=env, cwd=ROOT,
+                            text=True, capture_output=True)
+    if repeat.returncode != 3 or "42723:" not in repeat.stderr:
+        raise RuntimeError("unexpected result repeating one-time migration 010")
+    for prefix in ("011", "012"):
+        run([*cli, "-f", next(migrations.glob(prefix + "_*.sql"))], env, stdout=subprocess.DEVNULL)
+    after = run(cli, env, input=catalogue, capture_output=True).stdout
+    if before != after:
+        raise RuntimeError("repeating the migrations changed the catalogue or fixture rows")
+    print("PASS 010 repeat rejected atomically (42723); 011 and 012 replay; catalogue/row SHA256=" +
+          hashlib.sha256(after.encode()).hexdigest(), flush=True)
+
+
+def client_loss_cases(env):
+    """Kill a client inside a transaction, then retry a committed request from a new session."""
+    cli = ["psql", "-XwAtq", "-v", "ON_ERROR_STOP=1"]
+    run([*cli, "-f", "asset-exchange/db/test/fixture.sql"], env, stdout=subprocess.DEVNULL)
+    accept = """SELECT * FROM asset_exchange.accept_offer_atomic('ae-test-01',
+        'offer-00000001','loss-trade-001','taker:loss',repeat('a',64),7,
+        repeat('c',64),decode('aa','hex'),'client-loss-retry-01',repeat('b',64));"""
+    client = subprocess.Popen(cli, env=env, cwd=ROOT, text=True, stdin=subprocess.PIPE,
+                              stdout=subprocess.PIPE)
+    try:
+        client.stdin.write("BEGIN;\n" + accept + "\n")
+        client.stdin.flush()
+        if client.stdout.readline().strip() != "CONSUMED|loss-trade-001":
+            raise RuntimeError("uncommitted acceptance did not execute")
+    finally:
+        client.kill()
+        client.wait(timeout=10)
+        client.stdin.close()
+        client.stdout.close()
+    check = run(cli, env, input="""SELECT state FROM asset_exchange.offers
+        WHERE offer_id='offer-00000001' FOR UPDATE;
+        SELECT count(*) FROM asset_exchange.trades;
+        SELECT count(*) FROM asset_exchange.trade_events;
+        SELECT count(*) FROM asset_exchange.idempotency_records;""", capture_output=True)
+    if check.stdout.splitlines() != ["OPEN", "0", "0", "0"]:
+        raise RuntimeError("client loss left partial acceptance")
+    # The application discards the first committed response, as after response loss.
+    run(cli, env, input=accept, stdout=subprocess.DEVNULL)
+    check = run(cli, env, input=accept + """
+        SELECT count(*) FROM asset_exchange.trades;
+        SELECT count(*) FROM asset_exchange.trade_events;
+        SELECT count(*) FROM asset_exchange.idempotency_records;""", capture_output=True)
+    if check.stdout.splitlines() != ["CONSUMED|loss-trade-001", "1", "1", "1"]:
+        raise RuntimeError("post-commit retry lost or duplicated durable evidence")
+    print("PASS client loss before COMMIT and retry after discarded committed reply", flush=True)
 
 
 def campaign(bindir, work):
@@ -86,6 +150,8 @@ def campaign(bindir, work):
                 psql_scratch -f asset-exchange/db/test/prl_lab_privileges.sql
                 run_concurrency_cases
             """], env)
+            migration_replay_cases(env)
+            client_loss_cases(env)
         finally:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGINT)

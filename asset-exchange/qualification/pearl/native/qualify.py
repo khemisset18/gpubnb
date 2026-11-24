@@ -49,7 +49,7 @@ def check_recovery(verifier, capsule, expected, *, valid=True):
         require(result.returncode != 0, "changed public recovery intent accepted")
 
 
-def assess(binary, verifier, material, network, temp, expected_commitment):
+def assess(binary, verifier, material, network, temp, expected_commitment, fee_bump):
     f = json.loads((material / "fixture.json").read_text())
     require(f["network"] == network and f["magic"] == MAGIC[network], "wrong network fixture")
     capsule = recovery_input(f)
@@ -90,13 +90,24 @@ def assess(binary, verifier, material, network, temp, expected_commitment):
             reject(a, f["zeroFee"], "zero-fee-admission", ("fee",))
             valid_claim = accept(a, f["claim"])
             require(valid_claim["allowed"], "claim refused")
-            require(a.rpc("sendrawtransaction", f["claim"]) == f["claimTxid"], "claim ID mismatch")
+            claim_id = f["claimTxid"]
+            if fee_bump:
+                first = a.rpc("sendrawtransaction", f["rbfBase"])
+                reject(a, f["rbfLower"], "replacement-lower-fee", ("fee",))
+                require(accept(a, f["rbfHigher"])["allowed"], "higher-fee replacement refused")
+                claim_id = a.rpc("sendrawtransaction", f["rbfHigher"])
+                require(set(a.rpc("getrawmempool")) == {claim_id} and first != claim_id,
+                        "replacement did not evict the lower-fee claim")
+                record("opt-in-replacement", replaced=first, confirmed_candidate=claim_id,
+                       original_fee_grains=500, replacement_fee_grains=4000)
+            else:
+                require(a.rpc("sendrawtransaction", f["claim"]) == claim_id, "claim ID mismatch")
             # Inspect the same prevout on physically separate chain databases.
             claimblock, _ = generate(a)
-            require(f["claimTxid"] in a.rpc("getblock", claimblock, 1)["tx"], "claim never confirmed")
+            require(claim_id in a.rpc("getblock", claimblock, 1)["tx"], "claim never confirmed")
             require(a.rpc("gettxout", confirmation, 0) is None and b.rpc("gettxout", confirmation, 0) is not None,
                     "expected independent observer disagreement")
-            record("claim-confirmed-observers-disagree", claim=f["claimTxid"], a_tip=claimblock, b_tip=fundblock)
+            record("claim-confirmed-observers-disagree", claim=claim_id, a_tip=claimblock, b_tip=fundblock)
             fork = []
             while b.rpc("getblockcount") < f["height"]:
                 if b.rpc("getblockcount") == f["height"] - 1:
@@ -155,9 +166,9 @@ def assess(binary, verifier, material, network, temp, expected_commitment):
             for block, raw in fork:
                 submit_fixture_block(a, block, raw)
             require(a.rpc("getbestblockhash") == b.rpc("getbestblockhash") == finalblock, "tips failed to converge")
-            require(a.rpc("gettxout", f["claimTxid"], 0) is None and a.rpc("gettxout", f["refundTxid"], 0) is not None,
+            require(a.rpc("gettxout", claim_id, 0) is None and a.rpc("gettxout", f["refundTxid"], 0) is not None,
                     "orphaned claim or canonical refund misreported")
-            require(f["claimTxid"] not in (a.rpc("getrawmempool") or []), "conflicting claim reappeared")
+            require(claim_id not in (a.rpc("getrawmempool") or []), "conflicting claim reappeared")
             record("longer-fork-disconnects-claim", orphan=claimblock, agreed_tip=finalblock,
                    canonical_refund=f["refundTxid"], peers=a.rpc("getconnectioncount"))
             try:
@@ -174,12 +185,13 @@ if __name__ == "__main__":
     parser.add_argument("--pearld", type=Path, required=True)
     parser.add_argument("--verify-refund", type=Path, required=True)
     parser.add_argument("--commitment", required=True, help="SHA-256 retained separately at preparation")
+    parser.add_argument("--fee-bump", action="store_true", help="exercise opt-in replacement using the prepared fee variants")
     parser.add_argument("--material", type=Path, required=True)
     parser.add_argument("--network", choices=tuple(MAGIC), required=True)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="prl-observers-") as root:
         directory = Path(root).resolve()
         assess(args.pearld.resolve(strict=True), args.verify_refund.resolve(strict=True),
-               args.material.resolve(strict=True), args.network, directory, args.commitment)
+               args.material.resolve(strict=True), args.network, directory, args.commitment, args.fee_bump)
     require(not directory.exists(), "node directories still present")
     record("qualification-run-complete", network=args.network, data_removed=True)

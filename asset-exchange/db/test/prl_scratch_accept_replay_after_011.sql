@@ -225,7 +225,7 @@ BEGIN
 
   IF (SELECT state FROM offers WHERE offer_id='prl-old-open-0001') <> 'OPEN'
      OR (SELECT count(*) FROM trades WHERE offer_id='prl-old-open-0001') <> 0
-     OR (SELECT count(*) FROM idempotency_records) <> 3 THEN
+     OR (SELECT count(*) FROM idempotency_records) <> 4 THEN
     RAISE EXCEPTION 'scratch database was unexpectedly mutated';
   END IF;
 END;

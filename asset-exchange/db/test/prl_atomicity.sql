@@ -29,7 +29,22 @@ BEGIN
     IF position('Pearl' IN SQLERRM) = 0 THEN RAISE; END IF;
   END;
   BEGIN
-    UPDATE trades SET signed_terms_a=decode('aa','hex'), terms_hash=repeat('6',64)
+    PERFORM submit_trade_terms_signature_atomic('ae-test-01','prl-trade-want-0001',
+      'maker:test:prl','MAKER',repeat('6',64),decode('aa','hex'),
+      'legacy-prl-terms-01',repeat('8',64));
+    RAISE EXCEPTION 'expected fully matching historic PRL terms replay refusal';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF position('Pearl' IN SQLERRM) = 0 THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM reject_unqualified_prl_asset_keys('test|scratch|NATIVE|' || chr(160) || 'ID|8',
+      'test|scratch|NATIVE|CANONICAL|8');
+    RAISE EXCEPTION 'expected noncanonical asset identifier refusal';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF position('malformed stored asset key' IN SQLERRM) = 0 THEN RAISE; END IF;
+  END;
+  BEGIN
+    UPDATE trades SET signed_terms_b=decode('bb','hex'), state='TERMS_SIGNED'
     WHERE trade_id='prl-trade-want-0001';
     RAISE EXCEPTION 'expected direct historical terms refusal';
   EXCEPTION WHEN SQLSTATE '55000' THEN
