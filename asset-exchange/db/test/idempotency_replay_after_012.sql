@@ -44,7 +44,7 @@ BEGIN
     'ABCDEFGHIJKLMNOP',7,'prl-scratch-policy',1,v_expiry,
     'publish-replay-key-0001',repeat('7',64)::char(64)
   ) AS p;
-  IF v_result_status <> 'OPEN' OR v_result_id <> 'replay-publish-0001' THEN
+  IF v_result_status IS DISTINCT FROM 'OPEN' OR v_result_id IS DISTINCT FROM 'replay-publish-0001' THEN
     RAISE EXCEPTION 'publication did not return the new result';
   END IF;
   PERFORM pg_sleep(0.8);
@@ -57,7 +57,7 @@ BEGIN
     'ABCDEFGHIJKLMNOP',7,'prl-scratch-policy',1,v_expiry,
     'publish-replay-key-0001',repeat('7',64)::char(64)
   ) AS p;
-  IF v_result_status <> 'OPEN' OR v_result_id <> 'replay-publish-0001' THEN
+  IF v_result_status IS DISTINCT FROM 'OPEN' OR v_result_id IS DISTINCT FROM 'replay-publish-0001' THEN
     RAISE EXCEPTION 'expired exact publication replay failed';
   END IF;
 
@@ -148,7 +148,7 @@ BEGIN
     'ae-test-01','replay-publish-0001','maker:test:012',repeat('c',64)::char(64),
     decode('cc','hex'),'cancel-replay-key-0001',repeat('d',64)::char(64)
   ) AS c;
-  IF v_result_status <> 'CANCELLED' OR v_result_id <> 'replay-publish-0001' THEN
+  IF v_result_status IS DISTINCT FROM 'CANCELLED' OR v_result_id IS DISTINCT FROM 'replay-publish-0001' THEN
     RAISE EXCEPTION 'exact cancellation replay failed';
   END IF;
   BEGIN
@@ -166,7 +166,14 @@ BEGIN
       decode('cc','hex'),'cancel-replay-key-0001',repeat('d',64)::char(64)
     );
     RAISE EXCEPTION 'expected cancellation hash mismatch refusal';
-  EXCEPTION WHEN SQLSTATE '23505' THEN NULL;
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF position('cancellation identity mismatch' IN SQLERRM) = 0 THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM cancel_offer_atomic('ae-test-01','replay-publish-0001','maker:test:012',
+      repeat('c',64),decode('cc','hex'),'cancel-replay-key-0001',repeat('f',64));
+    RAISE EXCEPTION 'expected cancellation request hash mismatch';
+  EXCEPTION WHEN unique_violation THEN NULL;
   END;
   BEGIN
     PERFORM cancel_offer_atomic(
@@ -197,7 +204,7 @@ BEGIN
     repeat('5',64)::char(64),decode('55','hex'),
     'terms-maker-key-0001',repeat('6',64)::char(64)
   ) AS s;
-  IF v_result_status <> 'ACCEPTED_PENDING_TERMS' OR v_result_id <> 'terms-trade-0001' THEN
+  IF v_result_status IS DISTINCT FROM 'ACCEPTED_PENDING_TERMS' OR v_result_id IS DISTINCT FROM 'terms-trade-0001' THEN
     RAISE EXCEPTION 'first terms signature returned unexpected result';
   END IF;
   PERFORM submit_trade_terms_signature_atomic(

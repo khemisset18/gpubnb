@@ -1,6 +1,6 @@
 -- GPUbnb Asset Exchange / Pearl PRL — additive, NOT DEPLOYED
 -- Database backstop for historical PRL offers and direct SQL bypasses.
--- No real funds, no signer, no node, no migration execution authorised.
+-- Experimental migration for an isolated disposable Exchange database.
 -- Review and test on an isolated disposable Exchange database BEFORE deployment.
 BEGIN;
 SET LOCAL search_path = asset_exchange, pg_catalog;
@@ -107,6 +107,18 @@ $prl$;
 CREATE TRIGGER trades_reject_unqualified_prl_insert
 BEFORE INSERT ON asset_exchange.trades
 FOR EACH ROW
+EXECUTE FUNCTION asset_exchange.guard_prl_trade_creation();
+
+-- A legacy trade may pre-date quarantine. Protect direct changes to its
+-- signed terms as well as new trade inserts. Reads and offer cancellation remain possible.
+CREATE TRIGGER trades_reject_unqualified_prl_terms
+BEFORE UPDATE OF terms_hash, signed_terms_a, signed_terms_b, state ON asset_exchange.trades
+FOR EACH ROW WHEN (
+  OLD.terms_hash IS DISTINCT FROM NEW.terms_hash OR
+  OLD.signed_terms_a IS DISTINCT FROM NEW.signed_terms_a OR
+  OLD.signed_terms_b IS DISTINCT FROM NEW.signed_terms_b OR
+  (NEW.state = 'TERMS_SIGNED' AND OLD.state IS DISTINCT FROM NEW.state)
+)
 EXECUTE FUNCTION asset_exchange.guard_prl_trade_creation();
 
 -- Defense 3: protect the consumption state if a code path bypasses
