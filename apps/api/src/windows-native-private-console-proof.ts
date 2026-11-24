@@ -136,10 +136,12 @@ export async function readConsoleProof(
       || typeof x.gpuUuid !== 'string'
       || !WINDOWS_NATIVE_GPU_UUID_RE.test(x.gpuUuid)
     ) return null;
-    // Legacy/operator proofs remain unscoped for backwards compatibility;
-    // the Host UI's schema-2 consent is restricted to Gaming only.
+    // Old operator/CI proofs are unscoped, so preserve them only for their
+    // original Cloud Desktop path. They must never authorize Gaming, whose
+    // local owner consent is represented by the workspace-scoped schema v2.
     const provedWorkspace = x.workspaceSlug ?? 'legacy';
     if (provedWorkspace !== 'legacy' && provedWorkspace !== 'cloud-desktop' && provedWorkspace !== 'gaming') return null;
+    if (provedWorkspace === 'legacy' && workspaceSlug !== 'cloud-desktop') return null;
     if (provedWorkspace !== 'legacy' && provedWorkspace !== workspaceSlug) return null;
     return { agentCommit: approvedCommit, gpuUuid: x.gpuUuid, workspaceSlug };
   } catch {

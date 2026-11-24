@@ -95,11 +95,21 @@ test('console claim is bounded in Redis and revoked by negative heartbeat', asyn
   assert.deepEqual(await readConsoleProof(storage, 'machine-test', SHA, '21'), {
     gpuUuid: GPU, agentCommit: SHA, workspaceSlug: 'cloud-desktop',
   });
+  assert.equal(
+    await readConsoleProof(storage, 'machine-test', SHA, '21', 'gaming'),
+    null,
+    'an unscoped legacy proof must not authorize Gaming',
+  );
   assert.equal(await readConsoleProof(storage, 'machine-test', 'a'.repeat(40), '21'), null);
   assert.equal(await readConsoleProof(storage, 'machine-test', SHA, '22'), null, 'stale heartbeat counter must not authorize console');
   assert.deepEqual(await qualificationNativeSource(storage, 'machine-test', SHA, false, null, BigInt(21)), {
     gpuUuid: GPU, captureBackend: 'console-dedicated', workspaceSlug: 'cloud-desktop',
   });
+  assert.equal(
+    await qualificationNativeSource(storage, 'machine-test', SHA, false, null, BigInt(21), 'gaming'),
+    null,
+    'a legacy Cloud Desktop proof must not become a Gaming source',
+  );
   await replaceConsoleProof(storage, 'machine-test', null, '22');
   assert.equal(await readConsoleProof(storage, 'machine-test', SHA, '21'), null);
   assert.equal(await qualificationNativeSource(storage, 'machine-test', SHA, false, null, BigInt(21)), null);
