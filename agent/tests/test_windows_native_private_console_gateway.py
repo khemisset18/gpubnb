@@ -4,7 +4,7 @@ import os
 import threading
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from gpubnb_agent import workspace_gateway_v10 as gateway
 
@@ -75,6 +75,80 @@ class ConsoleGatewayTests(unittest.TestCase):
             obj._reconcile_native_sessions()
         obj._start_native_runtime.assert_not_called()
         self.assertEqual(len(obj._report_error.call_args_list), 1)
+
+    def test_local_consent_revocation_stops_only_gaming_runtime_and_start(self):
+        obj = object.__new__(gateway.GatewaySupervisor)
+        obj._native_lock = threading.RLock()
+        obj.native_runtimes = {
+            "gaming-active": SimpleNamespace(workspace_slug="gaming"),
+            "desktop-active": SimpleNamespace(workspace_slug="cloud-desktop"),
+        }
+        obj._native_start_workspaces = {
+            "gaming-starting": "gaming",
+            "creator-starting": "creator",
+        }
+        obj._native_start_tokens = {
+            "gaming-starting": object(),
+            "creator-starting": object(),
+        }
+        obj._native_start_backends = {
+            "gaming-starting": gateway.CONSOLE_BACKEND,
+            "creator-starting": "iddcx",
+        }
+        obj._native_blocked = set()
+        obj._private_gaming_revocation_retry_at = {}
+        obj._close_session_channels = Mock()
+        obj._native_stop_and_report = Mock(return_value=True)
+        obj._report_error = Mock()
+
+        with patch.object(gateway, "private_gaming_workspace_local_opt_in_enabled", return_value=False):
+            obj._revoke_private_gaming_sessions_if_disabled()
+
+        self.assertCountEqual(
+            obj._native_stop_and_report.call_args_list,
+            [
+                call("gaming-active", local_consent_revocation=True),
+                call("gaming-starting", local_consent_revocation=True),
+            ],
+        )
+        self.assertEqual(obj._native_blocked, {"gaming-active", "gaming-starting"})
+        self.assertCountEqual(
+            obj._close_session_channels.call_args_list,
+            [call("gaming-active"), call("gaming-starting")],
+        )
+        self.assertIn("desktop-active", obj.native_runtimes)
+        self.assertIn("creator-starting", obj._native_start_workspaces)
+
+    def test_local_consent_revocation_stops_capture_before_server_request(self):
+        obj = object.__new__(gateway.GatewaySupervisor)
+        obj._native_lock = threading.RLock()
+        obj.native_runtimes = {
+            "gaming-active": SimpleNamespace(handle=SimpleNamespace(capture_backend=gateway.CONSOLE_BACKEND)),
+        }
+        obj._native_blocked = set()
+        obj._native_start_tokens = {}
+        obj._native_start_backends = {}
+        obj._native_start_workspaces = {}
+        obj._close_session_channels = Mock()
+        obj.usage_last_report = {"gaming-active": 1.0}
+        events: list[str] = []
+        obj._announce_native_revocation_started = Mock(side_effect=lambda _: events.append("server-revoke"))
+        obj._release_native_claims = Mock(return_value=True)
+        obj._trace = Mock()
+
+        def stop_local(session_id: str) -> None:
+            self.assertEqual(session_id, "gaming-active")
+            events.append("local-stop")
+
+        with patch.object(gateway, "stop_windows_native_workspace", side_effect=stop_local):
+            cleaned = obj._stop_native_runtime(
+                "gaming-active",
+                local_consent_revocation=True,
+            )
+
+        self.assertTrue(cleaned)
+        self.assertEqual(events, ["local-stop", "server-revoke"])
+        self.assertNotIn("gaming-active", obj.native_runtimes)
 
     def test_source_change_revokes_active_console_instead_of_switching_in_place(self):
         obj = supervisor_for(desired=session())  # legacy server no longer grants console

@@ -84,6 +84,8 @@ def windows_native_active_workspace_slugs() -> frozenset[str]:
 WINDOWS_NATIVE_MEDIA_HEADER = "X-GPUbnb-Media-Token"
 WINDOWS_NATIVE_USAGE_INTERVAL_SECONDS = 10.0
 WINDOWS_NATIVE_START_RETRY_MAX_SECONDS = 60.0
+PRIVATE_GAMING_CONSENT_POLL_SECONDS = 0.25
+PRIVATE_GAMING_CONSENT_RETRY_SECONDS = 2.0
 _NATIVE_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 
 
@@ -111,6 +113,7 @@ class NativeGatewayRuntime:
     port: int
     websocket_url: str
     handle: NativeRuntimeHandle
+    workspace_slug: str = ""
 
 
 def _native_runtime_id(session_id: str) -> str:
@@ -214,11 +217,13 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         self._native_blocked: set[str] = set()
         self._native_start_tokens: dict[str, object] = {}
         self._native_start_backends: dict[str, str] = {}
+        self._native_start_workspaces: dict[str, str] = {}
         self._native_revocation_pending: set[str] = set()
         self._native_revocation_inflight: set[str] = set()
         self._native_lock = threading.RLock()
         self._native_resume_locks: dict[str, threading.Lock] = {}
         self._native_channel_sessions: dict[str, str] = {}
+        self._private_gaming_revocation_retry_at: dict[str, float] = {}
         self._console_fence_wakeup = threading.Event()
         register_console_fence_wakeup(self._console_fence_wakeup)
         threading.Thread(
@@ -226,6 +231,64 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             daemon=True,
             name="gpubnb-console-wts-revoker",
         ).start()
+        threading.Thread(
+            target=self._watch_private_gaming_consent,
+            daemon=True,
+            name="gpubnb-private-gaming-consent-revoker",
+        ).start()
+
+    def _watch_private_gaming_consent(self) -> None:
+        # Owner revocation is local authority. Do not wait for the next server
+        # poll: close the Host relay and stop local capture even if the network
+        # is unavailable. Remote revocation follows the local STOP attempt.
+        while not self.stop_event.wait(PRIVATE_GAMING_CONSENT_POLL_SECONDS):
+            self._revoke_private_gaming_sessions_if_disabled()
+
+    def _revoke_private_gaming_sessions_if_disabled(self) -> None:
+        if private_gaming_workspace_local_opt_in_enabled():
+            return
+
+        now = time.monotonic()
+        with self._native_lock:
+            affected = {
+                session_id
+                for session_id, runtime in self.native_runtimes.items()
+                if getattr(runtime, "workspace_slug", "") == "gaming"
+            }
+            start_workspaces = getattr(self, "_native_start_workspaces", {})
+            affected.update(
+                session_id
+                for session_id, workspace_slug in start_workspaces.items()
+                if workspace_slug == "gaming"
+            )
+            affected = {
+                session_id for session_id in affected
+                if now >= self._private_gaming_revocation_retry_at.get(session_id, 0.0)
+            }
+            for session_id in affected:
+                self._native_blocked.add(session_id)
+                self._native_start_tokens.pop(session_id, None)
+                self._native_start_backends.pop(session_id, None)
+                start_workspaces.pop(session_id, None)
+                self._private_gaming_revocation_retry_at[session_id] = (
+                    now + PRIVATE_GAMING_CONSENT_RETRY_SECONDS
+                )
+
+        # Fence WebSocket media and input before asking the helper to stop.
+        # Failed cleanup remains blocked and retries with a short backoff.
+        for session_id in affected:
+            self._close_session_channels(session_id)
+        for session_id in affected:
+            try:
+                cleaned = self._native_stop_and_report(
+                    session_id,
+                    local_consent_revocation=True,
+                )
+            except Exception:
+                cleaned = False
+                self._report_error(RuntimeError("private_gaming_consent_revocation_failed"))
+            if cleaned:
+                self._private_gaming_revocation_retry_at.pop(session_id, None)
 
     def _watch_console_session_fence(self) -> None:
         # WTS HandlerEx only sets an Event. Never block the Windows service
@@ -248,6 +311,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             for session_id in affected:
                 self._native_start_tokens.pop(session_id, None)
                 self._native_start_backends.pop(session_id, None)
+                getattr(self, "_native_start_workspaces", {}).pop(session_id, None)
         # Disconnect buffered media/input first; physical STOP and API reporting
         # follow, outside the lock. The worker separately checks WTS before
         # publishing frames and injecting input.
@@ -507,6 +571,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 raise RuntimeError("windows_native_start_revoked_or_in_progress")
             self._native_start_tokens[session_id] = token
             self._native_start_backends[session_id] = backend
+            self._native_start_workspaces[session_id] = workspace_slug
         try:
             return self._start_native_runtime_attempt(
                 session_id, workspace_slug, token,
@@ -517,6 +582,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 if self._native_start_tokens.get(session_id) is token:
                     self._native_start_tokens.pop(session_id, None)
                     self._native_start_backends.pop(session_id, None)
+                    getattr(self, "_native_start_workspaces", {}).pop(session_id, None)
 
     def _native_start_token_is_current(self, session_id: str, token: object) -> bool:
         with self._native_lock:
@@ -525,8 +591,16 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 and session_id not in self._native_blocked
             )
             backend = self._native_start_backends.get(session_id)
+            workspace_slug = getattr(self, "_native_start_workspaces", {}).get(session_id)
         if not current:
             return False
+        if backend == CONSOLE_BACKEND and workspace_slug == "gaming":
+            if not private_gaming_workspace_local_opt_in_enabled():
+                self._native_stop_and_report(
+                    session_id,
+                    local_consent_revocation=True,
+                )
+                return False
         # The WTS watcher is asynchronous and can observe a transition just
         # before a start token is published. Recheck here at every startup
         # boundary so that a missed watcher edge cannot authorize console work.
@@ -537,6 +611,11 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             return (
                 self._native_start_tokens.get(session_id) is token
                 and session_id not in self._native_blocked
+                and (
+                    backend != CONSOLE_BACKEND
+                    or workspace_slug != "gaming"
+                    or private_gaming_workspace_local_opt_in_enabled()
+                )
             )
 
     def _publish_native_runtime_if_current(
@@ -646,6 +725,7 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                 port=port,
                 websocket_url=websocket_url,
                 handle=handle,
+                workspace_slug=workspace_slug,
             )
             for spec in specs:
                 self._trace(
@@ -734,7 +814,12 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
                     self._native_revocation_pending.discard(session_id)
         return accepted
 
-    def _stop_native_runtime(self, session_id: str) -> bool | None:
+    def _stop_native_runtime(
+        self,
+        session_id: str,
+        *,
+        local_consent_revocation: bool = False,
+    ) -> bool | None:
         # Block reconnect callbacks before closing sockets; a reader thread may
         # observe the close concurrently and must not suspend/resume a runtime
         # that is already being destroyed.
@@ -743,11 +828,14 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             self._native_blocked.add(session_id)
             self._native_start_tokens.pop(session_id, None)
             self._native_start_backends.pop(session_id, None)
+            getattr(self, "_native_start_workspaces", {}).pop(session_id, None)
         self._close_session_channels(session_id)
         self.usage_last_report.pop(session_id, None)
-        # Revoke API delivery before potentially slow helper/GPU cleanup. The
-        # server serializes this transition with every native send/input fence.
-        self._announce_native_revocation_started(session_id)
+        # For ordinary server STOP, revoke delivery before helper cleanup. A
+        # local owner-consent revocation must attempt physical STOP first so a
+        # slow or unavailable server cannot keep capture alive.
+        if not local_consent_revocation:
+            self._announce_native_revocation_started(session_id)
 
         if runtime is None:
             # A lost/restarted Agent supervisor has no in-memory handle, but the
@@ -757,12 +845,16 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             try:
                 stop_windows_native_workspace(session_id)
             except Exception as exc:
+                if local_consent_revocation:
+                    self._announce_native_revocation_started(session_id)
                 self._trace(
                     "native_stop_without_handle_failed",
                     session_id=session_id,
                     detail=f"code={_native_error_code(exc)}",
                 )
                 return False
+            if local_consent_revocation:
+                self._announce_native_revocation_started(session_id)
             released = self._release_native_claims(session_id)
             # Keep a process-lifetime tombstone after a successful STOP. A
             # delayed, already-authorized OPEN can still arrive after cleanup;
@@ -773,12 +865,16 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
         try:
             stop_windows_native_workspace(session_id)
         except Exception as exc:
+            if local_consent_revocation:
+                self._announce_native_revocation_started(session_id)
             self._trace(
                 "native_stop_failed",
                 session_id=session_id,
                 detail=f"code={_native_error_code(exc)}",
             )
             return False
+        if local_consent_revocation:
+            self._announce_native_revocation_started(session_id)
 
         released = self._release_native_claims(session_id)
         if released is not True:
@@ -789,8 +885,16 @@ class GatewaySupervisor(reconnect.GatewaySupervisor):
             # so late OPENs cannot take the non-native fallback path.
         return True
 
-    def _native_stop_and_report(self, session_id: str) -> bool:
-        cleaned = self._stop_native_runtime(session_id)
+    def _native_stop_and_report(
+        self,
+        session_id: str,
+        *,
+        local_consent_revocation: bool = False,
+    ) -> bool:
+        cleaned = self._stop_native_runtime(
+            session_id,
+            local_consent_revocation=local_consent_revocation,
+        )
         if cleaned is None:
             # Cleanup is physically safe but the second GPU quiescence proof is
             # transiently inconclusive. Do not tell the control plane cleanup
