@@ -611,6 +611,11 @@ echo "All PostgreSQL concurrency/idempotency/immutability tests passed."
 )
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  if [[ "${GITHUB_ACTIONS:-}" == true && -z "${PRL_SCRATCH_ACK:-}" ]]; then
+    # The PR runner supplies a service endpoint. Run the PRL campaign in a
+    # separate initdb cluster owned by the harness, using runner binaries.
+    exec python3 "$(dirname "$0")/prl_disposable.py" --pg-bin "$(pg_config --bindir)"
+  fi
   verify_socket_before_races
   run_concurrency_cases
 fi
