@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/pearl-research-labs/pearl/node/chaincfg"
@@ -27,8 +28,9 @@ func check(ok bool, why string) {
 }
 
 func transaction(s string) *wire.MsgTx {
+	check(len(s) < 8192, "oversize fixture transaction")
 	data, err := hex.DecodeString(s)
-	check(err == nil && len(data) < 4096, "invalid fixture serialization")
+	check(err == nil, "invalid fixture serialization")
 	r := bytes.NewReader(data)
 	var tx wire.MsgTx
 	check(tx.Deserialize(r) == nil && r.Len() == 0, "invalid Pearl transaction")
@@ -40,9 +42,11 @@ func main() {
 		Intent          intent
 		Funding, Refund string
 	}
-	d := json.NewDecoder(os.Stdin)
+	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 16385))
+	check(err == nil && len(raw) <= 16384, "oversize or unreadable recovery input")
+	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
-	check(d.Decode(&in) == nil, "malformed recovery input")
+	check(d.Decode(&in) == nil && d.Decode(new(any)) == io.EOF, "malformed recovery input")
 	i := in.Intent
 	params := &chaincfg.RegressionNetParams
 	if i.Network == "simnet" {

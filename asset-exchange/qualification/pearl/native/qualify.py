@@ -49,9 +49,77 @@ def check_recovery(verifier, capsule, expected, *, valid=True):
         require(result.returncode != 0, "changed public recovery intent accepted")
 
 
-def assess(binary, verifier, material, network, temp, expected_commitment, fee_bump, fee_boundaries):
+def confirm_recipient_spend(a, b, f, child):
+    decoded = b.rpc("decoderawtransaction", child["raw"])
+    source, = decoded["vin"]
+    dest, = decoded["vout"]
+    require(decoded["txid"] == child["txid"] and source["txid"] == f["refundTxid"] and source["vout"] == 0,
+            "independent child does not spend the confirmed refund")
+    require(dest["value"] * 100_000_000 == 996_500 and dest["scriptPubKey"]["hex"] == child["nextScript"],
+            "wrong independent recipient output")
+    result = accept(b, child["raw"])
+    require(result["allowed"] and result["fees"]["base"] * 100_000_000 == 2_000, "unexpected child or fee")
+    require(b.rpc("sendrawtransaction", child["raw"]) == child["txid"], "changed recipient transaction")
+    block, raw = generate(b)
+    submit_fixture_block(a, block, raw)
+    for observer in (a, b):
+        utxo = observer.rpc("gettxout", child["txid"], 0)
+        require(observer.rpc("gettxout", f["refundTxid"], 0) is None and utxo["confirmations"] == 1 and
+                utxo["value"] * 100_000_000 == 996_500 and utxo["scriptPubKey"]["hex"] == child["nextScript"],
+                "recipient payment missing from canonical chain")
+    record("independent-recipient-spent-refund", refund=f["refundTxid"], child=child["txid"],
+           height=b.rpc("getblockcount"), block=block, paid_grains=996_500, fee_grains=2_000)
+    return result["vsize"]
+
+
+def check_high_relay(binary, temp, material, f, archive, final_block, refund_vsize, child, child_vsize, rate):
+    with private_node(binary, temp / f"relay-{rate}", f["network"], f["payout"], relay_grains_per_kvb=rate) as observer:
+        floor = int(observer.rpc("getnetworkinfo")["relayfee"] * 100_000_000)
+        require(floor == rate, "unexpected higher relay policy")
+        for path in (material / "blocks.jsonl", archive):
+            with path.open() as saved:
+                for line in saved:
+                    submit_fixture_block(observer, *json.loads(line))
+        require(observer.rpc("getblockcount") == f["height"], "wrong fee-check height")
+        required_fee = floor * refund_vsize // 1000
+        reject(observer, f["refund"], "fixed-refund-above-fee-budget",
+               (f"has 1500 fees which is under the required amount of {required_fee}",))
+        require(not observer.rpc("getrawmempool") and observer.rpc("gettxout", f["fundingTxid"], 0),
+                "policy rejection changed spend state")
+        if child is not None:
+            raw_pair = [f["refund"], child["raw"]]
+            pair = observer.rpc("testmempoolaccept", raw_pair, 0.1)
+            require(len(pair) == 2 and [item["txid"] for item in pair] == [f["refundTxid"], child["txid"]]
+                    and all(not item.get("allowed", False) for item in pair), "paired preview changed fee decision")
+            try:
+                observer.rpc("submitpackage", raw_pair)
+            except RpcError as error:
+                require(error.args[0]["code"] == -32601, "unexpected package RPC error")
+                record("package-relay-unavailable", rate_grains_per_kvb=floor, total_fee_grains=3_500,
+                       total_vsize=refund_vsize + child_vsize, preview_reasons=[r.get("reject-reason") for r in pair],
+                       error=error.args[0])
+            else:
+                raise RuntimeError("unexpected package submission behavior on pinned node")
+            require(not observer.rpc("getrawmempool"), "package probe changed the mempool")
+        submit_fixture_block(observer, *final_block)
+        payout = observer.rpc("gettxout", f["refundTxid"], 0)
+        require(payout["confirmations"] == 1 and payout["value"] * 100_000_000 == 998_500 and
+                payout["scriptPubKey"]["hex"] == f["destination"], "different policy rejected canonical refund")
+        record("relay-policy-versus-confirmed-refund", min_relay_grains_per_kvb=floor, refund_grains=1500,
+               required_grains=required_fee, vsize=refund_vsize, refund=f["refundTxid"], block=final_block[0])
+
+
+def assess(binary, verifier, material, network, temp, expected_commitment, fee_bump, fee_boundaries,
+           recipient_commitment=None, high_relay=False):
     f = json.loads((material / "fixture.json").read_text())
     require(f["network"] == network and f["magic"] == MAGIC[network], "wrong network fixture")
+    child = None
+    child_vsize = None
+    if recipient_commitment is not None:
+        child = f["recipientSpend"]
+        digest = hashlib.sha256(json.dumps(child, sort_keys=True).encode()).hexdigest()
+        require(digest == recipient_commitment and child["recipientScript"] == f["destination"] and
+                child["network"] == network and child["refund"] == f["refundTxid"], "recipient commitment mismatch")
     capsule = recovery_input(f)
     canonical = json.dumps(capsule, sort_keys=True).encode()
     checksum = hashlib.sha256(canonical).hexdigest()
@@ -165,7 +233,9 @@ def assess(binary, verifier, material, network, temp, expected_commitment, fee_b
             restored = json.loads(recovery_file.read_text())
             check_recovery(verifier, restored, f["refundTxid"])
             require(f["refundTxid"] not in (b.rpc("getrawmempool") or []), "unexpected pending refund")
-            require(accept(b, restored["Refund"])["allowed"], "restored refund refused")
+            refund_admission = accept(b, restored["Refund"])
+            require(refund_admission["allowed"], "restored refund refused")
+            refund_vsize = refund_admission["vsize"]
             require(b.rpc("sendrawtransaction", restored["Refund"]) == f["refundTxid"], "refund ID changed")
             reject(b, f["claim"], "same-outpoint-conflict", ("already spent in mempool", "conflict", "replace"))
             finalblock, raw = generate(b)
@@ -190,6 +260,11 @@ def assess(binary, verifier, material, network, temp, expected_commitment, fee_b
                 record("out-of-range-rpc", error=err.args[0])
             else:
                 raise RuntimeError("unknown height returned a hash")
+            if child is not None:
+                child_vsize = confirm_recipient_spend(a, b, f, child)
+    if high_relay:
+        for rate in (11_000, 20_000):
+            check_high_relay(binary, temp, material, f, archive, fork[-1], refund_vsize, child, child_vsize, rate)
 
 
 if __name__ == "__main__":
@@ -199,6 +274,8 @@ if __name__ == "__main__":
     parser.add_argument("--commitment", required=True, help="SHA-256 retained separately at preparation")
     parser.add_argument("--fee-bump", action="store_true", help="exercise opt-in replacement using the prepared fee variants")
     parser.add_argument("--fee-boundaries", action="store_true", help="require the one-grain fee and dust boundary fixtures")
+    parser.add_argument("--recipient-commitment", help="separately retained receipt of the independent recipient")
+    parser.add_argument("--high-relay", action="store_true", help="recheck identical blocks under a higher relay fee")
     parser.add_argument("--material", type=Path, required=True)
     parser.add_argument("--network", choices=tuple(MAGIC), required=True)
     args = parser.parse_args()
@@ -206,6 +283,6 @@ if __name__ == "__main__":
         directory = Path(root).resolve()
         assess(args.pearld.resolve(strict=True), args.verify_refund.resolve(strict=True),
                args.material.resolve(strict=True), args.network, directory, args.commitment,
-               args.fee_bump, args.fee_boundaries)
+               args.fee_bump, args.fee_boundaries, args.recipient_commitment, args.high_relay)
     require(not directory.exists(), "node directories still present")
     record("qualification-run-complete", network=args.network, data_removed=True)

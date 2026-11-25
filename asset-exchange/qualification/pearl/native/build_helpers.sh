@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the two offline lab programs against unmodified, pinned upstream objects.
+# Build the offline lab programs against unmodified, pinned upstream objects.
 set -euo pipefail
 if [[ $# != 2 ]]; then
   echo 'usage: build_helpers.sh PEARL_GIT_CHECKOUT OUTPUT_DIRECTORY' >&2
@@ -17,7 +17,7 @@ trap 'rm -rf -- "$build"' EXIT
 git -C "$upstream" archive "$pin" go.mod go.sum node/btcec node/btcutil node/chaincfg node/wire node/txscript xmss | tar -x -C "$build"
 mkdir -p "$out"
 cd "$build"
-for tool in fixture verifyrefund; do
+for tool in fixture verifyrefund recipient; do
   go build -mod=readonly -trimpath -buildvcs=false -o "$out/$tool" "$src/cmd/$tool/main.go"
 done
-sha256sum "$out/fixture" "$out/verifyrefund"
+sha256sum "$out/fixture" "$out/verifyrefund" "$out/recipient"

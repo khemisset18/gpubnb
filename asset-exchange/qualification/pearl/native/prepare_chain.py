@@ -13,7 +13,34 @@ MATURITY = 100
 REFUND_HEIGHT = MATURITY + 4
 
 
-def prepare(binary, signer, network, output):
+def signed_fixture(process, request, recipient_tool, directory):
+    recipient = None
+    try:
+        if recipient_tool:
+            recipient = subprocess.Popen([recipient_tool], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         cwd=directory, text=True, env={"LC_ALL": "C"})
+            public = json.loads(recipient.stdout.readline())
+            request["recipientScript"] = public["recipientScript"]
+        response, _ = process.communicate(json.dumps(request), timeout=45)
+        require(process.returncode == 0, "ephemeral signer failed its Pearl VM checks")
+        bundle = json.loads(response)
+        if recipient:
+            require(bundle["destination"] == public["recipientScript"], "refund recipient changed")
+            reply, _ = recipient.communicate(json.dumps({"Network": request["network"], "Refund": bundle["refund"]}), timeout=30)
+            require(recipient.returncode == 0, "independent recipient refused the refund")
+            child = {**json.loads(reply), **public, "network": request["network"], "refund": bundle["refundTxid"]}
+            record("recipient-spend-commitment", network=request["network"],
+                   sha256=hashlib.sha256(json.dumps(child, sort_keys=True).encode()).hexdigest(),
+                   recipient_exited=recipient.returncode)
+            bundle["recipientSpend"] = child
+        return bundle
+    finally:
+        if recipient and recipient.poll() is None:
+            recipient.kill()
+            recipient.wait()
+
+
+def prepare(binary, signer, network, output, recipient_tool):
     output.mkdir(mode=0o700)
     with tempfile.TemporaryDirectory(prefix="prl-seed-") as tmp:
         directory = Path(tmp).resolve()
@@ -35,9 +62,7 @@ def prepare(binary, signer, network, output):
                             request = {"network": network, "txid": coinbase_id, "output": out["n"],
                                        "value": int(out["value"] * 100_000_000),
                                        "height": REFUND_HEIGHT, "script": hello["script"]}
-                            response, _ = process.communicate(json.dumps(request), timeout=45)
-                            require(process.returncode == 0, "ephemeral signer failed its Pearl VM checks")
-                            bundle = json.loads(response)
+                            bundle = signed_fixture(process, request, recipient_tool, directory)
                             fixture = {**hello, **request, **bundle, "magic": MAGIC[network]}
                             (output / "fixture.json").write_text(json.dumps(fixture, sort_keys=True))
                             capsule = json.dumps(recovery_input(fixture), sort_keys=True).encode()
@@ -93,9 +118,13 @@ if __name__ == "__main__":
     mode.add_argument("--resume-commitment", help="pinned SHA-256 from the preparation receipt")
     parser.add_argument("--network", choices=tuple(MAGIC), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--recipient-signer", type=Path, help="independent one-shot lab recipient for a new fixture")
     args = parser.parse_args()
+    if args.resume_commitment and args.recipient_signer:
+        parser.error("checkpoint recovery needs public data only")
     if args.resume_commitment:
         resume(args.pearld.resolve(strict=True), args.network, args.output.resolve(), args.resume_commitment)
     else:
         prepare(args.pearld.resolve(strict=True), args.fixture_signer.resolve(strict=True),
-                args.network, args.output.resolve())
+                args.network, args.output.resolve(),
+                args.recipient_signer.resolve(strict=True) if args.recipient_signer else None)

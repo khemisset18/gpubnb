@@ -1,5 +1,5 @@
 // Package main is a one-shot fixture signer for the two private Pearl networks.
-// It generates every key in memory, waits for its own synthetic coinbase outpoint,
+// It generates contract keys in memory, waits for its own synthetic coinbase,
 // verifies the prepared refund in Pearl's VM and exits before funding is submitted.
 package main
 
@@ -24,12 +24,13 @@ import (
 const contractValue int64 = 1_000_000
 
 type fixtureInput struct {
-	Network string
-	Txid    string
-	Output  uint32
-	Value   int64
-	Height  uint32
-	Script  string
+	Network         string
+	Txid            string
+	Output          uint32
+	Value           int64
+	Height          uint32
+	Script          string
+	RecipientScript string
 }
 
 func must[T any](value T, err error) T {
@@ -99,8 +100,17 @@ func main() {
 
 	claimKey := must(btcec.NewPrivateKey())
 	refundKey := must(btcec.NewPrivateKey())
-	beneficiary := must(btcec.NewPrivateKey())
-	dest := must(txscript.PayToTaprootScript(txscript.ComputeTaprootKeyNoScript(beneficiary.PubKey())))
+	var dest []byte
+	if p.RecipientScript == "" {
+		beneficiary := must(btcec.NewPrivateKey())
+		dest = must(txscript.PayToTaprootScript(txscript.ComputeTaprootKeyNoScript(beneficiary.PubKey())))
+	} else {
+		dest = must(hex.DecodeString(p.RecipientScript))
+		if len(dest) != 34 || !txscript.IsPayToTaproot(dest) {
+			panic("invalid public beneficiary script")
+		}
+		_ = must(schnorr.ParsePubKey(dest[2:]))
+	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		panic(err)

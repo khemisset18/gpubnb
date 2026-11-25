@@ -52,8 +52,9 @@ class Node:
 
 
 @contextmanager
-def private_node(binary, directory, network, payout, *, existing=False, standard=True):
+def private_node(binary, directory, network, payout, *, existing=False, standard=True, relay_grains_per_kvb=1_000):
     require(network in MAGIC, "only private lab networks supported")
+    require(relay_grains_per_kvb in (1_000, 11_000, 20_000), "unsupported lab relay policy")
     with Path(binary).open("rb") as binary_file:
         require(hashlib.file_digest(binary_file, "sha256").hexdigest() == DAEMON, "unverified pearld")
     if not existing:
@@ -76,6 +77,8 @@ def private_node(binary, directory, network, payout, *, existing=False, standard
                "--txindex", "--miningaddr=" + payout]
         if standard:
             cmd.append("--rejectnonstd")
+        if relay_grains_per_kvb != 1_000:
+            cmd.append(f"--minrelaytxfee={Decimal(relay_grains_per_kvb)/100_000_000:.8f}")
         clean_env = {"HOME": str(directory), "LC_ALL": "C", "RAYON_NUM_THREADS": "6",
                      "GOMAXPROCS": "2", "TMPDIR": str(directory)}
         with (directory / "console.log").open("a") as log:
