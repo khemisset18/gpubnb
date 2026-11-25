@@ -343,6 +343,17 @@ jobs:
             throw "Expected exactly one NSIS installer, found $($installer.Count)."
           }
 
+          if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') {
+            throw 'Host preflight smoke requires a disposable GitHub-hosted runner.'
+          }
+          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'
+          $sourcePayloadRoot = 'apps/host-desktop/src-tauri/stage4'
+          $sourceManifestHash = (Get-FileHash -LiteralPath (Join-Path $sourcePayloadRoot 'stage4.manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sourceIdentityHash = (Get-FileHash -LiteralPath (Join-Path $sourcePayloadRoot 'build-identities.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installerHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedTunnelHash = (Get-FileHash -LiteralPath 'services/edge/target/release/gpubnb-host-tunnel.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedAgentHash = (Get-FileHash -LiteralPath 'dist/gpubnb-agent.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+
           $installDirectory = Join-Path $env:RUNNER_TEMP 'gpubnb-host-smoke-test'
           if (Test-Path $installDirectory) {
             throw "Smoke-test install directory already exists: $installDirectory"
@@ -380,12 +391,28 @@ jobs:
           }
 
           $payloadRoot = Join-Path $installDirectory 'resources/stage4'
-          $payloadManifest = Get-Content (Join-Path $payloadRoot 'stage4.manifest.json') -Raw | ConvertFrom-Json
-          if ($payloadManifest.installable -ne $false -or
+          $payloadManifestPath = Join-Path $payloadRoot 'stage4.manifest.json'
+          if ((Get-FileHash -LiteralPath $payloadManifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $sourceManifestHash -or
+              (Get-FileHash -LiteralPath (Join-Path $payloadRoot 'build-identities.json') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $sourceIdentityHash) {
+            throw 'Installed manifest or build identities differ from the exact staged payload.'
+          }
+          $payloadManifest = Get-Content -LiteralPath $payloadManifestPath -Raw | ConvertFrom-Json
+          if ($payloadManifest.sourceCommit -cne $expectedCommit -or
+              $payloadManifest.buildIdentitiesSha256 -cne $sourceIdentityHash -or
+              @($payloadManifest.files).Count -ne 4 -or
+              $payloadManifest.installable -ne $false -or
               $payloadManifest.signatureStatus -cne 'unsigned' -or
               $payloadManifest.iddDriverIncluded -ne $false -or
               $payloadManifest.publicBookabilityEnabled -ne $false) {
             throw 'The disposable installer smoke must remain explicitly non-installable.'
+          }
+          $agentRecord = @($payloadManifest.files | Where-Object { $_.name -ceq 'gpubnb-agent.exe' })
+          if ($agentRecord.Count -ne 1 -or $agentRecord[0].sha256 -cne $expectedAgentHash -or
+              (Get-FileHash -LiteralPath $installedSidecar -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedAgentHash) {
+            throw 'Installed Agent hash differs from the staged manifest or build.'
+          }
+          if ((Get-FileHash -LiteralPath $installedTunnel -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedTunnelHash) {
+            throw 'Installed Host tunnel hash differs from the staged build.'
           }
           foreach ($name in @('gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')) {
             $record = @($payloadManifest.files | Where-Object { $_.name -ceq $name })
@@ -397,7 +424,6 @@ jobs:
               throw "Installed native component hash mismatch: $name"
             }
           }
-          $expectedCommit = '${{ github.event.pull_request.head.sha || github.sha }}'
           $installedBuildInfo = (& $installedSidecar build-info | Out-String) | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Installed agent build-info command failed.' }
           if (-not $installedBuildInfo.frozen) { throw 'Installed agent does not report itself as frozen.' }
@@ -517,6 +543,18 @@ jobs:
             throw 'The uninstaller left the GPUbnbAgent service registered.'
           }
 
+          foreach ($name in @('stage4.manifest.json','build-identities.json','gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')) {
+            if (Test-Path -LiteralPath (Join-Path $payloadRoot $name)) {
+              throw "The uninstaller left bundled payload file $name behind."
+            }
+          }
+          if (Test-Path -LiteralPath (Join-Path $installDirectory 'resources/installer/install-stage4-payload.ps1')) {
+            throw 'The uninstaller left the payload helper behind.'
+          }
+          if ((Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -cne $installerHash) {
+            throw 'Installer bytes changed during the smoke test.'
+          }
+
           $artifactDirectory = 'apps/host-desktop/dist-windows'
           New-Item -ItemType Directory -Force $artifactDirectory | Out-Null
           Copy-Item $installer.FullName $artifactDirectory
@@ -528,6 +566,23 @@ jobs:
           No PC1 installation, account connection, GPU session, or streaming test has been performed.
           '@ | Set-Content (Join-Path $artifactDirectory 'INSTALLATION_STATUS.txt') -Encoding utf8
 
+          [ordered]@{
+            schemaVersion = 1
+            kind = 'HOST_WINDOWS_CI_PREFLIGHT_ONLY'
+            sourceCommit = $expectedCommit
+            installerSha256 = $installerHash
+            stage4ManifestSha256 = $sourceManifestHash
+            buildIdentitiesSha256 = $sourceIdentityHash
+            agentSha256 = $expectedAgentHash
+            hostTunnelSha256 = $expectedTunnelHash
+            nativeComponentsVerified = 4
+            installUninstallSmokePassed = $true
+            signatureStatus = 'unsigned'
+            installable = $false
+            iddDriverIncluded = $false
+            hardwareQualified = $false
+            publicBookabilityEnabled = $false
+          } | ConvertTo-Json | Set-Content (Join-Path $artifactDirectory 'HOST_PREFLIGHT_EVIDENCE.json') -Encoding utf8
           $payloads = Get-ChildItem $artifactDirectory -File
           $checksums = $payloads | Get-FileHash -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" }
