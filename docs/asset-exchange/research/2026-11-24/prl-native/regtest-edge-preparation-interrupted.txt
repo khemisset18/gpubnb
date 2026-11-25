@@ -1,0 +1,24 @@
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c52", "network": "regtest", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "recovery-intent-commitment", "network": "regtest", "sha256": "e482b538ef45e4828a9c1107eb687613165e5adb6184427edec9a568b26ff94c"}
+{"case": "refund-verified-before-funding", "funding": "dcb07db152c09ff3fa519a1f50d1e8adc3dd7520264b2e4b7e71fec285869edb", "network": "regtest", "refund": "3ba1063fd54bfd20b77c5507a38527e81e522162fc25dfd6a9298d18df18f08e", "signer_exited": 0, "submitted": false}
+{"block": "8a02d502361737d632916b038668045f5b9c80f89aecad8226b41947d2a410bd", "case": "generated", "height": 1, "network": "regtest"}
+{"block": "dd906b275e0d5efb361605c067ad7d6cbc73de2b224effc385b42c779f1d2c19", "case": "generated", "height": 10, "network": "regtest"}
+{"block": "8a86b4abcd9c164db5236f368461d5369500089fc2d11e02c614828e20df7c88", "case": "generated", "height": 20, "network": "regtest"}
+{"case": "node-stopped", "exit": -9, "network": "regtest"}
+Traceback (most recent call last):
+  File "/workspace/scratch/3285715d1c94/prl-current/asset-exchange/qualification/pearl/native/prepare_chain.py", line 100, in <module>
+    prepare(args.pearld.resolve(strict=True), args.fixture_signer.resolve(strict=True),
+  File "/workspace/scratch/3285715d1c94/prl-current/asset-exchange/qualification/pearl/native/prepare_chain.py", line 27, in prepare
+    block, = node.rpc("generate", 1, timeout=240)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/3285715d1c94/prl-current/asset-exchange/qualification/pearl/native/private_node.py", line 46, in rpc
+    result = json.loads(conn.getresponse().read(), parse_float=Decimal)
+                        ^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py", line 1478, in getresponse
+    response.begin()
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py", line 343, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py", line 312, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+http.client.RemoteDisconnected: Remote end closed connection without response

@@ -28,6 +28,8 @@ Les six lignes sont extraites du code compilé de la version épinglée. Seuls R
 
 [Commandes complètes de reproduction](research/2026-11-24/prl-native/REPRODUCE.md)
 
+La transaction signée n'embarque pas la magic réseau. Dans un contrôle hors ligne, attribuer ensemble l'étiquette et la magic Simnet à une capsule Regtest a conservé la validité de sa signature et le même txid. L'engagement de préparation a changé. Le harnais complet a alors refusé la capsule avant même de lancer un nœud. Ce contrôle précise pourquoi il faut conserver l'engagement par une voie indépendante. [Contrôle de liaison réseau](research/2026-11-24/prl-native/network-binding.txt)
+
 ## Protocole de laboratoire
 
 Une PRL vaut 100 000 000 grains. Le programme Go fabrique des clés éphémères en mémoire pour le financement, le claim, le refund et l'adresse destinataire. Les transactions version 2 sont sérialisées par Pearl. Leur txid est le double SHA-256 de la sérialisation hors témoin. La sortie du contrat est P2TR v1 sur 32 octets, encodée en Bech32m pour l'adresse de laboratoire. Le consensus amont reconnaît également P2MR v2 et les sorties de données. [Transactions](https://github.com/pearl-research-labs/pearl/blob/3db05e0de0ca90c3a043abd927b968cf53bcd4c8/node/wire/msgtx.go) · [Sorties autorisées](https://github.com/pearl-research-labs/pearl/blob/3db05e0de0ca90c3a043abd927b968cf53bcd4c8/node/blockchain/validate.go)
@@ -62,6 +64,20 @@ La suite intégrale `node/wire` passe aussi avec la bibliothèque Rust ZK compil
 | PostgreSQL natif | Processus PostgreSQL 16.16, transactions avec des clients séparés et rôles PostgreSQL réels. |
 | Blockchain native | `pearld` v1.5.8 sur Regtest, avec PoUW, et séparément sur Simnet, avec le certificat simplifié du protocole. |
 | Matériel physique | BLOCKED. Aucun appareil ou écran de confiance testé pour le contrat PRL. |
+
+## Confirmation indépendante des bornes en Regtest
+
+Une nouvelle chaîne Regtest et une nouvelle paire de signataires de claim/refund ont reproduit les bornes observées en Simnet avec des certificats PoUW natifs. Le financement de 1 000 000 grains a été confirmé à la hauteur 101. Le nœud a refusé 154 grains et accepté 155 grains de frais pour 155 vbytes. La frontière de dust P2TR se situe entre 332 et 333 grains dans cette configuration. Le remplacement à 400 grains a été rejeté, celui à 4 000 a évincé la dépense à 500 grains, puis a été confirmé. [Journal Regtest intégral](research/2026-11-24/prl-native/regtest-edges.jsonl)
+
+| Preuve sur la nouvelle chaîne | Valeur exacte |
+|---|---|
+| Engagement du refund conservé avant financement | `e482b538ef45e4828a9c1107eb687613165e5adb6184427edec9a568b26ff94c` |
+| Financement | `dcb07db152c09ff3fa519a1f50d1e8adc3dd7520264b2e4b7e71fec285869edb` |
+| Claim confirmé sur la branche A | `92b1d0cb4f6e97a214d4d0617fd564ccca828c99442c712794a19ee04b1bf0d0` |
+| Refund confirmé sur B et adopté par A | `3ba1063fd54bfd20b77c5507a38527e81e522162fc25dfd6a9298d18df18f08e` |
+| Bloc 105 commun après la réorganisation | `1ceaf9205670f832f96fb4233d0da7f983f3e48339c268a578c052f9727c89e3` |
+
+La préparation avait perdu la connexion RPC à la hauteur 21 et le processus est sorti par SIGKILL. La cause du signal n'a pas été établie. Un nœud neuf a revalidé les 21 blocs et l'engagement, puis repris la génération. L’environnement a été relancé après le bloc 99. Un dernier processus a revalidé ces 99 blocs avant de produire le bloc 100 le 25 novembre, toujours sans le signataire. Ce premier incident de préparation est distinct de l'arrêt brutal injecté volontairement à la hauteur 104 dans la qualification. Pour ce dernier, le nœud redémarré a retrouvé la hauteur 0 et a revalidé 104 blocs. Un essai de répétition du scénario initial a perdu son processus, puis sa relance autonome a également abouti, avec un autre tip et le même refund présigné. [Incident initial](research/2026-11-24/prl-native/regtest-edge-preparation-interrupted.txt) · [Reprise de la préparation](research/2026-11-24/prl-native/regtest-edge-preparation-resumed.jsonl) · [Tentative interrompue](research/2026-11-24/prl-native/regtest-initial-repeat-failure.txt) · [Répétition du premier scénario](research/2026-11-24/prl-native/regtest-repeated.jsonl) · [Index des blocs](research/2026-11-24/prl-native/prepared-block-index.json)
 
 ## Matrice de décision
 

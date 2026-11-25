@@ -1,0 +1,5 @@
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c52", "network": "regtest", "peers": 0, "restart": false}
+{"case": "refund-verified-before-funding", "funding": "ae55a9bfd5a59cd2bd1f2b6a07f70fff5ee8a7507a6fb90e89310e8de8c5ac32", "network": "regtest", "refund": "b3e0cc75d13b6e47deb1e33f65627b33c346d1738e112557388ba6f24f7c11dc", "signer_exited": 0, "submitted": false}
+{"block": "48bc41d1183342f7f498eb6860bde72cd313853c0a7b0af99f261b65babda2b4", "case": "generated", "height": 1, "network": "regtest"}
+{"block": "b34c201f223808b11248c9d05d7827a24b52505816185124a3f76580086f79de", "case": "generated", "height": 10, "network": "regtest"}
+{"block": "2e626b0270b19611797483945bc6d632c5519f093e8fe152606faba715539cae", "case": "generated", "height": 20, "network": "regtest"}

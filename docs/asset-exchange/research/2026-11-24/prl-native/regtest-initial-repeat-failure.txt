@@ -1,0 +1,32 @@
+{"case": "independent-verifier-before-funding", "receipt_sha256": "32320777d50ac39a594dec130b8b133ae1ead63819aa2cb66f93c646e360d3f6", "refund": "b3e0cc75d13b6e47deb1e33f65627b33c346d1738e112557388ba6f24f7c11dc", "wrong_amount_rejected": true, "wrong_destination_rejected": true, "wrong_magic_rejected": true}
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c52", "network": "regtest", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c52", "network": "regtest", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "two-independently-validated-chains", "height": 100, "tip": "6848960456deaa3fcea375da808b7b45adceb49fc4e742aa023ba49a807d172d"}
+{"block": "e7529e167c3395b305c3c025b37efb61b42455c2b52c55072a2ccc54946afd55", "case": "funding-confirmed", "txid": "ae55a9bfd5a59cd2bd1f2b6a07f70fff5ee8a7507a6fb90e89310e8de8c5ac32", "value_grains": 1000000}
+{"case": "refund-premature", "reason": "transaction b3e0cc75d13b6e47deb1e33f65627b33c346d1738e112557388ba6f24f7c11dc is not standard: transaction is not finalized"}
+{"case": "wrong-preimage", "reason": "failed to validate input d9ee5f9b2a32dcd1f330061d4ab390ad4c97e804d1b253eb290e4dd9bbe24560:0 which references output ae55a9bfd5a59cd2bd1f2b6a07f70fff5ee8a7507a6fb90e89310e8de8c5ac32:0 - OP_EQUALVERIFY failed (input witness [b4ef091b0bed0336fe0513ee1c46c65e6dd3ca5a6e9797b9b0e557003c6c58cbdd2203ec916bfdfdf9997f55313a61bc9b2e9b7ed1548bf72e68c47b6f8a0a0f01 c8c9823a069f3a2d9a975b27939494b21f181912cf2c141b402b140a09afd3c2 82012088a82025d7e4e4a0187c4e7645e347a88b996d492f8b75402e04e624a00c8af13783458820fedf2524b6ce826d5b3474eec474f6f22e5a69426b42bf71af96a00e91514082ac c150929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0e9f1f04b68bc1432cc2f45c9a873e03205c1ad5e4c804d583861209725d702ec], input script bytes , prev output script bytes 51206472f974a2e9fb17121947fabfe319eaac40dae76a8bb9ad3024426428efe332)"}
+{"case": "dust", "reason": "transaction a042c17b170dda2b1058db0889b0e199a84f1cf238d7b10c694960ee28fb7fe6 is not standard: transaction output 0: payment is dust: 1"}
+{"case": "zero-fee-admission", "reason": "transaction 9c808a05618b6e3bc6e56e01e10333ee4c7940987f0f97fc188d41d5052fd634 has 0 fees which is under the required amount of 155"}
+{"a_tip": "0ebe35872f9c3ae3d4bc645aab9cb39ca78c8147716073418822d8b9c68f3350", "b_tip": "e7529e167c3395b305c3c025b37efb61b42455c2b52c55072a2ccc54946afd55", "case": "claim-confirmed-observers-disagree", "claim": "d9ee5f9b2a32dcd1f330061d4ab390ad4c97e804d1b253eb290e4dd9bbe24560"}
+{"case": "node-stopped", "exit": -9, "network": "regtest"}
+{"case": "node-stopped", "exit": 0, "network": "regtest"}
+Traceback (most recent call last):
+  File "/workspace/scratch/3285715d1c94/runtime/tested/asset-exchange/qualification/pearl/native/qualify.py", line 194, in <module>
+    assess(args.pearld.resolve(strict=True), args.verify_refund.resolve(strict=True),
+  File "/workspace/scratch/3285715d1c94/runtime/tested/asset-exchange/qualification/pearl/native/qualify.py", line 115, in assess
+    fork.append(generate(b))
+                ^^^^^^^^^^^
+  File "/workspace/scratch/3285715d1c94/runtime/tested/asset-exchange/qualification/pearl/native/qualify.py", line 31, in generate
+    block, = node.rpc("generate", 1, timeout=240)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/3285715d1c94/runtime/tested/asset-exchange/qualification/pearl/native/private_node.py", line 46, in rpc
+    result = json.loads(conn.getresponse().read(), parse_float=Decimal)
+                        ^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py", line 1478, in getresponse
+    response.begin()
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py", line 343, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py", line 312, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+http.client.RemoteDisconnected: Remote end closed connection without response
