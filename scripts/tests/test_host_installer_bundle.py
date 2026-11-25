@@ -111,6 +111,15 @@ class HostInstallerBundleContractTests(unittest.TestCase):
             "GPUbnbWindowsMedia.dll",
             "gpubnb-host-windows-preflight-noninstallable-",
             "The uninstaller left native component",
+            "Installed manifest or build identities differ from the exact staged payload.",
+            "Installed Agent hash differs from the staged manifest or build.",
+            "Installed Host tunnel hash differs from the staged build.",
+            "The uninstaller left bundled payload file",
+            "The uninstaller left the payload helper behind.",
+            "Installer bytes changed during the smoke test.",
+            "HOST_PREFLIGHT_EVIDENCE.json",
+            "hardwareQualified = $false",
+            "nativeComponentsVerified = 4",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, workflow)

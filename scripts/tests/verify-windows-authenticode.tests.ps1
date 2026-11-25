@@ -203,5 +203,49 @@ try {
 } finally {
     Remove-Item -LiteralPath $processFixture -Force
 }
+# Exercise signer rejection before any certificate lookup or signing.
+$signer = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\sign-windows-authenticode.ps1')).Path
+$signerKeys = @('GPUBNB_CODESIGN_THUMBPRINT','GPUBNB_CODESIGN_TIMESTAMP_URL','GPUBNB_CODESIGN_EXPECTED_SIGNER_SHA256')
+$originalSignerEnv = @{}
+foreach ($key in $signerKeys) { $originalSignerEnv[$key] = [Environment]::GetEnvironmentVariable($key, 'Process') }
+$signerFixture = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N')+'.ps1')
+[IO.File]::WriteAllText($signerFixture, 'unsigned preflight test')
+function Assert-SignerRejects {
+    param([string[]]$Paths, [string]$Expected)
+    $caught = ''
+    try { & $signer -Path $Paths | Out-Null } catch { $caught = $_.Exception.Message }
+    if (-not $caught.StartsWith($Expected, [StringComparison]::Ordinal)) {
+        throw "signer_negative_case_failed:${Expected}:$caught"
+    }
+}
+try {
+    $env:GPUBNB_CODESIGN_THUMBPRINT = 'invalid'
+    $env:GPUBNB_CODESIGN_TIMESTAMP_URL = 'https://example.invalid'
+    $env:GPUBNB_CODESIGN_EXPECTED_SIGNER_SHA256 = 'a' * 64
+    Assert-SignerRejects @($signerFixture) 'codesign_thumbprint_invalid'
+    $passed++
+    $env:GPUBNB_CODESIGN_THUMBPRINT = 'A' * 40
+    $env:GPUBNB_CODESIGN_EXPECTED_SIGNER_SHA256 = ''
+    Assert-SignerRejects @($signerFixture) 'codesign_approved_publisher_sha256_required'
+    $passed++
+    $env:GPUBNB_CODESIGN_EXPECTED_SIGNER_SHA256 = 'a' * 64
+    $env:GPUBNB_CODESIGN_TIMESTAMP_URL = 'http://example.invalid'
+    Assert-SignerRejects @($signerFixture) 'codesign_timestamp_url_must_be_https'
+    $passed++
+    $env:GPUBNB_CODESIGN_TIMESTAMP_URL = 'https://example.invalid'
+    Assert-SignerRejects @($signerFixture, ($signerFixture + '.missing')) 'codesign_path_missing_or_unsafe:'
+    $passed++
+    Assert-SignerRejects @($signerFixture, $signerFixture) 'codesign_duplicate_path'
+    $passed++
+    if ((Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $signerFixture).Status -ne 'NotSigned') {
+        throw 'signer_negative_tests_must_not_sign'
+    }
+    Write-Host 'PASS signer rejects invalid policy and inputs before signing'
+} finally {
+    foreach ($key in $signerKeys) {
+        [Environment]::SetEnvironmentVariable($key, $originalSignerEnv[$key], 'Process')
+    }
+    Remove-Item -LiteralPath $signerFixture -Force
+}
 $global:LASTEXITCODE = 0
 Write-Host "AUTHENTICODE_TESTS_PASSED=$passed"
