@@ -74,6 +74,25 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         )
         self.assertNotRegex(helper, r"(?i)Start-Process.*(?:stream|worker)|pnputil|InstallDriver")
 
+    def test_preflight_runs_on_integration_contract_changes(self):
+        workflow = (ROOT / ".github/workflows/host-windows-preflight.yml").read_text(encoding="utf-8")
+        pull_request = workflow.split("  pull_request:\n", 1)[1].split("  workflow_dispatch:", 1)[0]
+        for path in (
+            "apps/api/**",
+            "apps/web/**",
+            "scripts/stage4_private_backend_delta.py",
+            "scripts/tests/test_stage4_private_backend_delta.py",
+            ".github/workflows/stage4-private-backend-source-delta.yml",
+            "apps/host-desktop/**",
+            "native/windows-media/**",
+            "native/windows-worker/**",
+            "native/windows-stream-helper/**",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(f"      - {path}\n", pull_request)
+        self.assertIn("ref: " + "$" + "{{ github.event.pull_request.head.sha || github.sha }}", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+
     def test_ci_bundle_smoke_requires_four_file_unsigned_policy_and_uninstall_cleanup(self):
         workflow = (ROOT / ".github/workflows/host-windows-preflight.yml").read_text(encoding="utf-8")
 
