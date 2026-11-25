@@ -1,0 +1,17 @@
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c52", "network": "regtest", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "recipient-spend-commitment", "network": "regtest", "recipient_exited": 0, "sha256": "cbfa0a6244035d5fafaf159e44f8e7de919d1a44f95153f70643e5f4d93e579b"}
+{"case": "recovery-intent-commitment", "network": "regtest", "sha256": "a14ceeb72f0df9775d1b809c707f688895b266b93a23e7a7233edb046927d365"}
+{"case": "refund-verified-before-funding", "funding": "7de9968af526b656f28f55f86c74bb34a7d09ad172334cabace80e3d6509c2c8", "network": "regtest", "refund": "38899aeec15c8cbe970311eb34beff7516607a95722bf5c90d977a6ccb013e4a", "signer_exited": 0, "submitted": false}
+{"block": "11d708bd7d40564686ae3e940ea6e3fc7b0baff520fdea8e22d854bd505b6aa8", "case": "generated", "height": 1, "network": "regtest"}
+{"block": "6ceca5a0b28cfc95a93e52c6d98809033106035796fc483e61b2a52cac69b047", "case": "generated", "height": 10, "network": "regtest"}
+{"block": "294639eb9647bfefa88bf73970dc93984faec1a53a0c084460cddf49dd52b60b", "case": "generated", "height": 20, "network": "regtest"}
+{"block": "aa48054cf4f3de85757b4e604bc393a729d88854fcbe5e42b9a6678da3f760cc", "case": "generated", "height": 30, "network": "regtest"}
+{"block": "f0595bcdced9c680ebf64de830432c988816d4d54ed65b114a6f5908530d75c2", "case": "generated", "height": 40, "network": "regtest"}
+{"block": "4b8389294ea8f4da36bdd88fefb583e7cbbcaee5a7ae8a8b72dac8fca9a53942", "case": "generated", "height": 50, "network": "regtest"}
+{"block": "857d4cda1f308c36e21bdaa913169793cf0326070c202ee8d6d8fadc4a5e57dc", "case": "generated", "height": 60, "network": "regtest"}
+{"block": "7274ce30cee9f1c338a71a9cc83ec069c3881930842344fb0924decb4ab540e6", "case": "generated", "height": 70, "network": "regtest"}
+{"block": "035f7f9ccc5537055630200d5e5b30a50cc1d823bb6f8cd527ae7ad00a26dd10", "case": "generated", "height": 80, "network": "regtest"}
+{"block": "38571592d632f576cd58b763b024e568dbc86378c3b25ac518d6ad028edc364c", "case": "generated", "height": 90, "network": "regtest"}
+{"block": "ea9f0ad99ab26537ae176dbdb95ceb4a12ec0ba9058b5a8037ef5dbae17712c6", "case": "generated", "height": 100, "network": "regtest"}
+{"case": "node-stopped", "exit": 0, "network": "regtest"}
+{"case": "preparation-complete", "data_removed": true, "network": "regtest"}

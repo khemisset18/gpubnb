@@ -1,0 +1,8 @@
+{"case": "independent-verifier-before-funding", "receipt_sha256": "f4f89724554083dfb78ccfcc5572fd2b4675eb62aad137bb0ee4084df9d9cbf1", "refund": "1d516dbdcefe85c2a56c0bc26cabe6b184ca3d4404ee357285bc86c6c2e730a8", "wrong_amount_rejected": true, "wrong_destination_rejected": true, "wrong_magic_rejected": true}
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c53", "network": "simnet", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c53", "network": "simnet", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "two-independently-validated-chains", "height": 100, "tip": "c0e3029ad49b3570dd9c2e0172a1bec0697df6de9aaf4aea64179d6ba8529c09"}
+{"budget_grains": 1500, "case": "refund-fee-check-before-funding", "covered": true, "funding_submitted": false, "min_relay_grains_per_kvb": 1000, "observer": "a", "refund": "1d516dbdcefe85c2a56c0bc26cabe6b184ca3d4404ee357285bc86c6c2e730a8", "required_grains": 138, "vsize": 138}
+{"budget_grains": 1500, "case": "refund-fee-check-before-funding", "covered": false, "funding_submitted": false, "min_relay_grains_per_kvb": 20000, "observer": "b", "refund": "1d516dbdcefe85c2a56c0bc26cabe6b184ca3d4404ee357285bc86c6c2e730a8", "required_grains": 2760, "vsize": 138}
+{"case": "node-stopped", "exit": 0, "network": "simnet"}
+{"case": "node-stopped", "exit": 0, "network": "simnet"}

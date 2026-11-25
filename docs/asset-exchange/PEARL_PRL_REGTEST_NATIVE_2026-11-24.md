@@ -1,4 +1,4 @@
-# Pearl PRL – qualification de la chaîne native du 24 novembre 2026
+# Pearl PRL – qualification de la chaîne native, 24 et 25 novembre 2026
 
 **Pearl a démontré en Regtest privé le financement d'un HTLC, sa dépense par préimage, son remboursement après panne et la disparition d'un claim confirmé lors d'une réorganisation. DOGE garde l'avance expérimentale sur les politiques de mempool et le signataire externe. La qualification de production PRL reste BLOCKED.** [PR brouillon #399](https://github.com/khemisset18/gpubnb/pull/399) · [Première campagne Regtest](research/2026-11-24/prl-native/regtest-first-excerpt.jsonl) · [Rapport API et PostgreSQL](PEARL_PRL_POSTGRES_NATIVE_2026-11-24.md)
 
@@ -7,6 +7,9 @@
 | Base de #397 | `19055e1a47296d611a950a20361341cc0e7b29f7` |
 | Campagne PostgreSQL, première campagne Regtest et réception des résultats d'Exchange | `7dbe541356f59b26e253bbe9e8326194e720d10e` |
 | Harnais avec bornes de frais et de dust, build des deux outils Go | `a595d3cf6f6a1ba1ddb112b0de4cdbb4b7bece65` |
+| Bénéficiaire distinct et observateurs avec des politiques de relais différentes | `f0bd9f3c82c4154a3e30dcbd9b1191d1cfe3c7cf` |
+| Service API et dépôt PostgreSQL réel après redémarrage du processus | `cc30275e1634dc3f5c64262a996fade99506edf0` |
+| Vérificateur des frais et refus du financement si un observateur exige davantage | `2fe74e7caa4a24ae19a4a937c178896564da5213` |
 | Pearl Research Labs | `v1.5.8` à `3db05e0de0ca90c3a043abd927b968cf53bcd4c8` |
 
 Les PR précédentes ont été consultées à leurs têtes respectives. [#391, 44ebb52](https://github.com/khemisset18/gpubnb/pull/391) · [#392, 5f3d5db](https://github.com/khemisset18/gpubnb/pull/392) · [#393, b8d5501](https://github.com/khemisset18/gpubnb/pull/393) · [#395, d7e1e70](https://github.com/khemisset18/gpubnb/pull/395) · [#396, 056e28f](https://github.com/khemisset18/gpubnb/pull/396) · [#397, 19055e1](https://github.com/khemisset18/gpubnb/pull/397)
@@ -40,7 +43,7 @@ L'arbre Taproot utilise le point interne NUMS de BIP341. La feuille claim exige 
 
 Le financement du premier scénario provenait du signataire initial, SHA-256 `1e97ff1ae0c836b07f022630ec15ebaca79edfa68f53c05a6c08872fd03b84cf`. Le signataire des scénarios aux seuils a l'empreinte `840984dc2f335707dc61390654ab7614aba0622c280ba43ec9f8a4066614fe0f`. Le vérificateur de remboursement est identique pour ces exécutions, `4ef30d28fdf3fcaa6545ff4f865b6580e793e4a8ac7fd73fb133dc5ca90ffa8b`.
 
-La preuve de récupération s'arrête à l'UTXO confirmé sur la destination choisie avant financement. La clé de cette destination était elle aussi éphémère. La campagne ne démontre donc pas une dépense ultérieure par un bénéficiaire réel, la garde de sa clé, ni la disponibilité d'un dépositaire d'archives indépendant. Le contrôle de la feuille refund ne reconstruit pas à lui seul la feuille claim cachée dans la preuve de Merkle. Le nœud valide séparément le claim complet sur l'autre branche.
+Les premiers scénarios se terminaient à l'UTXO confirmé sur la destination éphémère du signataire de la fixture. La campagne du 25 novembre ajoute un processus bénéficiaire distinct ainsi qu'une dépense de cet UTXO. La disponibilité d'un dépositaire d'archives indépendant et la garde à long terme des clés restent ouvertes. Le contrôle de la feuille refund ne reconstruit pas à lui seul la feuille claim cachée dans la preuve de Merkle. Le nœud valide séparément le claim complet sur l'autre branche. [Signataire du bénéficiaire](../../asset-exchange/qualification/pearl/native/cmd/recipient/main.go)
 
 ## Résultats natifs
 
@@ -58,11 +61,12 @@ La suite intégrale `node/wire` passe aussi avec la bibliothèque Rust ZK compil
 
 | Catégorie | Exécution et portée |
 |---|---|
-| Statique | Syntaxe de 110 modules, lecture des migrations et des paramètres de consensus, vérification des chemins du diff. |
+| Statique | Syntaxe de 111 modules JavaScript sur le code final, lecture des migrations et des paramètres de consensus, contrôle du diff. |
 | Unitaire | Suites Go de Pearl et tests de validation d'Asset Exchange. |
 | Doubles de test | Les 343 tests Node incluent des doubles de dépôts et de vérificateurs. Les 94 tests Python d'Exchange utilisent des fixtures hors ligne. |
-| PostgreSQL natif | Processus PostgreSQL 16.16, transactions avec des clients séparés et rôles PostgreSQL réels. |
+| PostgreSQL natif | PostgreSQL 16.16, droits et transactions avec des clients séparés, puis service d'offres et pilote Node sur le cluster jetable. |
 | Blockchain native | `pearld` v1.5.8 sur Regtest, avec PoUW, et séparément sur Simnet, avec le certificat simplifié du protocole. |
+| Signataire logiciel distinct | Processus bénéficiaire éphémère sans clé du HTLC. Une transaction présignée par ce processus dépense le refund après confirmation. |
 | Matériel physique | BLOCKED. Aucun appareil ou écran de confiance testé pour le contrat PRL. |
 
 ## Confirmation indépendante des bornes en Regtest
@@ -79,6 +83,32 @@ Une nouvelle chaîne Regtest et une nouvelle paire de signataires de claim/refun
 
 La préparation avait perdu la connexion RPC à la hauteur 21 et le processus est sorti par SIGKILL. La cause du signal n'a pas été établie. Un nœud neuf a revalidé les 21 blocs et l'engagement, puis repris la génération. L’environnement a été relancé après le bloc 99. Un dernier processus a revalidé ces 99 blocs avant de produire le bloc 100 le 25 novembre, toujours sans le signataire. Ce premier incident de préparation est distinct de l'arrêt brutal injecté volontairement à la hauteur 104 dans la qualification. Pour ce dernier, le nœud redémarré a retrouvé la hauteur 0 et a revalidé 104 blocs. Un essai de répétition du scénario initial a perdu son processus, puis sa relance autonome a également abouti, avec un autre tip et le même refund présigné. [Incident initial](research/2026-11-24/prl-native/regtest-edge-preparation-interrupted.txt) · [Reprise de la préparation](research/2026-11-24/prl-native/regtest-edge-preparation-resumed.jsonl) · [Tentative interrompue](research/2026-11-24/prl-native/regtest-initial-repeat-failure.txt) · [Répétition du premier scénario](research/2026-11-24/prl-native/regtest-repeated.jsonl) · [Index des blocs](research/2026-11-24/prl-native/prepared-block-index.json)
 
+## Bénéficiaire distinct et budgets de frais, 25 novembre
+
+Le nouveau bénéficiaire communique uniquement son script P2TR au constructeur du HTLC. Dans son propre processus, il vérifie que la transaction de remboursement lui paie précisément 998 500 grains, signe une dépense de cette sortie et quitte. Son engagement et celui du refund sont conservés séparément avant financement. Après panne et réorganisation, deux nœuds ont confirmé 996 500 grains sur sa seconde destination, avec 2 000 grains de frais. La transaction avait été autorisée avant financement. La capacité de signer une nouvelle autorisation après une panne ou d'en vérifier l'affichage sur un appareil physique reste à tester. [Préparation Regtest](research/2026-11-25/prl-native/regtest-prepare.jsonl) · [Campagne PoUW](research/2026-11-25/prl-native/regtest.jsonl) · [Campagne Simnet](research/2026-11-25/prl-native/simnet.jsonl)
+
+| Pièce de la première campagne Regtest avec bénéficiaire | Identifiant |
+|---|---|
+| Financement de 1 000 000 grains | `7de9968af526b656f28f55f86c74bb34a7d09ad172334cabace80e3d6509c2c8` |
+| Remboursement de 998 500 grains au bloc 105 | `38899aeec15c8cbe970311eb34beff7516607a95722bf5c90d977a6ccb013e4a` |
+| Bloc 105 de cette campagne | `d4e2c98113d880a7893ae43d0411b1eb808c1c4c5026959cfa174cffcab48e0b` |
+| Dépense présignée du bénéficiaire au bloc 106 | `d67ec761de8979cf16704c2862f53961e77c4ee39fd7c121053dfb90b83808fe` |
+| Bloc 106 de cette campagne | `864458980b0d2a63e9a186abddaba130eff7cd7827633cb2aede9baaa03a6ff8` |
+
+Le remboursement vérifié avant financement pèse 138 vbytes et paie 1 500 grains. Les résultats ci-dessous concernent les politiques réellement configurées sur `pearld` v1.5.8. Lorsque la politique était déjà exigeante avant financement, le nouveau harnais a arrêté l'essai avant diffusion dès le désaccord entre A et B. Lorsque le nœud à politique élevée a reçu le bloc 105 construit ailleurs, il l'a validé conformément aux règles de consensus. [Devis du vérificateur](research/2026-11-25/prl-native/verified-fee-quotes.jsonl) · [Refus avant financement en Regtest](research/2026-11-25/prl-native/regtest-fee-summary.txt) · [Contrôle Simnet](research/2026-11-25/prl-native/simnet-fee-summary.txt)
+
+| Plancher de relais (grains/kvB) | Frais exigés pour 138 vbytes | Décision observée |
+|---:|---:|---|
+| 1 000 | 138 | Deux observateurs autorisent l'essai. Refund et dépense du bénéficiaire confirmés. |
+| 11 000 | 1 518 | Financement refusé si B annonce ce seuil à l'origine. Au moment de la récupération sur une chaîne déjà financée, le refund seul est refusé en mempool. |
+| 20 000 | 2 760 | Même refus préventif et même refus du refund en mempool. |
+
+Au seuil de 11 000, le parent et son enfant paient ensemble 3 500 grains pour 250 vbytes, au-dessus des 2 750 grains calculés pour la paire. L'appel `testmempoolaccept` a renvoyé un refus de frais pour le parent, puis `missing-inputs` pour l'enfant. Le serveur a retourné `-32601 Method not found` pour `submitpackage`. Ce couple ne fournit donc pas de voie de relais démontrée sur ce nœud. **FAIL** pour la disponibilité du refund fixe sous ces deux politiques. Le refus de financer protège quand la hausse est visible à l'avance. La sortie en cas de hausse après financement reste **BLOCKED**. [Regtest au seuil initial de 11 000](research/2026-11-25/prl-native/regtest-fee-11000.jsonl) · [Regtest au seuil initial de 20 000](research/2026-11-25/prl-native/regtest-fee-20000.jsonl) · [Cycle complet et changement de politiques](research/2026-11-25/prl-native/regtest-fee-1000.jsonl)
+
+Le vérificateur hors ligne a validé les deux capsules publiées et rejeté les entrées tronquées ou trop longues, un second objet JSON, un champ inconnu, une valeur changée ou un script de destination différent. Le destinataire logiciel a refusé une demande pour un autre bénéficiaire et une étiquette de réseau public. Une empreinte du bénéficiaire altérée a interrompu le harnais avant toute ouverture d'un nœud. [Contrôles des entrées](research/2026-11-25/prl-native/public-inputs.txt) · [Contrôle des engagements](research/2026-11-25/prl-native/recipient-commitment-negative.txt)
+
+Le point de reprise exact au bloc 104 et une continuation publique jusqu'au bloc 106 sont livrés avec un lecteur autonome. Le lecteur utilise les blocs, la capsule de refund et la dépense présignée du bénéficiaire. Il lance un nouveau nœud sans portefeuille. Dans cet essai indépendant, le bloc 106 a pour hash `bf16d0b53ac9fb1d00f39bffc90058c7ea0ebe82fc9d751eda7464306b78b0c2`. Un autre nœud neuf a ensuite revalidé passivement les mêmes 106 blocs et retrouvé les mêmes 996 500 grains sur la sortie du bénéficiaire. [Archives et reproduction](research/2026-11-25/prl-native/README.md) · [Récupération](research/2026-11-25/prl-native/public-regtest-recovery.jsonl) · [Rejeu passif](research/2026-11-25/prl-native/public-regtest-replay.jsonl)
+
 ## Matrice de décision
 
 | Étape | Décision | Propriété démontrée ou preuve encore nécessaire |
@@ -87,11 +117,11 @@ La préparation avait perdu la connexion RPC à la hauteur 21 et le processus es
 | P1 – nœud et réseau | PASS | Deux nœuds officiels sur bases neuves, contrôle de magic, genesis, chaîne, pairs et maturité. |
 | P2 – transactions et scripts | PASS | Signatures Schnorr, Taproot, preuve de feuille, CLTV, préimage, sérialisation et mutations vérifiées par la VM et le nœud. |
 | P3 – lock, claim, refund | PASS | Financement confirmé après vérification du refund. Claim et refund confirmés sur des branches concurrentes. |
-| P4 – frais, mempool et conflits | BLOCKED | Seuils mesurés et remplacement simple démontré. La robustesse du refund à frais fixes sous pression, aux dépendances de paquets et aux limites d'éviction n'est pas qualifiée sur le nœud complet. |
+| P4 – frais, mempool et conflits | BLOCKED | Seuils et remplacement simple démontrés. FAIL pour le relais du remboursement à 1 500 grains sous les deux politiques élevées. Le garde-fou couvre les seuils visibles avant financement. Une hausse ultérieure, les limites d'éviction et les dépendances de transactions restent à couvrir pour garantir une sortie. |
 | P5 – réorganisation | PASS | Un claim confirmé est déconnecté par une branche plus longue. Deux répertoires et processus indépendants convergent sur le même UTXO. |
-| P6 – récupération | PASS | Dans le modèle testé, un outil séparé et les octets présignés suffisent après perte du signataire, arrêt brutal du nœud et restauration de l'historique public. |
-| P7 – API et PostgreSQL | PASS | Contrôles d'autorisation et de rejeu dans les suites Exchange, SQL natif 16.16, privilèges, courses et pertes de client sur cluster jetable. |
-| P8 – signataire externe et matériel | BLOCKED | Le signataire logiciel éphémère utilise les primitives natives. Aucune application matérielle ou émulation officielle qualifiée pour les feuilles PRL, le réseau et l'affichage de ce refund. |
+| P6 – récupération | PASS | Au seuil couvert, le refund est confirmé après arrêt brutal et restauration de l'historique public. Un bénéficiaire distinct a autorisé à l'avance une dépense de sa sortie, confirmée par deux nœuds. |
+| P7 – API et PostgreSQL | PASS | Refus de trois acceptations historiques via le dépôt PostgreSQL, contrôles SQL directs et reprise d'une requête applicative signée avec un unique résultat durable après redémarrage. |
+| P8 – signataire externe et matériel | BLOCKED | Le bénéficiaire logiciel détient une clé distincte et sa dépense aboutit dans le laboratoire. L'affichage de confiance du réseau, des feuilles PRL, des frais et de la destination reste à vérifier sur un appareil compatible. |
 | P9 – audit et décision de production | BLOCKED | Revue indépendante, politique de frais de sortie, sécurité opérationnelle et validation matérielle restent ouvertes. |
 
 Une démonstration BitGo de multisignature ou la présence du portefeuille logiciel Oyster ne valide pas l'affichage du réseau, de l'outpoint, du montant, de la destination, des frais et de la hauteur sur un dispositif indépendant. Aucun matériel physique n'a été utilisé. [Oyster](https://github.com/pearl-research-labs/pearl/blob/3db05e0de0ca90c3a043abd927b968cf53bcd4c8/wallet/README.md) · [Profil Pearl de BitGo](https://developers.bitgo.com/docs/pearl)
@@ -104,7 +134,7 @@ Une démonstration BitGo de multisignature ou la présence du portefeuille logic
 | Altération | SIGHASH_ALL, vérification indépendante de l'intention, refus des mutations de destination, montant, réseau, préimage ou temporisation. L'opérateur doit conserver un canal indépendant pour l'empreinte et la capsule. |
 | Répudiation | Empreintes, txid, hash des blocs, résultats d'idempotence et événements SQL relient les opérations. La perte de la réponse après commit a été exercée. Une conservation externe inaltérable reste à qualifier. |
 | Divulgation | Les clés des utilisateurs sont absentes du protocole de test. Les clés de signature éphémères restent dans le processus initial, les capsules sont publiques. La préimage d'un claim devient publique dans son témoin. Les sauvegardes et la télémétrie d'une future exploitation exigent une revue. |
-| Déni de service | Rejet des entrées malformées, contrôles de débit de l'API, concurrence SQL, erreur RPC, doubles dépenses, crash et réorganisation exercés. La saturation prolongée et le remboursement en marché de frais défavorable restent ouverts. |
+| Déni de service | Tailles d'entrées bornées, refus du second objet JSON, contrôles API, concurrence SQL, erreur RPC, crash et réorganisation exercés. Deux politiques locales refusent le refund à frais fixes. La disponibilité en cas de hausse après financement reste ouverte. |
 | Élévation de privilèges | Contrôles IDOR/BOLA et sujet/session, requêtes paramétrées, triggers SQL et droits invoker. Un lecteur ne peut écrire. Le compte propriétaire peut administrer son schéma. Les ACL réelles et la séparation des opérateurs demandent une preuve opérationnelle. |
 
 ## Comparaison avec DOGE et décision
@@ -112,9 +142,9 @@ Une démonstration BitGo de multisignature ou la présence du portefeuille logic
 | Critère | Pearl | Référence DOGE |
 |---|---|---|
 | Primitives et cycle natif | P2TR/Tapscript, deux dépenses confirmées, clés éphémères et argent fictif. | Dogecoin Core 1.14.9, HTLC et validation native de scripts selon son propre consensus. Même famille de démonstration expérimentale sur deux protocoles distincts. |
-| Reprise et observateurs | Perte du processus, restauration de l'historique public, séparation signataire/vérificateur, désaccord puis convergence. | Campagnes de cohérence et de reprise multi-observateurs plus étendues. Pearl couvre le cas borné décrit ici. |
-| Frais, conflits et pinning | Seuils d'admission, remplacement simple et suite de politique mempool amont. | Campagnes dédiées sur des graphes de dépendances, nouvelles entrées non confirmées et frontières de remplacement à 100/101. Avance DOGE. |
-| Signature externe | Signature logicielle et vérification cryptographique locale. | Application Ledger DOGE sous Speculos et contrôle libdogecoinconsensus, avec onze mutations rejetées. Le rapport DOGE laisse lui aussi D8 physique ouvert. |
+| Reprise et observateurs | Restauration sur blocs publics, refund puis dépense présignée d'un bénéficiaire distinct, désaccord sur le claim puis convergence. | Campagnes de cohérence et de reprise multi-observateurs plus étendues. Pearl couvre le cas borné décrit ici. |
+| Frais, conflits et pinning | Seuils d'admission, remplacement simple, deux politiques élevées et observation d'un couple parent/enfant sur le nœud natif. | Campagnes dédiées sur des graphes de dépendances, nouvelles entrées non confirmées et frontières de remplacement à 100/101. Avance DOGE. |
+| Signature externe | Outil logiciel séparé pour le bénéficiaire, contrôle cryptographique indépendant et confirmation de la dépense. | Application Ledger DOGE sous Speculos et contrôle libdogecoinconsensus, avec onze mutations rejetées. Le rapport DOGE laisse lui aussi D8 physique ouvert. |
 | Audit et usage réel | P8 et P9 bloquent la production. | La référence DOGE laisse D9 ouvert. Aucune équivalence globale ni autorisation de règlement réel n'en découle. |
 
 [Référence d'intégration DOGE](DOGE_INTEGRATION_2026-11-15.md) · [Frais et pinning](DOGE_FEE_PINNING_2026-11-11.md) · [Frontières RBF](DOGE_RBF_BOUNDARIES_2026-11-12.md) · [Récupération](DOGE_RECOVERY_CONSISTENCY_2026-11-13.md) · [Signataire émulé et consensus](DOGE_D8_STAGE3_NATIVE_CONSENSUS_2026-11-22.md)

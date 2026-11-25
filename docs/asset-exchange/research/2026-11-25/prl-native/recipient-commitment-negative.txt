@@ -1,0 +1,2 @@
+regtest exit 1 node identity records 0 RuntimeError: recipient commitment mismatch
+simnet exit 1 node identity records 0 RuntimeError: recipient commitment mismatch
