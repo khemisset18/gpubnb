@@ -8,9 +8,17 @@ Set-StrictMode -Version Latest
 
 $thumbprint = "$env:GPUBNB_CODESIGN_THUMBPRINT".Replace(' ', '').ToUpperInvariant()
 $timestampUrl = "$env:GPUBNB_CODESIGN_TIMESTAMP_URL".Trim()
+# Independent release-policy pin; never derive approval from the selected cert.
+$approvedSignerSha256 = "$env:GPUBNB_CODESIGN_EXPECTED_SIGNER_SHA256".Replace(' ', '').ToLowerInvariant()
 
 if ([string]::IsNullOrWhiteSpace($thumbprint)) {
     throw 'codesign_thumbprint_missing_on_signing_runner'
+}
+if ($thumbprint -cnotmatch '^[0-9A-F]{40}$') {
+    throw 'codesign_thumbprint_invalid'
+}
+if ($approvedSignerSha256 -cnotmatch '^[0-9a-f]{64}$') {
+    throw 'codesign_approved_publisher_sha256_required'
 }
 if ([string]::IsNullOrWhiteSpace($timestampUrl)) {
     throw 'codesign_timestamp_url_missing_on_signing_runner'
@@ -22,6 +30,18 @@ if (-not [Uri]::TryCreate($timestampUrl, [UriKind]::Absolute, [ref]$timestampUri
 }
 if (-not $Path -or $Path.Count -eq 0) {
     throw 'codesign_paths_missing'
+}
+
+# Validate all input files before any signing, not one at a time.
+$resolvedPaths = @()
+foreach ($item in $Path) {
+    $file = Get-Item -LiteralPath $item -ErrorAction SilentlyContinue
+    if ($null -eq $file -or $file -isnot [IO.FileInfo] -or
+        ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "codesign_path_missing_or_unsafe:$item"
+    }
+    if ($resolvedPaths -contains $file.FullName) { throw 'codesign_duplicate_path' }
+    $resolvedPaths += $file.FullName
 }
 
 $certificate = Get-ChildItem Cert:\CurrentUser\My |
@@ -40,7 +60,12 @@ $signerCertificateSha256 = $certificate.GetCertHashString(
     [System.Security.Cryptography.HashAlgorithmName]::SHA256
 ).ToLowerInvariant()
 
-$signTool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+if ($signerCertificateSha256 -cne $approvedSignerSha256) {
+    throw 'codesign_certificate_not_approved_publisher'
+}
+
+$foundSignTool = Get-Command signtool.exe -CommandType Application -ErrorAction SilentlyContinue
+$signTool = if ($null -ne $foundSignTool) { $foundSignTool.Source } else { $null }
 if (-not $signTool) {
     $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
     $candidate = Get-ChildItem $kits -Filter signtool.exe -File -Recurse -ErrorAction SilentlyContinue |
@@ -53,10 +78,7 @@ if (-not $signTool) {
     throw 'codesign_signtool_not_found'
 }
 
-foreach ($item in $Path) {
-    if (-not (Test-Path $item -PathType Leaf)) {
-        throw "codesign_path_missing:$item"
-    }
+foreach ($item in $resolvedPaths) {
     & $signTool sign /sha1 $thumbprint /fd SHA256 /tr $timestampUrl /td SHA256 /v $item
     if ($LASTEXITCODE -ne 0) {
         throw "codesign_failed:$item"
@@ -64,7 +86,7 @@ foreach ($item in $Path) {
 }
 
 & "$PSScriptRoot/verify-windows-authenticode.ps1" `
-    -Path $Path `
+    -Path $resolvedPaths `
     -Required `
     -RequireTimestamp `
     -ExpectedSignerSha256 $signerCertificateSha256
