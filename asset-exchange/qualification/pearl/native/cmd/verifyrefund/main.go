@@ -38,6 +38,8 @@ func transaction(s string) *wire.MsgTx {
 }
 
 func main() {
+	quote := len(os.Args) == 2 && os.Args[1] == "--fee-quote"
+	check(len(os.Args) == 1 || quote, "unsupported verifier arguments")
 	var in struct {
 		Intent          intent
 		Funding, Refund string
@@ -75,5 +77,17 @@ func main() {
 	hashes := txscript.NewTxSigHashes(refund, fetch)
 	vm, err := txscript.NewEngine(prev.PkScript, refund, 0, txscript.StandardVerifyFlags, nil, hashes, prev.Value, fetch)
 	check(err == nil && vm.Execute() == nil, "refund failed native Pearl VM")
+	if quote {
+		// Pearl v1.5.8 blockchain.CalcVsize discounts each four witness bytes.
+		base := refund.SerializeSizeStripped()
+		vsize := base + (refund.SerializeSize()-base+3)/4
+		err := json.NewEncoder(os.Stdout).Encode(struct {
+			Txid      string
+			FeeGrains int64
+			Vsize     int
+		}{refund.TxHash().String(), prev.Value - output.Value, vsize})
+		check(err == nil, "cannot write verified fee quote")
+		return
+	}
 	fmt.Println(refund.TxHash().String())
 }

@@ -49,6 +49,32 @@ def check_recovery(verifier, capsule, expected, *, valid=True):
         require(result.returncode != 0, "changed public recovery intent accepted")
 
 
+def verified_fee_quote(verifier, capsule, refund_txid):
+    result = subprocess.run([verifier, "--fee-quote"], input=json.dumps(capsule), text=True,
+                            capture_output=True, env={"LC_ALL": "C"}, timeout=10, check=True)
+    quote = json.loads(result.stdout)
+    intent = capsule["Intent"]
+    require(quote["Txid"] == refund_txid and type(quote["Vsize"]) is int and quote["Vsize"] > 0 and
+            quote["FeeGrains"] == intent["ContractValue"] - intent["RefundValue"], "invalid verified refund fee quote")
+    return quote
+
+
+def check_refund_relay_before_funding(node, observer, quote, funding_txid):
+    require(not node.rpc("getrawmempool") and node.rpc("gettxout", funding_txid, 0) is None,
+            "expected unfunded private observer")
+    rate = node.rpc("getnetworkinfo")["relayfee"] * 100_000_000
+    require(rate == int(rate) and rate >= 0, "invalid relay fee from private observer")
+    rate = int(rate)
+    # Pearl v1.5.8 calcMinRequiredTxRelayFee rounds down and substitutes
+    # the full rate when a positive rate rounds to zero.
+    required = (rate * quote["Vsize"] // 1000) or rate
+    covered = quote["FeeGrains"] >= required
+    record("refund-fee-check-before-funding", observer=observer, refund=quote["Txid"], vsize=quote["Vsize"],
+           budget_grains=quote["FeeGrains"], min_relay_grains_per_kvb=rate, required_grains=required,
+           covered=covered, funding_submitted=False)
+    require(covered, "funding refused: verified refund fee below observer relay floor")
+
+
 def confirm_recipient_spend(a, b, f, child):
     decoded = b.rpc("decoderawtransaction", child["raw"])
     source, = decoded["vin"]
@@ -110,7 +136,7 @@ def check_high_relay(binary, temp, material, f, archive, final_block, refund_vsi
 
 
 def assess(binary, verifier, material, network, temp, expected_commitment, fee_bump, fee_boundaries,
-           recipient_commitment=None, high_relay=False):
+           recipient_commitment=None, high_relay=False, observer_b_relay=1_000):
     f = json.loads((material / "fixture.json").read_text())
     require(f["network"] == network and f["magic"] == MAGIC[network], "wrong network fixture")
     child = None
@@ -125,6 +151,7 @@ def assess(binary, verifier, material, network, temp, expected_commitment, fee_b
     checksum = hashlib.sha256(canonical).hexdigest()
     require(checksum == expected_commitment, "recovery intent differs from preparation receipt")
     check_recovery(verifier, capsule, f["refundTxid"])
+    quote = verified_fee_quote(verifier, capsule, f["refundTxid"])
     for field, value in [("Magic", 0), ("Destination", f["contractScript"]), ("RefundValue", 998499)]:
         altered = {**capsule, "Intent": {**capsule["Intent"], field: value}}
         check_recovery(verifier, altered, f["refundTxid"], valid=False)
@@ -134,7 +161,7 @@ def assess(binary, verifier, material, network, temp, expected_commitment, fee_b
     record("independent-verifier-before-funding", refund=f["refundTxid"], receipt_sha256=checksum,
            wrong_magic_rejected=True, wrong_destination_rejected=True, wrong_amount_rejected=True)
     with private_node(binary, temp / "observer-a", network, f["payout"]) as a:
-        with private_node(binary, temp / "observer-b", network, f["payout"]) as b:
+        with private_node(binary, temp / "observer-b", network, f["payout"], relay_grains_per_kvb=observer_b_relay) as b:
             with (material / "blocks.jsonl").open() as stream:
                 for line in stream:
                     block, raw = json.loads(line)
@@ -142,8 +169,11 @@ def assess(binary, verifier, material, network, temp, expected_commitment, fee_b
                         submit_fixture_block(n, block, raw)
             for n in (a, b):
                 require(n.rpc("getblockcount") == 100, "immature/incomplete fixture")
-                require(accept(n, f["funding"])["allowed"] is True, "funding unavailable")
             record("two-independently-validated-chains", height=100, tip=a.rpc("getbestblockhash"))
+            check_refund_relay_before_funding(a, "a", quote, f["fundingTxid"])
+            check_refund_relay_before_funding(b, "b", quote, f["fundingTxid"])
+            for n in (a, b):
+                require(accept(n, f["funding"])["allowed"] is True, "funding unavailable")
             confirmation = a.rpc("sendrawtransaction", f["funding"])
             require(confirmation == f["fundingTxid"], "funding ID changed")
             fundblock, fund_raw = generate(a)
@@ -236,6 +266,8 @@ def assess(binary, verifier, material, network, temp, expected_commitment, fee_b
             refund_admission = accept(b, restored["Refund"])
             require(refund_admission["allowed"], "restored refund refused")
             refund_vsize = refund_admission["vsize"]
+            require(refund_vsize == quote["Vsize"] and refund_admission["fees"]["base"] * 100_000_000 == quote["FeeGrains"],
+                    "node refund admission differs from pre-funding quote")
             require(b.rpc("sendrawtransaction", restored["Refund"]) == f["refundTxid"], "refund ID changed")
             reject(b, f["claim"], "same-outpoint-conflict", ("already spent in mempool", "conflict", "replace"))
             finalblock, raw = generate(b)
@@ -276,6 +308,8 @@ if __name__ == "__main__":
     parser.add_argument("--fee-boundaries", action="store_true", help="require the one-grain fee and dust boundary fixtures")
     parser.add_argument("--recipient-commitment", help="separately retained receipt of the independent recipient")
     parser.add_argument("--high-relay", action="store_true", help="recheck identical blocks under a higher relay fee")
+    parser.add_argument("--observer-b-relay", type=int, choices=(1_000, 11_000, 20_000), default=1_000,
+                        help="starting relay floor of observer B in grains per kvB")
     parser.add_argument("--material", type=Path, required=True)
     parser.add_argument("--network", choices=tuple(MAGIC), required=True)
     args = parser.parse_args()
@@ -283,6 +317,6 @@ if __name__ == "__main__":
         directory = Path(root).resolve()
         assess(args.pearld.resolve(strict=True), args.verify_refund.resolve(strict=True),
                args.material.resolve(strict=True), args.network, directory, args.commitment,
-               args.fee_bump, args.fee_boundaries, args.recipient_commitment, args.high_relay)
+               args.fee_bump, args.fee_boundaries, args.recipient_commitment, args.high_relay, args.observer_b_relay)
     require(not directory.exists(), "node directories still present")
     record("qualification-run-complete", network=args.network, data_removed=True)
