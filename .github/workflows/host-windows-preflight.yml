@@ -25,6 +25,13 @@ on:
       - .github/workflows/host-windows-preflight.yml
   pull_request:
     paths:
+      # Exercise the unified CI-only bundle on the exact integration HEAD
+      # when API/browser contracts or Stage 4 source-report policy change.
+      - apps/api/**
+      - apps/web/**
+      - scripts/stage4_private_backend_delta.py
+      - scripts/tests/test_stage4_private_backend_delta.py
+      - .github/workflows/stage4-private-backend-source-delta.yml
       - agent/**
       - services/edge/**
       - scripts/build-windows-native-release-candidate.ps1

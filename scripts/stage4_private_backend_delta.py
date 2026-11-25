@@ -24,6 +24,14 @@ API_RUNTIME_INPUTS = frozenset(
 )
 API_RUNTIME_PREFIXES = ("apps/api/src/", "apps/api/prisma/", "apps/api/scripts/")
 
+# Previously classified Gaming web snapshots (PRs #387 and #398).
+# These are source-report expectations, NOT security approvals or release pins.
+# Descendants inherit an expectation only for the identical complete web tree.
+GAMING_WEB_SOURCE_SNAPSHOTS = (
+    ("778ee8b9ede2fb14d807f19ae43319dea1fbb920", "5efddae1ed19e11c173a68d52a77d6ac8bd84ed7"),
+    ("241bc7ff5815c709cc3a47ee8463dc99dc825af7", "92c536dbec78df50c42ca687cad1a39096acee4e"),
+)
+
 
 def _git(repo: Path, *args: str, binary: bool = False) -> bytes | str:
     # All arguments are fixed strings or separately validated Git SHAs.
@@ -54,6 +62,35 @@ def source_delta(repo: Path, base: str, candidate: str) -> list[str]:
     if not isinstance(names, bytes):
         raise RuntimeError("stage4_delta_unexpected_git_output")
     return sorted(name.decode("utf-8", errors="strict") for name in names.split(b"\0") if name)
+
+
+def matches_pinned_web_snapshot(
+    repo: Path,
+    candidate: str,
+    snapshots: tuple[tuple[str, str], ...] = GAMING_WEB_SOURCE_SNAPSHOTS,
+) -> bool:
+    """Classify known web source only by exact tree identity and ancestry."""
+    if not COMMIT.fullmatch(candidate):
+        raise ValueError("stage4_delta_pin_not_exact_commit")
+    if _git(repo, "rev-parse", "--verify", candidate + "^{commit}") != candidate:
+        raise ValueError("stage4_delta_pin_not_exact_commit")
+    tree = _git(repo, "rev-parse", "--verify", candidate + ":apps/web")
+    for commit, expected_tree in snapshots:
+        if not COMMIT.fullmatch(commit) or not COMMIT.fullmatch(expected_tree):
+            raise ValueError("stage4_delta_invalid_web_snapshot_pin")
+        if tree != expected_tree:
+            continue
+        if (
+            _git(repo, "rev-parse", "--verify", commit + "^{commit}") != commit
+            or _git(repo, "rev-parse", "--verify", commit + ":apps/web") != expected_tree
+        ):
+            raise ValueError("stage4_delta_web_snapshot_pin_mismatch")
+        try:
+            _git(repo, "merge-base", "--is-ancestor", commit, candidate)
+        except subprocess.CalledProcessError:
+            continue
+        return True
+    return False
 
 
 def analyze_source_delta(changed: list[str]) -> dict[str, object]:
@@ -115,12 +152,23 @@ def main() -> int:
     parser.add_argument("--expect-api-source-changed", action="store_true")
     parser.add_argument("--expect-web-source-changed", action="store_true")
     parser.add_argument("--expect-web-source-unchanged", action="store_true")
+    parser.add_argument("--expect-known-gaming-web-snapshot", action="store_true",
+                        help="Expect changed web source only for exact pinned Gaming snapshots")
     args = parser.parse_args()
+    if args.expect_known_gaming_web_snapshot and (
+        args.expect_web_source_changed or args.expect_web_source_unchanged
+    ):
+        raise SystemExit("stage4_delta_conflicting_web_expectations")
     report = make_report(
         Path(args.repo).resolve(),
         args.private_render_commit,
         args.pc1_candidate_commit,
     )
+    if args.expect_known_gaming_web_snapshot:
+        known = matches_pinned_web_snapshot(Path(args.repo).resolve(), args.pc1_candidate_commit)
+        args.expect_web_source_changed = known
+        args.expect_web_source_unchanged = not known
+        report["knownGamingWebSnapshotMatched"] = known
     if args.expect_api_source_changed and args.expect_api_source_unchanged:
         raise SystemExit("stage4_delta_conflicting_api_expectations")
     if args.expect_web_source_changed and args.expect_web_source_unchanged:
