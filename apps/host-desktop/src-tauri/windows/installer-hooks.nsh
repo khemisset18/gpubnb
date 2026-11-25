@@ -56,8 +56,39 @@
   Delete "$TEMP\gpubnb-stop-agent-service-pid.ps1"
 !macroend
 
+!macro GPUbnbAssertNativeWorkersStopped
+  ; Refuse replacement/removal while GPUbnb's exact installed media workers are
+  ; active. Never terminate these processes: STOP/session cleanup owns them.
+  FileOpen $2 "$TEMP\gpubnb-check-native-processes.ps1" w
+  FileWrite $2 "$$ErrorActionPreference = 'Stop'$\r$\n"
+  FileWrite $2 "$$root = [IO.Path]::Combine([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles), 'GPUbnb')$\r$\n"
+  FileWrite $2 "foreach ($$name in @('gpubnb-windows-stream.exe','gpubnb-windows-worker.exe')) {$\r$\n"
+  FileWrite $2 "  $$expected = [IO.Path]::GetFullPath((Join-Path $$root $$name))$\r$\n"
+  FileWrite $2 "  foreach ($$process in @(Get-CimInstance Win32_Process -Filter ('Name=' + [char]39 + $$name + [char]39) -ErrorAction Stop)) {$\r$\n"
+  FileWrite $2 "    $$actual = [string]$$process.ExecutablePath$\r$\n"
+  FileWrite $2 "    if ([string]::IsNullOrWhiteSpace($$actual)) { throw ('native_process_path_unavailable:' + $$name) }$\r$\n"
+  FileWrite $2 "    if ([string]::Equals([IO.Path]::GetFullPath($$actual), $$expected, [StringComparison]::OrdinalIgnoreCase)) { throw ('native_component_active:' + $$name) }$\r$\n"
+  FileWrite $2 "  }$\r$\n"
+  FileWrite $2 "}$\r$\n"
+  FileClose $2
+  !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\gpubnb-check-native-processes.ps1"' "GPUbnb media workers are still active; stop the session before updating or removing Host"
+  Delete "$TEMP\gpubnb-check-native-processes.ps1"
+!macroend
+
+!macro GPUbnbRequireDisposableCiRunner
+  FileOpen $2 "$TEMP\gpubnb-require-disposable-ci.ps1" w
+  FileWrite $2 "if ($$env:GITHUB_ACTIONS -cne 'true' -or $$env:RUNNER_ENVIRONMENT -cne 'github-hosted') { exit 87 }$\r$\n"
+  FileClose $2
+  !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\gpubnb-require-disposable-ci.ps1"' "This CI-only unsigned installer cannot be installed on a user PC"
+  Delete "$TEMP\gpubnb-require-disposable-ci.ps1"
+!macroend
+
 !macro NSIS_HOOK_PREINSTALL
   Delete "$TEMP\gpubnb-installer.log"
+  !ifdef GPUBNB_PREFLIGHT_INSTALLER
+    !insertmacro GPUbnbRequireDisposableCiRunner
+  !endif
+  !insertmacro GPUbnbAssertNativeWorkersStopped
   ; An existing service must release the sidecar before an upgrade can replace it.
   nsExec::ExecToStack '"$SYSDIR\sc.exe" query GPUbnbAgent'
   Pop $0
@@ -94,13 +125,40 @@
   FileClose $2
   !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\gpubnb-secure-data-directory.ps1"' "Unable to secure the GPUbnb data directory"
   Delete "$TEMP\gpubnb-secure-data-directory.ps1"
+  !ifdef GPUBNB_PREFLIGHT_INSTALLER
+    ; Embed the CI-only helper at a deterministic path before verification.
+    CreateDirectory "$INSTDIR\resources\installer"
+    SetOutPath "$INSTDIR\resources\installer"
+    File /oname=install-stage4-payload.ps1 "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\installer\install-stage4-payload.ps1"
+    SetOutPath "$INSTDIR\resources\stage4"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\gpubnb-windows-stream.exe"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\gpubnb-windows-worker.exe"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\GPUbnbWindowsMedia.dll"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\build-identities.json"
+    File "${__FILEDIR__}\..\..\..\..\apps\host-desktop\src-tauri\stage4\stage4.manifest.json"
+    SetOutPath "$INSTDIR"
+    SetOutPath "$INSTDIR"
+    !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer\install-stage4-payload.ps1" -Mode PreflightInstall -PackageDirectory "$INSTDIR\resources\stage4" -ApplicationDirectory "$INSTDIR" -NativeInstallDirectory "$PROGRAMFILES64\GPUbnb"' "The unsigned CI-only Stage 4 payload failed verification"
+  !endif
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service install' "Unable to install the GPUbnb Windows service"
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service start' "Unable to start the GPUbnb Windows service"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  !insertmacro GPUbnbAssertNativeWorkersStopped
   nsExec::ExecToLog '"$SYSDIR\sc.exe" stop GPUbnbAgent'
   Sleep 2000
   !insertmacro GPUbnbForceKillAgent
   !insertmacro GPUbnbExecChecked '"$INSTDIR\gpubnb-agent.exe" service remove' "Unable to remove the GPUbnb Windows service"
+  !ifdef GPUBNB_PREFLIGHT_INSTALLER
+    !insertmacro GPUbnbExecChecked '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer\install-stage4-payload.ps1" -Mode PreflightRemove -PackageDirectory "$INSTDIR\resources\stage4" -NativeInstallDirectory "$PROGRAMFILES64\GPUbnb"' "Unable to remove the verified CI-only Stage 4 payload"
+    Delete "$INSTDIR\resources\stage4\gpubnb-windows-stream.exe"
+    Delete "$INSTDIR\resources\stage4\gpubnb-windows-worker.exe"
+    Delete "$INSTDIR\resources\stage4\GPUbnbWindowsMedia.dll"
+    Delete "$INSTDIR\resources\stage4\build-identities.json"
+    Delete "$INSTDIR\resources\stage4\stage4.manifest.json"
+    RMDir "$INSTDIR\resources\stage4"
+    Delete "$INSTDIR\resources\installer\install-stage4-payload.ps1"
+    RMDir "$INSTDIR\resources\installer"
+  !endif
 !macroend
