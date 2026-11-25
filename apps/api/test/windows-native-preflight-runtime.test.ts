@@ -40,14 +40,15 @@ async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; he
     commercialRentals:config.WINDOWS_NATIVE_RENTALS_ENABLED};
   config.BETA_TEST_DEV_BYPASS='true';config.ESCROW_PROGRAM_ID='NOT_DEPLOYED_YET';
   config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='false';config.WINDOWS_NATIVE_RENTALS_ENABLED='false';
-  const state={authenticated:true,reads:0,candidates:[] as any[], listingReads:0,firstReadOnly:false,session:null as any,redisWrites:0,consoleProof:false};
+  const state={authenticated:true,reads:0,candidates:[] as any[], listingReads:0,firstReadOnly:false,session:null as any,redisWrites:0,consoleProof:false,consoleProofScope:'gaming' as 'gaming'|'legacy'|'unscoped'};
   const db={gpuListing:{findMany:async()=>{state.reads++;state.listingReads++;return state.firstReadOnly&&state.listingReads===1?[host()]:state.candidates;}},
     booking:{count:async()=>{state.reads++;return 0;},findFirst:async()=>{state.reads++;return null;}},
     workspaceSession:{findFirst:async()=>state.session}} as unknown as PrismaClient;
   // Deliberately no create/update/delete/transaction method: any write is a test failure.
   const redis={get:async(key:string)=>{
       if(key==='private-console-proof:v1:private-machine'&&state.consoleProof){
-        return JSON.stringify({gpuUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',agentCommit:'f664a07ec500c57bf9a508838f51b7c0305ba92d',acceptedCounter:'21'});
+        return JSON.stringify({gpuUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',agentCommit:PRIVATE_CONSOLE_SHA,acceptedCounter:'21',
+          ...(state.consoleProofScope==='unscoped'?{}:{workspaceSlug:state.consoleProofScope})});
       }
       return state.authenticated?JSON.stringify({userId:'renter',wallet:'',createdAt:new Date().toISOString(),lastSeenAt:new Date().toISOString()}):null;
     },
@@ -96,6 +97,14 @@ test('private Gaming is owner-bound, uses its own block reason and rejects direc
   assert.equal(fallback.json().code,'PRIVATE_WINDOWS_HOST_NOT_READY',
     'Gaming must not fall back to the legacy IddCx proof');
   state.consoleProof=true;
+  for(const scope of ['legacy','unscoped'] as const){
+    state.consoleProofScope=scope;
+    const stale=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+    assert.equal(stale.json().allowed,false);
+    assert.equal(stale.json().code,'PRIVATE_WINDOWS_HOST_NOT_READY',
+      'Gaming must not accept a legacy or unscoped console proof');
+  }
+  state.consoleProofScope='gaming';
   const preflight=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
   assert.equal(preflight.statusCode,200);assert.equal(preflight.json().privateNoPaymentMode,true);
   assert.equal(preflight.json().allowed,false);
@@ -118,6 +127,13 @@ test('explicit private Gaming attempt permits only an owner test and never recor
   try {
   config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
   state.candidates=[host()];
+  for(const scope of ['legacy','unscoped'] as const){
+    state.consoleProofScope=scope;
+    const rejected=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+    assert.equal(rejected.json().allowed,false);
+    assert.equal(rejected.json().code,'PRIVATE_WINDOWS_HOST_NOT_READY');
+  }
+  state.consoleProofScope='gaming';
   const gaming=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
   assert.equal(gaming.statusCode,200);
   assert.equal(gaming.json().privateNoPaymentMode,true);
