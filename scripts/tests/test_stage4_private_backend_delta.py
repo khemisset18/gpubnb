@@ -8,7 +8,9 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from stage4_private_backend_delta import analyze_source_delta, make_report, source_delta
+from stage4_private_backend_delta import (
+    analyze_source_delta, make_report, matches_pinned_web_snapshot, source_delta,
+)
 
 
 class Stage4PrivateBackendDeltaTests(unittest.TestCase):
@@ -106,12 +108,53 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
         self.assertIn('--pc1-candidate-commit "$REVIEWED_SHA"', workflow)
         self.assertIn("--expect-api-source-changed", workflow)
         self.assertNotIn("--expect-api-source-unchanged", workflow)
-        self.assertIn("--expect-web-source-changed", workflow)
-        self.assertIn("--expect-web-source-unchanged", workflow)
-        self.assertIn('CANDIDATE_BRANCH" = "feat/gaming-end-to-end-20261122"', workflow)
-        self.assertIn('CANDIDATE_BRANCH" = "feat/gaming-workspace-rebuild-20261123"', workflow)
+        self.assertIn("--expect-known-gaming-web-snapshot", workflow)
+        self.assertNotIn("CANDIDATE_BRANCH", workflow)
+        self.assertNotIn("--expect-web-source-changed", workflow)
         self.assertNotIn("32ffdc72ec7041310c4b07e286ac4c4c2818906c", workflow)
         self.assertEqual(len(pins[0]), 40)
+
+    def test_known_web_snapshot_requires_exact_tree_and_ancestry(self) -> None:
+        self._write("apps/web/index.js", "console.log('gaming')\n")
+        pinned = self._commit("known gaming source")
+        tree = self._git("rev-parse", pinned + ":apps/web")
+        snapshots = ((pinned, tree),)
+        self.assertTrue(matches_pinned_web_snapshot(self.repo, pinned, snapshots))
+        self._write("agent/runtime.py", "new recovery code\n")
+        inherited = self._commit("non-web change")
+        self.assertTrue(matches_pinned_web_snapshot(self.repo, inherited, snapshots))
+        self._write("apps/web/index.js", "console.log('unexpected')\n")
+        changed = self._commit("unexpected web change")
+        self.assertFalse(matches_pinned_web_snapshot(self.repo, changed, snapshots))
+
+        self._git("reset", "--hard", self.base)
+        self._write("apps/web/index.js", "console.log('gaming')\n")
+        other = self._commit("independent identical web tree")
+        self.assertEqual(self._git("rev-parse", other + ":apps/web"), tree)
+        self.assertFalse(matches_pinned_web_snapshot(self.repo, other, snapshots))
+
+    def test_known_snapshot_rejects_inconsistent_pin(self) -> None:
+        self._write("apps/web/index.js", "console.log('gaming')\n")
+        head = self._commit("gaming source")
+        tree = self._git("rev-parse", head + ":apps/web")
+        with self.assertRaisesRegex(ValueError, "web_snapshot_pin_mismatch"):
+            matches_pinned_web_snapshot(self.repo, head, ((self.base, tree),))
+
+    def test_cli_known_snapshot_rejects_unexpected_web_drift(self) -> None:
+        self._write("apps/web/index.js", "console.log('unknown')\n")
+        head = self._commit("unexpected browser change")
+        script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
+        result = subprocess.run(
+            [
+                sys.executable, str(script), "--repo", str(self.repo),
+                "--private-render-commit", self.base,
+                "--pc1-candidate-commit", head,
+                "--expect-known-gaming-web-snapshot",
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("stage4_delta_web_source_changed_review_required", result.stderr)
 
     def test_identical_source_pins_are_valid_and_do_not_hide_changes(self) -> None:
         self.assertEqual(source_delta(self.repo, self.base, self.base), [])
