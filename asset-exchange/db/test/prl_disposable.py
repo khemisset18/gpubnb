@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import secrets
 import signal
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -80,7 +81,7 @@ def client_loss_cases(env):
     print("PASS client loss before COMMIT and retry after discarded committed reply", flush=True)
 
 
-def campaign(bindir, work):
+def campaign(bindir, work, driver=None):
     data = work / "data"
     password = secrets.token_hex(32)
     pwfile = work / "bootstrap-password"
@@ -104,13 +105,20 @@ def campaign(bindir, work):
     control = run(["pg_controldata", data], env, capture_output=True).stdout.splitlines()
     system_id = next(line.split(":")[1].strip() for line in control
                      if line.startswith("Database system identifier:"))
+    def api_phase(phase):
+        if driver is not None:
+            node = shutil.which("node")
+            if not node:
+                raise RuntimeError("Node.js is required for the optional API bridge")
+            run([node, "asset-exchange/db/test/prl_api_postgres.mjs", driver, phase, work, system_id], env)
+
     print(f"initdb {version} system_identifier={system_id} database={database} mode={work.stat().st_mode & 0o777:o}", flush=True)
     def query(sql):
         return run(["psql", "-XwAtq", "-v", "ON_ERROR_STOP=1"], env,
                    input=sql, capture_output=True).stdout.strip()
     with (work / "postgres.log").open("w") as log:
         proc = subprocess.Popen([bindir / "postgres", "-D", data, "-h", "127.0.0.1", "-p", port,
-                                 "-c", "unix_socket_directories=", "-c", "log_statement=none"],
+                                 "-c", "unix_socket_directories=", "-c", "cluster_name=prl_lab_" + system_id, "-c", "log_statement=none"],
                                 env=env, stdout=log, stderr=log)
         try:
             pidfile = data / "postmaster.pid"
@@ -143,15 +151,20 @@ def campaign(bindir, work):
             print("Owned loopback + SCRAM; empty template0 database; non-superuser schema owner", flush=True)
             run(["bash", "-euc", """
                 source asset-exchange/db/test/prl_scratch_replay_run.sh
-                source asset-exchange/db/test/concurrency.sh
                 psql_scratch() { psql -Xw -v ON_ERROR_STOP=1 "$@"; }
-                psql_ci() { psql_scratch "$@"; }
                 run_replay_cases
                 psql_scratch -f asset-exchange/db/test/prl_lab_privileges.sql
+            """], env)
+            api_phase("historical")
+            run(["bash", "-euc", """
+                source asset-exchange/db/test/concurrency.sh
+                psql_ci() { psql -Xw -v ON_ERROR_STOP=1 "$@"; }
                 run_concurrency_cases
             """], env)
             migration_replay_cases(env)
             client_loss_cases(env)
+            api_phase("controls")
+            api_phase("restarted")
         finally:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGINT)
@@ -167,11 +180,13 @@ def campaign(bindir, work):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pg-bin", required=True, type=Path)
+    parser.add_argument("--node-pg-driver", type=Path, help="optional pinned node-postgres lib/index.js for API integration")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="prl-fresh-") as directory:
         work = Path(directory).resolve()
         try:
-            campaign(args.pg_bin.resolve(strict=True), work)
+            campaign(args.pg_bin.resolve(strict=True), work,
+                     args.node_pg_driver.resolve(strict=True) if args.node_pg_driver else None)
         finally:
             print("disposing owned temporary directory " + work.name, flush=True)
     if work.exists():
