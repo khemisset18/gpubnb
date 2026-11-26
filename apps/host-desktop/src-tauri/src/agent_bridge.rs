@@ -532,6 +532,24 @@ mod tests {
     }
 
     #[test]
+    fn private_gaming_inventory_is_optional_and_not_consent() {
+        let old: PrivateGamingConsentStatus =
+            serde_json::from_str(r#"{"enabled":false,"consentedAt":null}"#).unwrap();
+        assert!(old.installation_inventory.is_none());
+        let status: PrivateGamingConsentStatus = serde_json::from_str(
+            r#"{"enabled":false,"consentedAt":null,"installationInventory":{
+                "supportedPlatform":true,"streamHelperPresent":true,
+                "workerPresent":true,"mediaLibraryPresent":true,"steamPresent":false
+            }}"#,
+        )
+        .unwrap();
+        assert!(!status.enabled);
+        let inventory = status.installation_inventory.unwrap();
+        assert!(inventory.media_library_present);
+        assert!(!inventory.steam_present);
+    }
+
+    #[test]
     fn private_gaming_consent_requires_an_explicit_owner_confirmation() {
         assert_eq!(
             set_private_gaming_consent(true, false).unwrap_err(),
