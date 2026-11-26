@@ -1195,12 +1195,17 @@ def command_private_gaming_consent(args: argparse.Namespace) -> int:
 
 
 def command_build_info(_: argparse.Namespace) -> int:
-    print_json({
+    from ._build_info import BUILD_UNSIGNED_HELPER_SHA256
+
+    report = {
         "agentVersion": __version__,
         "buildCommit": BUILD_COMMIT,
         "frozen": bool(getattr(sys, "frozen", False)),
         "executable": sys.executable,
-    })
+    }
+    if BUILD_UNSIGNED_HELPER_SHA256:
+        report["unsignedHelperSha256"] = BUILD_UNSIGNED_HELPER_SHA256
+    print_json(report)
     return 0
 
 
