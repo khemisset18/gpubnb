@@ -877,3 +877,45 @@ test('audio websocket packets are epoch-fenced after video and closed with the v
   assert.equal(mediaClosed, 1);
   assert.equal(audioClosed, 1);
 });
+
+test('keyboard and controller owners do not prematurely release shared wire inputs', () => {
+  const calls = [];
+  const client = new WindowsNativeDesktopClient({
+    canvas: fakeCanvas(),
+    mediaFactory: () => ({push() {}, close() {}}),
+  });
+  client.input = {
+    key(code, up) { calls.push(['key', code, up]); return true; },
+    mouseButton(button, up) { calls.push(['button', button, up]); return true; },
+  };
+  assert.equal(client.key('KeyW'), true);
+  assert.equal(client.key('KeyW', false, 'gamepad'), true);
+  assert.equal(client.key('KeyW', true, 'gamepad'), true);
+  assert.equal(client.key('KeyW', true), true);
+  assert.equal(client.pointerButton(0, false, 'gamepad'), true);
+  assert.equal(client.pointerButton(0), true);
+  assert.equal(client.pointerButton(0, true), true);
+  assert.equal(client.pointerButton(0, true, 'gamepad'), true);
+  assert.equal(client.pointerButton(0, true, 'gamepad'), false);
+  assert.deepEqual(calls, [
+    ['key','KeyW',false], ['key','KeyW',true],
+    ['button',0,false], ['button',0,true],
+  ]);
+  client.close();
+});
+
+test('far-future video is disposed instead of creating an unbounded presentation timer', () => {
+  const canvas = fakeCanvas();
+  let output;
+  const client = new WindowsNativeDesktopClient({
+    canvas,
+    mediaFactory: options => { output = options.output; return {push() {}, close() {}}; },
+  });
+  const frame = { displayWidth:1280, displayHeight:720, disposed:false, close() { this.disposed = true; } };
+  output(frame, {streamEpoch:1n, frameSequence:1n, width:1280,height:720,
+    keyframe:true, codec:'avc1.640028',presentationTimeMs:performance.now()+10000});
+  assert.equal(frame.disposed,true);
+  assert.equal(client.pendingVideoFrames.size,0);
+  assert.equal(canvas.draws.length,0);
+  client.close();
+});
