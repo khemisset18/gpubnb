@@ -34,7 +34,7 @@ const host = () => ({id:'private-listing', hourlyLamports:3600n,
   accelerators:[{accelerator:{machineId:'private-machine',hardwareUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',
     vendor:'NVIDIA', moderationStatus:'CLEAR', status:'AVAILABLE'}}]});
 
-async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; headers: Record<string,string>}) => Promise<void>) {
+async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; db: any; headers: Record<string,string>}) => Promise<void>) {
   const original={bypass:config.BETA_TEST_DEV_BYPASS,escrow:config.ESCROW_PROGRAM_ID,
     privateGamingAttempt:config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED,
     commercialRentals:config.WINDOWS_NATIVE_RENTALS_ENABLED};
@@ -54,7 +54,7 @@ async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; he
     },
     del:async()=>1,set:async()=>{state.redisWrites++;return 'OK';}} as unknown as Redis;
   const app=Fastify();await app.register(cookie);registerDesktopWorkspaceRoutes(app,db,redis);
-  try {await run({app,state,headers:{cookie:`${config.SESSION_COOKIE_NAME}=offline-fixture-token`}});}
+  try {await run({app,state,db,headers:{cookie:`${config.SESSION_COOKIE_NAME}=offline-fixture-token`}});}
   finally {await app.close();config.BETA_TEST_DEV_BYPASS=original.bypass;config.ESCROW_PROGRAM_ID=original.escrow;
     config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED=original.privateGamingAttempt;
     config.WINDOWS_NATIVE_RENTALS_ENABLED=original.commercialRentals;}
@@ -242,5 +242,99 @@ test('private Gaming preflight rejects a GPU bound to another Host even with a m
     assert.equal(valid.json().allowed,true);
     assert.equal(valid.json().qualificationPassed,false);
     assert.equal(valid.json().publicEligible,false);
+  } finally {restoreConsole();}
+}));
+
+
+test('private Gaming booking commits its exact allocation atomically and reuses only a committed lock',async()=>fixture(async({app,state,headers,db})=>{
+  const restoreConsole=usePrivateConsoleProof(state);
+  try {
+    config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
+    const candidate=host();
+    const gpu={...candidate.accelerators[0]!.accelerator,id:'exact-gpu',
+      verifiedAt:new Date(),lastSeenAt:new Date(),
+      miningResource:{enabled:true,quarantined:false,runtimeState:'IDLE',activeRentalId:null,lastSeenAt:new Date()}};
+    const machine={...candidate.machine,connectivity:'ONLINE',moderationStatus:'CLEAR',accelerators:[gpu]};
+    const fresh={...candidate,machineId:machine.id,machine,accelerators:[{accelerator:gpu}]};
+    const listing={...fresh,status:'HIDDEN_OFFLINE',resourceMode:'SELECTED_ACCELERATORS',
+      accelerators:[{acceleratorId:gpu.id}]};
+    const {ResourceAllocationError}=await import('../src/resource-allocation-service.js');
+    let committed:any=null;
+    let failAllocation=true;
+    let transactions=0;
+    let rollbacks=0;
+    let commits=0;
+    let allocationAttempts=0;
+    db.gpuListing.findMany=async(args:any)=>args.where.machine.operational==='DEGRADED'?[]:[fresh];
+    db.booking.findFirst=async()=>committed;
+    // Model transaction visibility: staging a booking must not expose it to
+    // other requests; throwing discards both the booking and allocation.
+    db.$transaction=async(handler:any,options:any)=>{
+      transactions++;
+      assert.equal(options.isolationLevel,'Serializable');
+      let staged:any=null;
+      const tx={
+        gpuListing:{findFirst:async()=>fresh},
+        booking:{
+          count:async()=>0,
+          create:async({data}:any)=>{
+            assert.equal(committed,null);
+            staged={...data,id:'private-booking',listing,machineAllocation:null,acceleratorAllocations:[]};
+            return staged;
+          },
+          findFirst:async()=>staged,
+          updateMany:async()=>({count:1}),
+        },
+        $executeRaw:async()=>1,
+        acceleratorAllocation:{
+          createMany:async({data}:any)=>{
+            allocationAttempts++;
+            assert.equal(committed,null);
+            assert.equal(data.length,1);
+            assert.equal(data[0].acceleratorId,gpu.id);
+            assert.equal(data[0].bookingId,staged.id);
+            if(failAllocation) throw new ResourceAllocationError('resource_conflict');
+            staged.acceleratorAllocations=data.map((row:any)=>({...row,accelerator:{machineId:machine.id}}));
+            return {count:1};
+          },
+        },
+      };
+      try {
+        const result=await handler(tx);
+        committed=staged;
+        commits++;
+        return result;
+      } catch(error) {
+        rollbacks++;
+        throw error;
+      }
+    };
+    const request=()=>app.inject({method:'POST',url:'/qualification/windows-native/booking',headers,
+      payload:{workspaceSlug:'gaming'}});
+    const rejected=await request();
+    assert.equal(rejected.statusCode,409);
+    assert.equal(rejected.json().error,'windows_native_qualification_resource_conflict');
+    assert.equal(committed,null);
+    assert.equal(rollbacks,1);
+    failAllocation=false;
+    const created=await request();
+    assert.equal(created.statusCode,201,created.body);
+    assert.equal(created.json().bookingId,'private-booking');
+    assert.equal(committed.acceleratorAllocations.length,1);
+    const reused=await request();
+    assert.equal(reused.statusCode,200,reused.body);
+    assert.equal(reused.json().created,false);
+    assert.equal(reused.json().bookingId,'private-booking');
+    assert.equal(transactions,2);
+    assert.equal(commits,1);
+    assert.equal(allocationAttempts,2);
+    const original=committed.acceleratorAllocations;
+    for(const allocations of [[],[...original,{...original[0]}],[{...original[0],accelerator:{machineId:'other-host'}}]]) {
+      committed.acceleratorAllocations=allocations;
+      const invalid=await request();
+      assert.equal(invalid.statusCode,409);
+      assert.equal(invalid.json().error,'windows_native_qualification_allocation_missing');
+    }
+    assert.equal(transactions,2,'orphaned or mismatched reuse must not create another booking');
   } finally {restoreConsole();}
 }));
