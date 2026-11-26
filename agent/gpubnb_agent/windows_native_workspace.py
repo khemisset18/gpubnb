@@ -212,6 +212,46 @@ def find_stream_helper() -> str | None:
         return _find_absolute_windows_file(os.environ.get(WINDOWS_STREAM_HELPER_DEV_PATH_ENV))
     return None
 
+def private_gaming_installation_inventory() -> dict[str, bool]:
+    """Read-only presence hints for Host UI, not executable trust or readiness.
+
+    Never run a helper, create a display, consult a developer override, install
+    Steam, or derive authorization from this diagnostic. The real runtime
+    still proves signatures, exact GPU, renter identity and server authority.
+    """
+    supported = platform.system() == "Windows" and platform.machine().lower() in {
+        "amd64", "x86_64",
+    }
+    result = {
+        "supportedPlatform": supported,
+        "streamHelperPresent": False,
+        "workerPresent": False,
+        "mediaLibraryPresent": False,
+        "steamPresent": False,
+    }
+    if not supported:
+        return result
+
+    # Fixed production location only: a developer PATH override is not an
+    # installed component. Presence does not imply Authenticode validation.
+    root = Path(WINDOWS_STREAM_HELPER_INSTALL_PATH).parent
+    for field, name in (
+        ("streamHelperPresent", "gpubnb-windows-stream.exe"),
+        ("workerPresent", "gpubnb-windows-worker.exe"),
+        ("mediaLibraryPresent", "GPUbnbWindowsMedia.dll"),
+    ):
+        try:
+            candidate = root / name
+            result[field] = candidate.is_file() and not candidate.is_symlink()
+        except OSError:
+            pass
+    try:
+        result["steamPresent"] = discover_native_application("gaming") is not None
+    except (OSError, RuntimeError):
+        pass
+    return result
+
+
 def windows_native_desktop_preflight(
     helper_path: str | None = None,
     *,
