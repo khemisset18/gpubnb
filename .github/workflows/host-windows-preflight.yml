@@ -51,6 +51,11 @@ on:
       - rust-toolchain.toml
       - .github/workflows/host-windows-preflight.yml
   workflow_dispatch:
+    inputs:
+      publisher_sha256:
+        description: Explicit approved public certificate SHA-256 for unsigned candidate rebuild (not a secret)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -63,11 +68,28 @@ jobs:
   windows-installer:
     runs-on: windows-2025
     timeout-minutes: 60
+    env:
+      PREFLIGHT_PUBLISHER_SHA256: ${{ inputs.publisher_sha256 || '' }}
+      PREFLIGHT_EVENT_NAME: ${{ github.event_name }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Resolve explicit publisher for candidate build (no signing)
+        shell: pwsh
+        run: |
+          if ($env:PREFLIGHT_EVENT_NAME -ceq 'workflow_dispatch') {
+            $publisher = $env:PREFLIGHT_PUBLISHER_SHA256
+          } else {
+            # Historical public pin is a reproducible CI fixture, never trust approval.
+            $publisher = '3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619'
+          }
+          if ($publisher.Length -ne 64 -or $publisher -cnotmatch '^[0-9a-f]{64}$' -or $publisher -match '^(.)\1{63}$') {
+            throw 'host_preflight_explicit_publisher_sha256_invalid'
+          }
+          "GPUBNB_PREFLIGHT_BUILD_PUBLISHER=$publisher" | Add-Content -Path $env:GITHUB_ENV -Encoding utf8
 
       - name: Parse Stage 4 native release-candidate builder
         shell: pwsh
@@ -223,7 +245,7 @@ jobs:
         shell: pwsh
         run: |
           $commit = '${{ github.event.pull_request.head.sha || github.sha }}'
-          $publisher = '3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619'
+          $publisher = $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
           $out = Join-Path $env:RUNNER_TEMP 'stage4-host-payload'
           & ./scripts/build-stage4-unsigned-package.ps1 `
             -ExpectedCommit $commit `
@@ -233,6 +255,7 @@ jobs:
           if (-not $?) { throw 'Unified Host native payload build failed.' }
           $manifest = Get-Content (Join-Path $out 'stage4.manifest.json') -Raw | ConvertFrom-Json
           if ($manifest.sourceCommit -cne $commit -or
+              $manifest.publisherSha256 -cne $publisher -or
               $manifest.signatureStatus -cne 'unsigned' -or
               $manifest.installable -cne $false -or
               $manifest.iddDriverIncluded -cne $false -or
@@ -398,6 +421,7 @@ jobs:
           }
           $payloadManifest = Get-Content -LiteralPath $payloadManifestPath -Raw | ConvertFrom-Json
           if ($payloadManifest.sourceCommit -cne $expectedCommit -or
+              $payloadManifest.publisherSha256 -cne $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER -or
               $payloadManifest.buildIdentitiesSha256 -cne $sourceIdentityHash -or
               @($payloadManifest.files).Count -ne 4 -or
               $payloadManifest.installable -ne $false -or
@@ -570,6 +594,7 @@ jobs:
             schemaVersion = 1
             kind = 'HOST_WINDOWS_CI_PREFLIGHT_ONLY'
             sourceCommit = $expectedCommit
+            publisherSha256 = $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
             installerSha256 = $installerHash
             stage4ManifestSha256 = $sourceManifestHash
             buildIdentitiesSha256 = $sourceIdentityHash
@@ -587,6 +612,73 @@ jobs:
           $checksums = $payloads | Get-FileHash -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" }
           $checksums | Set-Content (Join-Path $artifactDirectory 'SHA256SUMS.txt') -Encoding ascii
+
+      - name: Prepare exact unsigned signing handoff (not an installer)
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'host-signing-handoff'
+          if (Test-Path -LiteralPath $root) { throw 'host_handoff_requires_new_directory' }
+          $native = Join-Path $root 'stage4'
+          New-Item -ItemType Directory -Path $native -Force | Out-Null
+          $source = Join-Path $env:RUNNER_TEMP 'stage4-host-payload'
+          foreach ($name in @('stage4.manifest.json','build-identities.json','gpubnb-agent.exe','gpubnb-windows-stream.exe','gpubnb-windows-worker.exe','GPUbnbWindowsMedia.dll')) {
+            Copy-Item -LiteralPath (Join-Path $source $name) -Destination (Join-Path $native $name)
+          }
+          $evidencePath = 'apps/host-desktop/dist-windows/HOST_PREFLIGHT_EVIDENCE.json'
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          $commit = '${{ github.event.pull_request.head.sha || github.sha }}'
+          if ($evidence.sourceCommit -cne $commit -or
+              $evidence.publisherSha256 -cne $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER -or
+              $evidence.installable -cne $false -or
+              $evidence.signatureStatus -cne 'unsigned') {
+            throw 'host_handoff_invalid_smoke_evidence'
+          }
+          & ./scripts/verify-stage4-package.ps1 -PackageDirectory $native -ExpectedManifestSha256 $evidence.stage4ManifestSha256 -ExpectedCommit $commit -ExpectedPublisherSha256 $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
+          if (-not $?) { throw 'host_handoff_stage4_verification_failed' }
+          python scripts/verify_stage4_package.py verify --directory $native --manifest-sha256 $evidence.stage4ManifestSha256 --commit $commit --publisher $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
+          if ($LASTEXITCODE -ne 0) { throw 'host_handoff_independent_verification_failed' }
+          $app = @('target/release/gpubnb-host-desktop.exe','apps/host-desktop/src-tauri/target/release/gpubnb-host-desktop.exe') | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $app) { throw 'host_handoff_desktop_binary_missing' }
+          $tunnel = 'services/edge/target/release/gpubnb-host-tunnel.exe'
+          foreach ($file in @($app,$tunnel)) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "host_handoff_component_missing:$file" }
+            $sig = Get-AuthenticodeSignature -LiteralPath $file
+            if ($sig.Status -ne 'NotSigned' -or $null -ne $sig.SignerCertificate) {
+              throw "host_handoff_expected_unsigned_component:$file"
+            }
+            Copy-Item -LiteralPath $file -Destination $root
+          }
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'gpubnb-host-tunnel.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $evidence.hostTunnelSha256) {
+            throw 'host_handoff_tunnel_mismatch'
+          }
+          Copy-Item -LiteralPath $evidencePath -Destination $root
+          [ordered]@{
+            schemaVersion = 1
+            kind = 'HOST_UNSIGNED_SIGNING_HANDOFF_NOT_RELEASE'
+            sourceCommit = $commit
+            publisherSha256 = $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
+            stage4ManifestSha256 = $evidence.stage4ManifestSha256
+            buildIdentitiesSha256 = $evidence.buildIdentitiesSha256
+            agentSha256 = $evidence.agentSha256
+            hostTunnelSha256 = $evidence.hostTunnelSha256
+            hostDesktopSha256 = (Get-FileHash -LiteralPath (Join-Path $root 'gpubnb-host-desktop.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+            smokeEvidenceSha256 = (Get-FileHash -LiteralPath (Join-Path $root 'HOST_PREFLIGHT_EVIDENCE.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+            signatureStatus = 'unsigned'
+            installable = $false
+            hardwareQualified = $false
+            publicBookabilityEnabled = $false
+          } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'HOST_UNSIGNED_HANDOFF.json') -Encoding utf8
+          Write-Host "HOST_UNSIGNED_HANDOFF_SHA256=$((Get-FileHash -LiteralPath (Join-Path $root 'HOST_UNSIGNED_HANDOFF.json') -Algorithm SHA256).Hash.ToLowerInvariant())"
+          'UNSIGNED COMPONENTS ONLY. No user installer, signing approval, or physical qualification. Never install or run this handoff on PC1.' | Set-Content -LiteralPath (Join-Path $root 'DO-NOT-INSTALL.txt') -Encoding ascii
+
+      - name: Upload unsigned signing handoff
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: host-unsigned-signing-handoff-not-installable-${{ github.sha }}
+          path: ${{ runner.temp }}/host-signing-handoff/**
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload Windows preflight artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

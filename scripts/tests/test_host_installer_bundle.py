@@ -93,6 +93,38 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         self.assertIn("ref: " + "$" + "{{ github.event.pull_request.head.sha || github.sha }}", workflow)
         self.assertIn("persist-credentials: false", workflow)
 
+    def test_signing_handoff_remains_unsigned_and_manual_publisher_is_explicit(self):
+        workflow = (ROOT / ".github/workflows/host-windows-preflight.yml").read_text(encoding="utf-8")
+        dispatch = workflow.split("  workflow_dispatch:\n", 1)[1].split("\npermissions:", 1)[0]
+        self.assertIn("publisher_sha256:", dispatch)
+        self.assertIn("required: true", dispatch)
+        self.assertNotIn("default:", dispatch)
+        self.assertIn("PREFLIGHT_PUBLISHER_SHA256: " + "$" + "{{ inputs.publisher_sha256 || '' }}", workflow)
+        self.assertIn("if ($env:PREFLIGHT_EVENT_NAME -ceq 'workflow_dispatch')", workflow)
+        self.assertIn("$publisher.Length -ne 64", workflow)
+        self.assertIn("$publisher = $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER", workflow)
+        self.assertIn("$manifest.publisherSha256 -cne $publisher", workflow)
+        handoff = workflow.split("- name: Prepare exact unsigned signing handoff (not an installer)", 1)[1]
+        prepare, upload = handoff.split("- name: Upload unsigned signing handoff", 1)
+        for required in (
+            "verify-stage4-package.ps1",
+            "verify_stage4_package.py verify",
+            "host_handoff_expected_unsigned_component",
+            "HOST_UNSIGNED_HANDOFF.json",
+            "HOST_UNSIGNED_HANDOFF_SHA256",
+            "signatureStatus = 'unsigned'",
+            "installable = $false",
+            "hardwareQualified = $false",
+            "publicBookabilityEnabled = $false",
+            "DO-NOT-INSTALL.txt",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, prepare)
+        self.assertNotIn("sign-windows-authenticode.ps1", prepare)
+        self.assertNotIn("Start-Process", prepare)
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", upload)
+        self.assertIn("host-unsigned-signing-handoff-not-installable-", upload)
+
     def test_ci_bundle_smoke_requires_four_file_unsigned_policy_and_uninstall_cleanup(self):
         workflow = (ROOT / ".github/workflows/host-windows-preflight.yml").read_text(encoding="utf-8")
 
