@@ -88,13 +88,13 @@ def private_console_local_opt_in_enabled() -> bool:
 
 
 def private_gaming_workspace_local_opt_in_enabled() -> bool:
-    """Return the local owner decision scoped to the Gaming workspace."""
-    return private_console_local_opt_in_enabled()
+    """Only explicit Gaming consent authorizes Gaming; legacy opt-in is desktop-only."""
+    return private_console_proof_scope() == {"schemaVersion": 2, "workspaceSlug": "gaming"}
 
 
 def private_gaming_consent_status() -> dict[str, Any]:
     saved = read_private_gaming_consent()
-    enabled = private_console_local_opt_in_enabled()
+    enabled = private_gaming_workspace_local_opt_in_enabled()
     return {
         "enabled": enabled,
         "consentedAt": saved["consentedAt"] if enabled else None,
@@ -107,6 +107,8 @@ def set_private_gaming_consent(enabled: bool, *, confirmed: bool = False) -> dic
     if enabled:
         if confirmed is not True:
             raise RuntimeError("private_gaming_owner_consent_required")
+        if os.environ.get("GPUBNB_PRIVATE_CONSOLE_QUALIFICATION") == "false":
+            raise RuntimeError("private_gaming_environment_blocked")
         consented_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         payload = {
             "schemaVersion": CONSENT_SCHEMA_VERSION,
