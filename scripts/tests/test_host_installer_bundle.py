@@ -125,6 +125,37 @@ class HostInstallerBundleContractTests(unittest.TestCase):
         self.assertIn("if: github.event_name == 'workflow_dispatch'", upload)
         self.assertIn("host-unsigned-signing-handoff-not-installable-", upload)
 
+    def test_ci_smoke_binds_desktop_payload_helper_and_running_service_path(self):
+        workflow = (ROOT / ".github/workflows/host-windows-preflight.yml").read_text(encoding="utf-8")
+        smoke = workflow.split("- name: Verify installer and bundled sidecars", 1)[1].split(
+            "- name: Prepare exact unsigned signing handoff", 1
+        )[0]
+        for required in (
+            "host_preflight_exactly_one_desktop_build_required",
+            "host_preflight_installed_desktop_hash_mismatch",
+            "host_preflight_installed_payload_helper_hash_mismatch",
+            "Embedded native component hash mismatch:",
+            "host_preflight_service_executable_ambiguous",
+            "host_preflight_service_executable_mismatch",
+            "host_preflight_running_service_image_mismatch",
+            "host_preflight_running_service_image_hash_mismatch",
+            "The uninstaller left the Host desktop executable behind.",
+            "installedDesktopVerified = $true",
+            "serviceProcessImageVerified = $true",
+            "hostDesktopSha256 = $expectedDesktopHash",
+            "payloadHelperSha256 = $expectedPayloadHelperHash",
+            "installable = $false",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, smoke)
+        self.assertNotIn('$service.PathName -notlike', smoke)
+        self.assertLess(smoke.index("$expectedDesktopHash ="), smoke.index("Start-Process -FilePath $installer"))
+        self.assertLess(smoke.index("host_preflight_running_service_image_hash_mismatch"),
+                        smoke.index("Start-Process -FilePath $uninstaller"))
+        handoff = workflow.split("- name: Prepare exact unsigned signing handoff", 1)[1]
+        self.assertIn("host_handoff_desktop_smoke_evidence_mismatch", handoff)
+        self.assertIn("hostDesktopSha256 = $evidence.hostDesktopSha256", handoff)
+
     def test_ci_bundle_smoke_requires_four_file_unsigned_policy_and_uninstall_cleanup(self):
         workflow = (ROOT / ".github/workflows/host-windows-preflight.yml").read_text(encoding="utf-8")
 
