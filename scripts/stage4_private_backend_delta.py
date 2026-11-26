@@ -115,7 +115,7 @@ def analyze_source_delta(changed: list[str]) -> dict[str, object]:
     }
 
 
-def make_report(repo: Path, base: str, candidate: str) -> dict[str, object]:
+def make_report(repo: Path, base: str, candidate: str, review_base: str | None = None) -> dict[str, object]:
     changed = source_delta(repo, base, candidate)
     analysis = analyze_source_delta(changed)
     docker = _git(repo, "show", candidate + ":apps/api/Dockerfile")
@@ -123,8 +123,11 @@ def make_report(repo: Path, base: str, candidate: str) -> dict[str, object]:
         r"(?m)^\s*COPY\s+apps/web\s+/app/web\s*$", docker
     ):
         raise ValueError("stage4_delta_expected_api_container_web_copy_missing")
-    return {
+    report = {
         "kind": "STAGE4_PRIVATE_RENDER_SOURCE_DELTA_READONLY",
+        "sourceEvidenceSchemaVersion": 2,
+        "reviewedRootTree": _git(repo, "rev-parse", "--verify", candidate + "^{tree}"),
+        "reviewedWebTree": _git(repo, "rev-parse", "--verify", candidate + ":apps/web"),
         "privateRenderObservedCommit": base,
         "reviewedSourceCommit": candidate,
         # This is only a source snapshot. Nothing here proves a signed or live artifact.
@@ -141,6 +144,16 @@ def make_report(repo: Path, base: str, candidate: str) -> dict[str, object]:
         "publicBookabilityEnabled": False,
         "nextGate": "private_release_review_and_verified_runtime_then_physical_maintenance",
     }
+    # The PR target is a separate, exact comparison for reviewer convenience.
+    # It never replaces the observed Render baseline or proves compatibility.
+    if review_base is not None:
+        review_changes = source_delta(repo, review_base, candidate)
+        report["incrementalReview"] = {
+            "baseCommit": review_base,
+            "candidateCommit": candidate,
+            **analyze_source_delta(review_changes),
+        }
+    return report
 
 
 def main() -> int:
@@ -148,6 +161,7 @@ def main() -> int:
     parser.add_argument("--repo", default=".", help="Local repository path, read only")
     parser.add_argument("--private-render-commit", required=True)
     parser.add_argument("--pc1-candidate-commit", required=True)
+    parser.add_argument("--review-base-commit", help="Optional exact ancestor SHA for incremental PR review; not a release baseline")
     parser.add_argument("--expect-api-source-unchanged", action="store_true")
     parser.add_argument("--expect-api-source-changed", action="store_true")
     parser.add_argument("--expect-web-source-changed", action="store_true")
@@ -163,6 +177,7 @@ def main() -> int:
         Path(args.repo).resolve(),
         args.private_render_commit,
         args.pc1_candidate_commit,
+        review_base=args.review_base_commit,
     )
     if args.expect_known_gaming_web_snapshot:
         known = matches_pinned_web_snapshot(Path(args.repo).resolve(), args.pc1_candidate_commit)
@@ -173,15 +188,28 @@ def main() -> int:
         raise SystemExit("stage4_delta_conflicting_api_expectations")
     if args.expect_web_source_changed and args.expect_web_source_unchanged:
         raise SystemExit("stage4_delta_conflicting_web_expectations")
+    failures = []
     if args.expect_api_source_unchanged and not report["apiRuntimeInputsIdenticalAtSource"]:
-        raise SystemExit("stage4_delta_api_runtime_inputs_changed_review_required")
+        failures.append("stage4_delta_api_runtime_inputs_changed_review_required")
     if args.expect_api_source_changed and report["apiRuntimeInputsIdenticalAtSource"]:
-        raise SystemExit("stage4_delta_expected_api_runtime_change_missing")
+        failures.append("stage4_delta_expected_api_runtime_change_missing")
     if args.expect_web_source_changed and report["webAssetsIdenticalAtSource"]:
-        raise SystemExit("stage4_delta_web_difference_expectation_failed")
+        failures.append("stage4_delta_web_difference_expectation_failed")
     if args.expect_web_source_unchanged and not report["webAssetsIdenticalAtSource"]:
-        raise SystemExit("stage4_delta_web_source_changed_review_required")
-    print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False))
+        failures.append("stage4_delta_web_source_changed_review_required")
+    expectations_checked = any((
+        args.expect_api_source_unchanged, args.expect_api_source_changed,
+        args.expect_web_source_changed, args.expect_web_source_unchanged,
+    ))
+    report["sourceExpectationStatus"] = (
+        "BLOCKED" if failures else "MATCHED" if expectations_checked else "NOT_CHECKED"
+    )
+    report["sourceExpectationFailures"] = failures
+    # Always emit review evidence for a valid comparison, including rejection.
+    # Keep the original nonzero gate result and never grant release authority.
+    print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False), flush=True)
+    if failures:
+        raise SystemExit(failures[0])
     return 0
 
 

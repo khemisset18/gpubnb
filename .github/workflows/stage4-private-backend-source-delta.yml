@@ -34,14 +34,33 @@ jobs:
       # Only exact previously classified Gaming web trees, inherited from pinned
       # ancestors, may use the changed-web expectation. New web changes fail
       # closed; source evidence is never a security review or release permit.
-      - name: Record candidate API drift from observed Render source (read-only)
+      - name: Compare exact candidate and review base with observed Render source (read-only)
         env:
           REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REVIEW_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+        shell: bash
         run: |
+          set -o pipefail
+          args=()
+          if [[ -n "$REVIEW_BASE_SHA" ]]; then
+            args+=(--review-base-commit "$REVIEW_BASE_SHA")
+          fi
           python scripts/stage4_private_backend_delta.py \
             --repo . \
             --private-render-commit 23a7a2950ecf365866f3531ddbf76920d9fcb295 \
             --pc1-candidate-commit "$REVIEWED_SHA" \
             --expect-api-source-changed \
-            --expect-known-gaming-web-snapshot
+            --expect-known-gaming-web-snapshot \
+            "${args[@]}" \
+            | tee "$RUNNER_TEMP/stage4-source-review.json"
+      # Preserve the report even when the policy rejects a new web snapshot.
+      # The previous step remains failed; uploading evidence grants no authority.
+      - name: Upload source review evidence (including blocked comparisons)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: stage4-source-review-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/stage4-source-review.json
+          if-no-files-found: ignore
+          retention-days: 14
       # No secrets, deploy, PC1 service, quarantine, booking, signed evidence, or hardware use.
