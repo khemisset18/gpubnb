@@ -81,6 +81,46 @@ class PackageVerifierTests(unittest.TestCase):
         result = verifier.verify(self.root, self.manifest_hash, COMMIT, PUBLISHER)
         self.assertEqual(len(result["files"]), 4)
 
+    def test_complete_unsigned_build_chain_is_bound_to_exact_component_bytes(self) -> None:
+        identity_path = self.root / "build-identities.json"
+        identity = json.loads(identity_path.read_text(encoding="utf-8"))
+        manifest_path = self.root / "stage4.manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        links = (
+            ("worker", "unsignedMediaSha256", "GPUbnbWindowsMedia.dll"),
+            ("helper", "unsignedWorkerSha256", "gpubnb-windows-worker.exe"),
+            ("agent", "unsignedHelperSha256", "gpubnb-windows-stream.exe"),
+        )
+        for component, field, name in links:
+            identity[component][field] = verifier.sha(self.root / name)
+
+        def verify_current():
+            identity_path.write_text(json.dumps(identity), encoding="utf-8")
+            manifest["buildIdentitiesSha256"] = verifier.sha(identity_path)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            return verifier.verify(self.root, verifier.sha(manifest_path), COMMIT, PUBLISHER)
+
+        self.assertFalse(verify_current()["installable"])
+        for component, field, name in links:
+            with self.subTest(component=component):
+                good = identity[component][field]
+                identity[component][field] = "1" * 64
+                with self.assertRaisesRegex(ValueError, "stage4_unsigned_build_chain_mismatch:" + component):
+                    verify_current()
+                del identity[component][field]
+                with self.assertRaisesRegex(ValueError, "stage4_unsigned_build_chain_incomplete"):
+                    verify_current()
+                identity[component][field] = good
+        self.assertFalse(verify_current()["installable"])
+
+        # Even if the manifest hash is recomputed, swapping a PE payload without
+        # rebuilding its dependent component breaks the embedded provenance chain.
+        media = self.root / "GPUbnbWindowsMedia.dll"
+        media.write_bytes(media.read_bytes() + b"changed")
+        next(record for record in manifest["files"] if record["name"] == media.name)["sha256"] = verifier.sha(media)
+        with self.assertRaisesRegex(ValueError, "stage4_unsigned_build_chain_mismatch:worker"):
+            verify_current()
+
     def test_component_substitution_during_pe_inspection_is_detected(self) -> None:
         real_pe_info = verifier.pe_info
         mutated = False
