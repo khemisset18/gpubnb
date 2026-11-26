@@ -5,6 +5,7 @@
 // unknown controllers never send unvalidated native commands.
 const DEADZONE = 0.38;
 const MAX_POINTER_STEP = 14;
+const AIM_INTERVAL_MS = 1000 / 60;
 const BUTTON_KEYS = Object.freeze([
   [0, 'Space'],       // A: jump / confirm
   [1, 'Escape'],      // B: back
@@ -61,19 +62,30 @@ export class WindowsNativeGamepadBridge {
     this.mouseRelative = mouseRelative;
     this.heldKeys = new Set();
     this.triggerHeld = false;
+    this.nextAimAt = null;
+    this.lastAimPollAt = null;
+    this.controllerIdentity = null;
   }
 
-  update(gamepads) {
+  update(gamepads, timestamp = globalThis.performance?.now?.() ?? Date.now()) {
     const pad = standardGamepad(gamepads);
     if (!pad) {
       this.release();
       return false;
     }
+    const identity = Number.isSafeInteger(pad.index) && pad.index >= 0
+      ? JSON.stringify([pad.index, typeof pad.id === 'string' ? pad.id : ''])
+      : null;
+    if (this.controllerIdentity !== identity) {
+      this.release();
+      this.controllerIdentity = identity;
+    }
     const next = desiredKeys(pad);
     for (const code of [...this.heldKeys]) {
       if (!next.has(code)) {
-        try { this.key(code, true); } catch {} // Release must continue if the stream vanished.
-        this.heldKeys.delete(code);
+        // Keep ownership until the current input transport accepts the up.
+        // On an exception the viewer disarms and releases all wire inputs.
+        if (this.key(code, true)) this.heldKeys.delete(code);
       }
     }
     for (const code of next) {
@@ -87,7 +99,21 @@ export class WindowsNativeGamepadBridge {
     const y = axis(pad.axes[3]);
     const dx = Math.abs(x) > DEADZONE ? Math.round(x * MAX_POINTER_STEP) : 0;
     const dy = Math.abs(y) > DEADZONE ? Math.round(y * MAX_POINTER_STEP) : 0;
-    if (dx || dy) this.mouseRelative(dx, dy);
+    // requestAnimationFrame may run at 60, 120, 144 or 240 Hz. Keep aiming
+    // near the same 60-Hz event cadence, with no catch-up burst after a stall.
+    // Key and button changes above still run on every available poll.
+    if (!Number.isFinite(timestamp) || timestamp < 0) return true;
+    if (this.lastAimPollAt !== null && timestamp < this.lastAimPollAt) {
+      this.nextAimAt = timestamp + AIM_INTERVAL_MS;
+    }
+    this.lastAimPollAt = timestamp;
+    if (this.nextAimAt === null || timestamp + 0.0001 >= this.nextAimAt) {
+      const previousDeadline = this.nextAimAt;
+      this.nextAimAt = previousDeadline === null || timestamp - previousDeadline >= AIM_INTERVAL_MS
+        ? timestamp + AIM_INTERVAL_MS
+        : previousDeadline + AIM_INTERVAL_MS;
+      if (dx || dy) this.mouseRelative(dx, dy);
+    }
     return true;
   }
 
@@ -96,6 +122,9 @@ export class WindowsNativeGamepadBridge {
       try { this.key(code, true); } catch {} // Transport may already be revoked.
     }
     this.heldKeys.clear();
+    this.nextAimAt = null;
+    this.lastAimPollAt = null;
+    this.controllerIdentity = null;
     if (this.triggerHeld) {
       try { this.pointerButton(0, true); } catch {}
       this.triggerHeld = false;
