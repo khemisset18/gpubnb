@@ -13,6 +13,8 @@ from gpubnb_agent.private_console_consent import (
     private_console_local_opt_in_enabled,
     private_console_environment_opt_in_enabled,
     private_console_proof_scope,
+    private_gaming_consent_status,
+    private_gaming_workspace_local_opt_in_enabled,
     read_private_gaming_consent,
     set_private_gaming_consent,
 )
@@ -78,6 +80,41 @@ class PrivateGamingConsentTests(unittest.TestCase):
             set_private_gaming_consent(False)
             self.assertIsNone(private_console_proof_scope())
             self.assertFalse(private_console_environment_opt_in_enabled())
+
+    def test_legacy_opt_in_never_authorizes_gaming_or_reports_owner_consent(self):
+        from gpubnb_agent.windows_native_private_console import selected_capture_backend
+        from gpubnb_agent.workspace_gateway_v10 import windows_native_active_workspace_slugs
+
+        commit = "f664a07ec500c57bf9a508838f51b7c0305ba92d"
+        gaming = {
+            "runtimeBackend": "WINDOWS_NATIVE",
+            "workspaceSlug": "gaming",
+            "captureBackend": "console-dedicated",
+            "consoleAgentCommit": commit,
+        }
+        with patch.dict(os.environ, {"GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "true"}):
+            self.assertTrue(private_console_local_opt_in_enabled())
+            self.assertFalse(private_gaming_workspace_local_opt_in_enabled())
+            self.assertFalse(private_gaming_consent_status()["enabled"])
+            self.assertNotIn("gaming", windows_native_active_workspace_slugs())
+            with self.assertRaisesRegex(RuntimeError, "native_console_local_opt_in_required"):
+                selected_capture_backend(gaming, build_commit=commit)
+
+            set_private_gaming_consent(True, confirmed=True)
+            self.assertTrue(private_gaming_workspace_local_opt_in_enabled())
+            self.assertTrue(private_gaming_consent_status()["enabled"])
+            self.assertIn("gaming", windows_native_active_workspace_slugs())
+            self.assertEqual(selected_capture_backend(gaming, build_commit=commit), "console-dedicated")
+
+    def test_environment_deny_rejects_enable_without_persisting_permission(self):
+        with patch.dict(os.environ, {"GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "false"}):
+            with self.assertRaisesRegex(RuntimeError, "private_gaming_environment_blocked"):
+                set_private_gaming_consent(True, confirmed=True)
+            self.assertFalse(consent_path().exists())
+            self.assertFalse(private_gaming_consent_status()["enabled"])
+            self.assertTrue(private_gaming_consent_status()["environmentBlocked"])
+            self.assertFalse(set_private_gaming_consent(False)["enabled"])
+        self.assertFalse(private_gaming_workspace_local_opt_in_enabled())
 
     def test_disable_persists_revocation_and_disables_local_console_authority(self):
         set_private_gaming_consent(True, confirmed=True)
