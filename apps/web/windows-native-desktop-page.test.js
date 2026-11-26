@@ -581,3 +581,41 @@ test('reconnect backoff resets only after ten seconds of continuously rendered f
   clients[3].onState({ state: 'closed', closeCode: 1006 });
   assert.equal(timers.at(-1).delay, 250);
 });
+
+test('closing the local viewer leaves server STOP available and allows retry', async () => {
+  const button = () => ({
+    disabled:false, handlers:new Map(),
+    addEventListener(name, fn) { this.handlers.set(name, fn); },
+    removeEventListener(name, fn) { if (this.handlers.get(name) === fn) this.handlers.delete(name); },
+  });
+  const closeButton = button();
+  const stopButton = button();
+  const status = {textContent:''};
+  let closed = 0;
+  let attempts = 0;
+  mountWindowsNativeDesktop({
+    documentObject:{
+      querySelector(selector) {
+        return {'#nativeDesktopCanvas':{}, '#nativeDesktopStatus':status,
+          '#nativeDesktopClose':closeButton, '#nativeDesktopStopSession':stopButton}[selector] ?? null;
+      },
+      addEventListener(){}, removeEventListener(){},
+    },
+    windowObject:{GPUBNB_API_URL:'https://api.example.test', addEventListener(){}, removeEventListener(){}},
+    locationObject:{href:'https://example.test/windows-native-desktop.html?session=sess-1',search:'?session=sess-1'},
+    clientFactory:()=>({bindDom(){return ()=>{};},start(){},close(){closed++;}}),
+    apiFetch:async()=>({ok:++attempts>1}),
+  });
+  closeButton.handlers.get('click')({type:'click'});
+  assert.equal(closed,1);
+  assert.equal(status.textContent,'Session vidéo fermée');
+  assert.equal(stopButton.handlers.has('click'),true);
+  await stopButton.handlers.get('click')();
+  assert.equal(stopButton.disabled,false);
+  assert.match(status.textContent,/Arrêt non confirmé/u);
+  await stopButton.handlers.get('click')();
+  assert.equal(attempts,2);
+  assert.equal(closed,1);
+  assert.equal(stopButton.handlers.has('click'),false);
+  assert.match(status.textContent,/Arrêt confirmé/u);
+});
