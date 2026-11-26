@@ -587,9 +587,8 @@ mod windows_impl {
             .open(verified.path())
             .map_err(|_| FileDigestError::OpenFailed)?;
         let handle = file.as_raw_handle() as Handle;
-        let attributes: FileAttributeTagInfo =
-            file_info(handle, FILE_ATTRIBUTE_TAG_INFO_CLASS)
-                .map_err(|_| FileDigestError::ReadFailed)?;
+        let attributes: FileAttributeTagInfo = file_info(handle, FILE_ATTRIBUTE_TAG_INFO_CLASS)
+            .map_err(|_| FileDigestError::ReadFailed)?;
         let identity: FileIdInfo =
             file_info(handle, FILE_ID_INFO_CLASS).map_err(|_| FileDigestError::ReadFailed)?;
         if attributes.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
@@ -679,10 +678,8 @@ mod windows_impl {
                 .duration_since(UNIX_EPOCH)
                 .expect("clock")
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!(
-                "gpubnb-digest-{}-{nonce}.bin",
-                std::process::id()
-            ));
+            let path = std::env::temp_dir()
+                .join(format!("gpubnb-digest-{}-{nonce}.bin", std::process::id()));
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -693,9 +690,9 @@ mod windows_impl {
 
             let opened = open_application_for_verification(&path).expect("open fixture");
             let expected = [
-                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d,
-                0xae, 0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10,
-                0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae,
+                0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61,
+                0xf2, 0x00, 0x15, 0xad,
             ];
             assert_eq!(opened.file_sha256(), Ok(expected));
             assert_eq!(opened.file_sha256(), Ok(expected));
