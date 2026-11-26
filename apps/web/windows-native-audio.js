@@ -5,6 +5,8 @@ export const BROWSER_AUDIO_HEADER_SIZE = 64;
 export const BROWSER_AUDIO_PACKET_MAX_BYTES = 512 * 1024;
 export const BROWSER_AUDIO_MAX_BUFFERED_PACKETS = 32;
 export const BROWSER_AUDIO_MAX_BUFFERED_BYTES = 1024 * 1024;
+export const BROWSER_AUDIO_MAX_SCHEDULED_SOURCES = 64;
+export const BROWSER_AUDIO_MAX_SCHEDULE_AHEAD_MS = 250;
 
 const MAGIC = [0x47, 0x42, 0x4e, 0x41]; // GBNA
 const FLAG_SILENT = 1;
@@ -238,8 +240,11 @@ export class WindowsNativeAudioPlayback {
         typeof this.context.createBuffer !== 'function' || typeof this.context.createBufferSource !== 'function') {
       fail('windows_native_audio_context');
     }
-    await this.context.resume();
-    if (this.context.state && this.context.state !== 'running') {
+    const context = this.context;
+    await context.resume();
+    // STOP or context replacement may happen during the async browser resume.
+    if (this.closed || this.context !== context) return false;
+    if (context.state && context.state !== 'running') {
       this.awaitingGesture = true;
       this.onState({ audioState: 'blocked' });
       return false;
@@ -296,6 +301,21 @@ export class WindowsNativeAudioPlayback {
       return false;
     }
 
+    // Do not allocate a buffer/node for packets that cannot fit the live
+    // playout horizon. The frame sequence is shared by all audio packets in
+    // a video frame, so it is not an independent audio packet counter.
+    const targetTime = this.clock.audioContextTimeFor(qpc, context, nowMs);
+    const when = Math.max(targetTime, context.currentTime + 0.015,
+      packet.discontinuity ? 0 : this.nextAudioTime ?? 0);
+    if (!Number.isFinite(when) || when + durationSeconds > context.currentTime + BROWSER_AUDIO_MAX_SCHEDULE_AHEAD_MS / 1000 ||
+        (!packet.discontinuity && this.sources.size >= BROWSER_AUDIO_MAX_SCHEDULED_SOURCES)) {
+      this.onState({ audioState: 'dropping-stale' });
+      return false;
+    }
+    if (packet.discontinuity) {
+      this.#stopSources();
+      this.nextAudioTime = null;
+    }
     const buffer = context.createBuffer(packet.channels, packet.frames, packet.sampleRate);
     const view = new DataView(packet.payload.buffer, packet.payload.byteOffset, packet.payload.byteLength);
     const sampleSize = bytesPerSample(packet.sampleFormat);
@@ -313,9 +333,6 @@ export class WindowsNativeAudioPlayback {
     gain.gain.value = this.volume;
     source.connect(gain);
     gain.connect(context.destination);
-    if (packet.discontinuity) this.nextAudioTime = null;
-    const targetTime = this.clock.audioContextTimeFor(qpc, context, nowMs);
-    const when = Math.max(targetTime, context.currentTime + 0.015, this.nextAudioTime ?? 0);
     const record = { source, gain };
     this.sources.add(record);
     source.onended = () => {
