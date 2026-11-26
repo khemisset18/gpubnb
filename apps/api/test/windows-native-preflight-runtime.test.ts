@@ -31,7 +31,7 @@ const host = () => ({id:'private-listing', hourlyLamports:3600n,
   machine:{id:'private-machine', ownerId:'renter', operatingSystem:'Windows 11', operational:'AVAILABLE', lastHeartbeatAt:new Date(Date.now()-1_000),
     nativeDesktopStreamingAvailable:true, lastCounter:BigInt(21),
     nativeDesktopStreamingGpuUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a'},
-  accelerators:[{accelerator:{hardwareUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',
+  accelerators:[{accelerator:{machineId:'private-machine',hardwareUuid:'GPU-e8301c16-2a14-2b3f-f057-b21f3b00524a',
     vendor:'NVIDIA', moderationStatus:'CLEAR', status:'AVAILABLE'}}]});
 
 async function fixture(run: (f: {app: ReturnType<typeof Fastify>; state: any; headers: Record<string,string>}) => Promise<void>) {
@@ -223,4 +223,24 @@ test('legacy private qualification sessions cannot become openable or receive an
   const access=await app.inject({method:'POST',url:'/bookings/legacy-booking/workspace/cloud-desktop/access',headers});
   assert.equal(access.statusCode,409);assert.equal(access.json().error,'windows_native_audio_not_qualified');
   assert.equal(state.redisWrites,0);
+}));
+
+test('private Gaming preflight rejects a GPU bound to another Host even with a matching UUID',async()=>fixture(async({app,state,headers})=>{
+  const restoreConsole=usePrivateConsoleProof(state);
+  try {
+    config.WINDOWS_NATIVE_PRIVATE_GAMING_TEST_ATTEMPT_ENABLED='true';
+    const candidate=host();
+    candidate.accelerators[0]!.accelerator.machineId='different-machine';
+    state.candidates=[candidate];
+    const rejected=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+    assert.equal(rejected.statusCode,200);
+    assert.equal(rejected.json().allowed,false);
+    assert.equal(rejected.json().code,'PRIVATE_WINDOWS_HOST_NOT_READY');
+    assert.equal(state.redisWrites,0);
+    candidate.accelerators[0]!.accelerator.machineId=candidate.machine.id;
+    const valid=await app.inject({method:'GET',url:'/qualification/windows-native/preflight?workspaceSlug=gaming',headers});
+    assert.equal(valid.json().allowed,true);
+    assert.equal(valid.json().qualificationPassed,false);
+    assert.equal(valid.json().publicEligible,false);
+  } finally {restoreConsole();}
 }));
