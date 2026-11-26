@@ -56,6 +56,18 @@ pub struct PrivateGamingConsentStatus {
     pub consented_at: Option<String>,
     #[serde(default)]
     pub environment_blocked: bool,
+    #[serde(default)]
+    pub installation_inventory: Option<PrivateGamingInstallationInventory>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivateGamingInstallationInventory {
+    pub supported_platform: bool,
+    pub stream_helper_present: bool,
+    pub worker_present: bool,
+    pub media_library_present: bool,
+    pub steam_present: bool,
 }
 
 #[derive(Debug, Deserialize)]
