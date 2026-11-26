@@ -59,6 +59,7 @@ class ConsoleGatewayTests(unittest.TestCase):
                 "GPUBNB_WINDOWS_NATIVE_EXTENDED_LOCAL_OPT_IN": "true",
                 "GPUBNB_PRIVATE_CONSOLE_QUALIFICATION": "true",
             }),
+            patch.object(gateway, "private_gaming_workspace_local_opt_in_enabled", return_value=True),
             patch.object(gateway, "selected_capture_backend", return_value="console-dedicated"),
         ):
             obj._reconcile_native_sessions()
