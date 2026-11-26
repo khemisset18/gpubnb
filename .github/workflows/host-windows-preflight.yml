@@ -376,6 +376,12 @@ jobs:
           $installerHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           $expectedTunnelHash = (Get-FileHash -LiteralPath 'services/edge/target/release/gpubnb-host-tunnel.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
           $expectedAgentHash = (Get-FileHash -LiteralPath 'dist/gpubnb-agent.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+          # Identify the actual compiled Tauri binary before running the installer.
+          $appSources = @(@('target/release/gpubnb-host-desktop.exe','apps/host-desktop/src-tauri/target/release/gpubnb-host-desktop.exe') | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+          if ($appSources.Count -ne 1) { throw 'host_preflight_exactly_one_desktop_build_required' }
+          $appSource = $appSources[0]
+          $expectedDesktopHash = (Get-FileHash -LiteralPath $appSource -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedPayloadHelperHash = (Get-FileHash -LiteralPath 'apps/host-desktop/src-tauri/installer/install-stage4-payload.ps1' -Algorithm SHA256).Hash.ToLowerInvariant()
 
           $installDirectory = Join-Path $env:RUNNER_TEMP 'gpubnb-host-smoke-test'
           if (Test-Path $installDirectory) {
@@ -394,6 +400,19 @@ jobs:
           $installedSidecar = Join-Path $installDirectory 'gpubnb-agent.exe'
           $installedTunnel = Join-Path $installDirectory 'gpubnb-host-tunnel.exe'
           $nativeInstallDirectory = Join-Path $env:ProgramFiles 'GPUbnb'
+          # NSIS may use the product name for the main executable. Identify
+          # it by content, not by accepting an arbitrary file with that name.
+          $installedDesktopCandidates = @(Get-ChildItem -LiteralPath $installDirectory -File -Filter '*.exe' | Where-Object {
+            $_.Name -notin @('gpubnb-agent.exe','gpubnb-host-tunnel.exe','uninstall.exe') -and
+            ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 -and
+            (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $expectedDesktopHash
+          })
+          if ($installedDesktopCandidates.Count -ne 1) { throw 'host_preflight_installed_desktop_hash_mismatch' }
+          $installedDesktop = $installedDesktopCandidates[0].FullName
+          $installedPayloadHelper = Join-Path $installDirectory 'resources/installer/install-stage4-payload.ps1'
+          if ((Get-FileHash -LiteralPath $installedPayloadHelper -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedPayloadHelperHash) {
+            throw 'host_preflight_installed_payload_helper_hash_mismatch'
+          }
           if (-not (Test-Path $installedSidecar -PathType Leaf)) {
             throw 'The installed application does not contain the gpubnb-agent sidecar.'
           }
@@ -444,6 +463,10 @@ jobs:
             if ($record.Count -ne 1 -or -not (Test-Path $installedNative -PathType Leaf)) {
               throw "Unified installer did not install native component $name."
             }
+            $embeddedNative = Join-Path $payloadRoot $name
+            if ((Get-FileHash -LiteralPath $embeddedNative -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record[0].sha256) {
+              throw "Embedded native component hash mismatch: $name"
+            }
             if ((Get-FileHash $installedNative -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record[0].sha256) {
               throw "Installed native component hash mismatch: $name"
             }
@@ -459,8 +482,17 @@ jobs:
           if ($service.StartMode -ne 'Auto') {
             throw "The GPUbnbAgent service is not automatic: $($service.StartMode)"
           }
-          if ($service.PathName -notlike "*$installedSidecar*") {
-            throw "The service does not execute the installed sidecar: $($service.PathName)"
+          # SCM executable token must match the installed Agent exactly,
+          # not merely contain its path somewhere in command-line arguments.
+          $commandLine = ([string]$service.PathName).Trim()
+          $quotedPath = [regex]::Match($commandLine, '^"([^"]+)"(?:\s|$)')
+          $plainPath = [regex]::Match($commandLine, '^(\S+\.exe)(?:\s|$)', [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          if ($quotedPath.Success) { $serviceExe = $quotedPath.Groups[1].Value }
+          elseif ($plainPath.Success) { $serviceExe = $plainPath.Groups[1].Value }
+          else { throw 'host_preflight_service_executable_ambiguous' }
+          if (-not [IO.Path]::IsPathFullyQualified($serviceExe) -or
+              [IO.Path]::GetFullPath($serviceExe) -ine [IO.Path]::GetFullPath($installedSidecar)) {
+            throw 'host_preflight_service_executable_mismatch'
           }
           $dataDirectory = Join-Path $env:PROGRAMDATA 'GPUbnb'
           if (-not (Test-Path $dataDirectory -PathType Container)) {
@@ -543,6 +575,17 @@ jobs:
             throw "The restarted service is not running: $($service.State)"
           }
 
+          $runningServicePid = [uint32]$service.ProcessId
+          if ($runningServicePid -eq 0) { throw 'host_preflight_service_process_missing' }
+          $runningProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$runningServicePid"
+          if (-not $runningProcess -or [string]::IsNullOrWhiteSpace($runningProcess.ExecutablePath) -or
+              [IO.Path]::GetFullPath($runningProcess.ExecutablePath) -ine [IO.Path]::GetFullPath($installedSidecar)) {
+            throw 'host_preflight_running_service_image_mismatch'
+          }
+          if ((Get-FileHash -LiteralPath $runningProcess.ExecutablePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedAgentHash) {
+            throw 'host_preflight_running_service_image_hash_mismatch'
+          }
+
           $uninstaller = Join-Path $installDirectory 'uninstall.exe'
           if (-not (Test-Path $uninstaller -PathType Leaf)) {
             throw 'The NSIS package did not install an uninstaller.'
@@ -551,6 +594,9 @@ jobs:
             -ArgumentList '/S' -Wait -PassThru
           if ($uninstallation.ExitCode -ne 0) {
             throw "NSIS silent uninstallation failed with exit code $($uninstallation.ExitCode)."
+          }
+          if (Test-Path -LiteralPath $installedDesktop) {
+            throw 'The uninstaller left the Host desktop executable behind.'
           }
           if (Test-Path $installedSidecar) {
             throw 'The uninstaller left the agent sidecar behind.'
@@ -600,6 +646,10 @@ jobs:
             buildIdentitiesSha256 = $sourceIdentityHash
             agentSha256 = $expectedAgentHash
             hostTunnelSha256 = $expectedTunnelHash
+            hostDesktopSha256 = $expectedDesktopHash
+            payloadHelperSha256 = $expectedPayloadHelperHash
+            installedDesktopVerified = $true
+            serviceProcessImageVerified = $true
             nativeComponentsVerified = 4
             installUninstallSmokePassed = $true
             signatureStatus = 'unsigned'
@@ -637,8 +687,13 @@ jobs:
           if (-not $?) { throw 'host_handoff_stage4_verification_failed' }
           python scripts/verify_stage4_package.py verify --directory $native --manifest-sha256 $evidence.stage4ManifestSha256 --commit $commit --publisher $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
           if ($LASTEXITCODE -ne 0) { throw 'host_handoff_independent_verification_failed' }
-          $app = @('target/release/gpubnb-host-desktop.exe','apps/host-desktop/src-tauri/target/release/gpubnb-host-desktop.exe') | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-          if (-not $app) { throw 'host_handoff_desktop_binary_missing' }
+          $apps = @(@('target/release/gpubnb-host-desktop.exe','apps/host-desktop/src-tauri/target/release/gpubnb-host-desktop.exe') | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+          if ($apps.Count -ne 1) { throw 'host_handoff_desktop_binary_missing_or_ambiguous' }
+          $app = $apps[0]
+          if ($evidence.installedDesktopVerified -cne $true -or $evidence.serviceProcessImageVerified -cne $true -or
+              (Get-FileHash -LiteralPath $app -Algorithm SHA256).Hash.ToLowerInvariant() -cne $evidence.hostDesktopSha256) {
+            throw 'host_handoff_desktop_smoke_evidence_mismatch'
+          }
           $tunnel = 'services/edge/target/release/gpubnb-host-tunnel.exe'
           foreach ($file in @($app,$tunnel)) {
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "host_handoff_component_missing:$file" }
@@ -661,7 +716,7 @@ jobs:
             buildIdentitiesSha256 = $evidence.buildIdentitiesSha256
             agentSha256 = $evidence.agentSha256
             hostTunnelSha256 = $evidence.hostTunnelSha256
-            hostDesktopSha256 = (Get-FileHash -LiteralPath (Join-Path $root 'gpubnb-host-desktop.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+            hostDesktopSha256 = $evidence.hostDesktopSha256
             smokeEvidenceSha256 = (Get-FileHash -LiteralPath (Join-Path $root 'HOST_PREFLIGHT_EVIDENCE.json') -Algorithm SHA256).Hash.ToLowerInvariant()
             signatureStatus = 'unsigned'
             installable = $false
