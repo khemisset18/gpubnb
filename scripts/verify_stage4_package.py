@@ -116,6 +116,30 @@ def check_identity(identity, commit, publisher):
             m.get("nvencApi") == "13.0", "stage4_media_abi_mismatch")
 
 
+def check_unsigned_build_chain(identity, records):
+    """Check optional build-time evidence against the exact unsigned bytes.
+
+    Historical packages carry none of these fields. A partial chain is invalid.
+    Evidence alone never changes installable, signature or qualification policy.
+    """
+    links = (
+        ("worker", "unsignedMediaSha256", "GPUbnbWindowsMedia.dll"),
+        ("helper", "unsignedWorkerSha256", "gpubnb-windows-worker.exe"),
+        ("agent", "unsignedHelperSha256", "gpubnb-windows-stream.exe"),
+    )
+    present = [field in identity[component] for component, field, _ in links]
+    if not any(present):
+        return
+    require(all(present), "stage4_unsigned_build_chain_incomplete")
+    for component, field, name in links:
+        value = identity[component][field]
+        matching = [record for record in records if record.get("name") == name]
+        require(isinstance(value, str) and HEX.fullmatch(value) is not None and
+                value != "0" * 64 and len(matching) == 1 and
+                value == matching[0].get("sha256"),
+                "stage4_unsigned_build_chain_mismatch:" + component)
+
+
 def verify(directory, manifest_hash, commit, publisher, status="unsigned"):
     root = Path(directory).resolve(strict=True)
     require(not (root/"INCOMPLETE-DO-NOT-INSTALL.txt").exists(), "stage4_incomplete_package_forbidden")
@@ -157,7 +181,9 @@ def verify(directory, manifest_hash, commit, publisher, status="unsigned"):
             require(info["certificateTablePresent"], "stage4_signature_table_missing")
     identity_path = root / "build-identities.json"
     require(sha(identity_path) == m.get("buildIdentitiesSha256"), "stage4_identity_hash_mismatch")
-    check_identity(json.loads(identity_path.read_text(encoding="utf-8-sig")), commit, publisher)
+    identity = json.loads(identity_path.read_text(encoding="utf-8-sig"))
+    check_identity(identity, commit, publisher)
+    unsigned_records = records
     if status == "private-signed":
         require(HEX.fullmatch(m.get("unsignedManifestSha256", "")) is not None,
                 "stage4_unsigned_provenance_missing")
@@ -171,6 +197,8 @@ def verify(directory, manifest_hash, commit, publisher, status="unsigned"):
             old = [x for x in u["files"] if x.get("name") == f["name"]]
             require(len(old) == 1 and f.get("unsignedSha256") == old[0].get("sha256"),
                     "stage4_unsigned_file_provenance_mismatch")
+        unsigned_records = u["files"]
+    check_unsigned_build_chain(identity, unsigned_records)
     # Rehash after all PE and identity parsing. The Windows swap engine also
     # verifies each byte-for-byte staging copy immediately before service STOP.
     require(sha(manifest) == manifest_hash, "stage4_manifest_changed_during_verification")
