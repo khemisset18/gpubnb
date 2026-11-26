@@ -274,106 +274,112 @@ export function mountWindowsNativeDesktop({
     if (stopped || pageHidden || currentClient) return;
 
     let client = null;
-    client = clientFactory({
-      canvas,
-      onState: (state) => {
-        if (client !== currentClient) return;
+    try {
+      client = clientFactory({
+        canvas,
+        onState: (state) => {
+          if (client !== currentClient) return;
 
-        if (state?.audioState === 'enabled') {
-          if (audioEnableButton) {
-            audioEnableButton.textContent = 'Son activé';
-            audioEnableButton.setAttribute?.('aria-pressed', 'true');
-          }
-        } else if (state?.audioState === 'waiting-for-gesture' || state?.audioState === 'blocked') {
-          if (audioEnableButton) {
-            audioEnableButton.textContent = 'Activer le son';
+          if (state?.audioState === 'enabled') {
+            if (audioEnableButton) {
+              audioEnableButton.textContent = 'Son activé';
+              audioEnableButton.setAttribute?.('aria-pressed', 'true');
+            }
+          } else if (state?.audioState === 'waiting-for-gesture' || state?.audioState === 'blocked') {
+            if (audioEnableButton) {
+              audioEnableButton.textContent = 'Activer le son';
+              audioEnableButton.setAttribute?.('aria-pressed', 'false');
+            }
+          } else if (state?.audioState === 'closed' && audioEnableButton) {
+            audioEnableButton.textContent = 'Son arrêté';
             audioEnableButton.setAttribute?.('aria-pressed', 'false');
           }
-        } else if (state?.audioState === 'closed' && audioEnableButton) {
-          audioEnableButton.textContent = 'Son arrêté';
-          audioEnableButton.setAttribute?.('aria-pressed', 'false');
-        }
-        if (state?.audioState) return;
+          if (state?.audioState) return;
 
-        if (state?.state === 'closed') {
-          // Record only WebSocket protocol metadata to diagnose the FIRST
-          // closure, never a session URL, HTTP headers or video payload.
-          if (Number.isInteger(state.closeCode)) {
-            globalThis.console?.info?.('gpubnb_native_ws_closed', {
-              code: state.closeCode,
-              wasClean: state.wasClean === true,
-            });
-          }
-          resetProof();
-          stableProof.reset();
-          const unbind = unbindCurrent;
-          currentClient = null;
-          unbindCurrent = null;
-          try { unbind?.(); } catch {}
-          exitPresentationModes();
-
-          if (stopped) {
-            setStatus(gamingWorkspace ? 'Flux du jeu fermé' : 'Session vidéo fermée');
-            return;
-          }
-          // Render sends 1008 when the workspace authority expires/revokes.
-          // Never retry a revoked browser session or obscure the security gate.
-          if (state.closeCode === 1008) {
-            stop(gamingWorkspace
-              ? 'Session non autorisée — ouvrez une nouvelle réservation'
-              : 'Session vidéo non autorisée — ouvrir une nouvelle session');
-            return;
-          }
-          if (pageHidden) return;
-          scheduleReconnect();
-          return;
-        }
-
-        if (state?.state === 'ready') {
-          const timestamp = proofNow();
-          // The continuity engine requires rising frame sequence, same stream
-          // epoch and no gap >3s throughout the 10s backoff recovery period.
-          // A scheduled timer alone never proves video is being rendered.
-          if (stableProof.observe(state, timestamp).video300sObserved) {
-            markRecovered();
+          if (state?.state === 'closed') {
+            // Record only WebSocket protocol metadata to diagnose the FIRST
+            // closure, never a session URL, HTTP headers or video payload.
+            if (Number.isInteger(state.closeCode)) {
+              globalThis.console?.info?.('gpubnb_native_ws_closed', {
+                code: state.closeCode,
+                wasClean: state.wasClean === true,
+              });
+            }
+            resetProof();
             stableProof.reset();
+            const unbind = unbindCurrent;
+            currentClient = null;
+            unbindCurrent = null;
+            try { unbind?.(); } catch {}
+            exitPresentationModes();
+
+            if (stopped) {
+              setStatus(gamingWorkspace ? 'Flux du jeu fermé' : 'Session vidéo fermée');
+              return;
+            }
+            // Render sends 1008 when the workspace authority expires/revokes.
+            // Never retry a revoked browser session or obscure the security gate.
+            if (state.closeCode === 1008) {
+              stop(gamingWorkspace
+                ? 'Session non autorisée — ouvrez une nouvelle réservation'
+                : 'Session vidéo non autorisée — ouvrir une nouvelle session');
+              return;
+            }
+            if (pageHidden) return;
+            scheduleReconnect();
+            return;
           }
-          proof?.observe(state, timestamp);
-        } else {
-          stableProof.reset();
-          resetProof();
-        }
-        showProof();
 
-        const label = {
-          connecting: gamingWorkspace
-            ? (reconnectAttempt > 0 ? 'Reconnexion sécurisée au jeu…' : 'Connexion sécurisée au jeu…')
-            : (reconnectAttempt > 0 ? 'Reconnexion sécurisée…' : 'Connexion sécurisée…'),
-          connected: gamingWorkspace
-            ? 'Canal authentifié, attente de l’image du jeu…'
-            : 'Canal authentifié, attente de la première image…',
-          ready: gamingWorkspace ? 'Flux du jeu actif' : 'Bureau distant actif',
-        }[state?.state] ?? 'État inconnu';
-        setStatus(label);
-      },
-      onError: (error) => {
-        if (client !== currentClient) return;
-        const code = safeNativeDesktopErrorCode(error);
-        globalThis.console?.warn?.('gpubnb_native_client_error', code);
-        setStatus(`Connexion interrompue — ${code}`);
-      },
-    });
+          if (state?.state === 'ready') {
+            const timestamp = proofNow();
+            // The continuity engine requires rising frame sequence, same stream
+            // epoch and no gap >3s throughout the 10s backoff recovery period.
+            // A scheduled timer alone never proves video is being rendered.
+            if (stableProof.observe(state, timestamp).video300sObserved) {
+              markRecovered();
+              stableProof.reset();
+            }
+            proof?.observe(state, timestamp);
+          } else {
+            stableProof.reset();
+            resetProof();
+          }
+          showProof();
 
-    currentClient = client;
-    try {
+          const label = {
+            connecting: gamingWorkspace
+              ? (reconnectAttempt > 0 ? 'Reconnexion sécurisée au jeu…' : 'Connexion sécurisée au jeu…')
+              : (reconnectAttempt > 0 ? 'Reconnexion sécurisée…' : 'Connexion sécurisée…'),
+            connected: gamingWorkspace
+              ? 'Canal authentifié, attente de l’image du jeu…'
+              : 'Canal authentifié, attente de la première image…',
+            ready: gamingWorkspace ? 'Flux du jeu actif' : 'Bureau distant actif',
+          }[state?.state] ?? 'État inconnu';
+          setStatus(label);
+        },
+        onError: (error) => {
+          if (client !== currentClient) return;
+          const code = safeNativeDesktopErrorCode(error);
+          globalThis.console?.warn?.('gpubnb_native_client_error', code);
+          setStatus(`Connexion interrompue — ${code}`);
+        },
+      });
+
+      currentClient = client;
       unbindCurrent = client.bindDom({
         keyboardTarget: documentObject,
         pointerTarget: canvas,
       });
       client.start(streamPath, locationObject.href);
     } catch (error) {
-      releaseCurrent();
-      throw error;
+      // Synchronous construction/start failures are local viewer failures,
+      // not retryable WebSocket CloseEvents. Terminate local timers and input
+      // while retaining authenticated STOP. Never surface raw exception text.
+      const code = safeNativeDesktopErrorCode(error);
+      globalThis.console?.warn?.('gpubnb_native_client_error', code);
+      stop(code === 'windows_native_webcodecs_unavailable'
+        ? 'Navigateur incompatible avec le décodage vidéo — arrêt de la session disponible.'
+        : 'Lecteur vidéo indisponible — arrêt de la session disponible.');
     }
   };
 
