@@ -1433,6 +1433,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
           select: {
             accelerator: {
               select: {
+                machineId: true,
                 hardwareUuid: true,
                 vendor: true,
                 moderationStatus: true,
@@ -1468,6 +1469,7 @@ export function registerDesktopWorkspaceRoutes(app: FastifyInstance, db: PrismaC
           <= config.WORKSPACE_ACCESS_HEARTBEAT_MAX_AGE_SECONDS * 1000
         && listing.accelerators.length === 1
         && accelerator !== undefined
+        && accelerator.machineId === host.id
         && WINDOWS_NATIVE_GPU_UUID_RE.test(uuid)
         && accelerator.vendor?.trim().toUpperCase() === 'NVIDIA'
         && accelerator.moderationStatus === ModerationStatus.CLEAR
