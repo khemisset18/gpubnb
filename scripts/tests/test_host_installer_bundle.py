@@ -184,6 +184,9 @@ class HostInstallerBundleContractTests(unittest.TestCase):
             "HOST_PREFLIGHT_EVIDENCE.json",
             "hardwareQualified = $false",
             "nativeComponentsVerified = 4",
+            "host_preflight_installed_unsigned_build_chain_mismatch",
+            "unsignedBuildChainEvidenceVerified = $true",
+            "runtimeDigestAuthorizationEnabled = $false",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, workflow)

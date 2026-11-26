@@ -15,3 +15,5 @@ definition, so there is nothing meaningful to compare it against.
 from __future__ import annotations
 
 BUILD_COMMIT = "dev"
+# Optional build-only evidence; never a runtime permission or signature bypass.
+BUILD_UNSIGNED_HELPER_SHA256 = ""

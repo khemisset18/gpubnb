@@ -616,6 +616,20 @@ fn build_policy_json() -> Result<String, CliError> {
             v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()) && *v != "0".repeat(64)
         })
         .ok_or(CliError::new("build_worker_signer_unconfigured", 21))?;
+    // Optional evidence only. Not a new worker launch authority.
+    let digest_evidence = match option_env!("GPUBNB_BUILD_UNSIGNED_WORKER_SHA256") {
+        None => String::new(),
+        Some(value)
+            if value.len() == 64
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
+                && value.bytes().any(|b| b != b'0') =>
+        {
+            format!(r#","unsignedWorkerSha256":"{value}""#)
+        }
+        Some(_) => return Err(CliError::new("build_worker_digest_invalid", 21)),
+    };
     let authority = if cfg!(feature = "release-candidate") {
         "release-candidate"
     } else if cfg!(feature = "physical-qualification") {
@@ -624,7 +638,7 @@ fn build_policy_json() -> Result<String, CliError> {
         "disabled"
     };
     Ok(format!(
-        r#"{{"schemaVersion":1,"sourceCommit":"{source}","workerSignerSha256":"{signer}","mutationAuthority":"{authority}","workerProtocol":{},"mediaTransportProtocol":{},"consoleMediaTransportProtocol":{},"workerAudioBatchProtocol":{},"browserMediaProtocol":{},"browserAudioProtocol":{},"browserInputProtocol":{}}}"#,
+        r#"{{"schemaVersion":1,"sourceCommit":"{source}","workerSignerSha256":"{signer}","mutationAuthority":"{authority}"{digest_evidence},"workerProtocol":{},"mediaTransportProtocol":{},"consoleMediaTransportProtocol":{},"workerAudioBatchProtocol":{},"browserMediaProtocol":{},"browserAudioProtocol":{},"browserInputProtocol":{}}}"#,
         gpubnb_windows_stream_helper::worker_protocol::WORKER_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::media_protocol::MEDIA_TRANSPORT_PROTOCOL_VERSION,
         gpubnb_windows_stream_helper::media_protocol::MEDIA_CONSOLE_TRANSPORT_PROTOCOL_VERSION,

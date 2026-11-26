@@ -1056,8 +1056,16 @@ fn build_policy_json() -> Result<String, WorkerError> {
         .filter(|value| is_lower_hex(value, 40))
         .ok_or_else(|| WorkerError::new("build_source_commit_unconfigured", 21))?;
 
+    // Optional evidence only. Existing Authenticode policy remains mandatory.
+    let digest_evidence = match option_env!("GPUBNB_BUILD_UNSIGNED_MEDIA_SHA256") {
+        None => String::new(),
+        Some(value) if is_lower_hex(value, 64) && value.bytes().any(|b| b != b'0') => {
+            format!(r#","unsignedMediaSha256":"{value}""#)
+        }
+        Some(_) => return Err(WorkerError::new("build_media_digest_invalid", 21)),
+    };
     Ok(format!(
-        r#"{{"schemaVersion":1,"sourceCommit":"{source_commit}","mediaSignerSha256":"{media_signer}"}}"#
+        r#"{{"schemaVersion":1,"sourceCommit":"{source_commit}","mediaSignerSha256":"{media_signer}"{digest_evidence}}}"#
     ))
 }
 

@@ -168,6 +168,32 @@ function Close-Stage4PackageReadFence($Handles) {
     foreach($stream in $Handles){if($null -ne $stream){$stream.Dispose()}}
 }
 
+# Evidence only: compare complete build-time digest chain with unsigned provenance.
+# Historical packages with no chain remain under the existing signature policy.
+function Assert-Stage4UnsignedBuildChain($Identity,$Records) {
+    $links=@(
+        @('worker','unsignedMediaSha256','GPUbnbWindowsMedia.dll'),
+        @('helper','unsignedWorkerSha256','gpubnb-windows-worker.exe'),
+        @('agent','unsignedHelperSha256','gpubnb-windows-stream.exe')
+    )
+    $present=0
+    foreach($link in $links){
+        $section=$Identity.($link[0])
+        if($null -ne $section.PSObject.Properties[$link[1]]){$present++}
+    }
+    if($present -eq 0){return}
+    if($present -ne 3){throw 'stage4_unsigned_build_chain_incomplete'}
+    foreach($link in $links){
+        $value=$Identity.($link[0]).($link[1])
+        $matching=@($Records|Where-Object {$_.name -ceq $link[2]})
+        if($value -isnot [string] -or $value.Length -ne 64 -or
+           $value -cnotmatch '^[0-9a-f]{64}$' -or $value -ceq ('0'*64) -or
+           $matching.Count -ne 1 -or $value -cne $matching[0].sha256){
+            throw "stage4_unsigned_build_chain_mismatch:$($link[0])"
+        }
+    }
+}
+
 function Read-Stage4Package {
     param([string]$Directory,[string]$ManifestSha256,[string]$Commit,[string]$Publisher,[string]$Status='unsigned')
     if($Commit -cnotmatch '^[0-9a-f]{40}$'){throw 'stage4_exact_commit_required'}
@@ -217,6 +243,7 @@ function Read-Stage4Package {
         if($id.helper.($kv.Key) -ne $kv.Value){throw 'stage4_protocol_mismatch'}
     }
     if($id.media.mediaAbi -ne 2 -or $id.media.consoleMediaAbi -ne 3 -or $id.media.audioCaptureAbi -ne 1 -or $id.media.nvencApi -cne '13.0'){throw 'stage4_media_abi_mismatch'}
+    $unsignedRecords=$m.files
     if($Status -ceq 'private-signed' -and $m.unsignedManifestSha256 -cnotmatch '^[0-9a-f]{64}$'){throw 'stage4_unsigned_provenance_missing'}
     if($Status -ceq 'private-signed'){
         $up=Join-Path $root 'unsigned-stage4.manifest.json'
@@ -228,6 +255,8 @@ function Read-Stage4Package {
             if($old.Count -ne 1 -or $f.unsignedSha256 -cne $old[0].sha256){throw 'stage4_unsigned_file_provenance_mismatch'}
         }
     }
+    if($Status -ceq 'private-signed'){$unsignedRecords=$u.files}
+    Assert-Stage4UnsignedBuildChain $id $unsignedRecords
     # Rehash every accepted object after PE/provenance parsing. This detects a
     # concurrent package-file substitution during inspection; the installation
     # transaction independently hashes the exact staged bytes before STOP.

@@ -31,7 +31,27 @@ $work=Join-Path ([IO.Path]::GetTempPath()) ('stage4-build-'+[guid]::NewGuid().To
 [void][IO.Directory]::CreateDirectory($output)
 $oldPythonPath=$env:PYTHONPATH;$oldSource=$env:GPUBNB_SOURCE_COMMIT
 $oldMedia=$env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256;$oldWorker=$env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256
+$oldMediaDigest=$env:GPUBNB_BUILD_UNSIGNED_MEDIA_SHA256;$oldWorkerDigest=$env:GPUBNB_BUILD_UNSIGNED_WORKER_SHA256
 try {
+    # Media -> worker -> release-candidate helper. The pin is the supplied REAL
+    # public certificate fingerprint; no certificate or private key is used here.
+    $msbuild=(Get-Command msbuild.exe -ErrorAction Stop).Source
+    & $msbuild (Join-Path $repo 'native\windows-media\GPUbnbWindowsMedia.vcxproj') /m /t:Rebuild `
+        /p:Configuration=Release /p:Platform=x64 "/p:NvCodecHeadersDir=$headers" "/p:SourceCommit=$head" /p:RunCodeAnalysis=true
+    Check-Exit 'media-dll'
+    Copy-Item -LiteralPath (Join-Path $repo 'native\windows-media\bin\Release\GPUbnbWindowsMedia.dll') -Destination $output
+    $env:GPUBNB_SOURCE_COMMIT=$head
+    $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256=$PublisherSha256
+    $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256=$PublisherSha256
+    $env:GPUBNB_BUILD_UNSIGNED_MEDIA_SHA256=(Get-FileHash -LiteralPath (Join-Path $output 'GPUbnbWindowsMedia.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+    & cargo build --locked --release --manifest-path (Join-Path $repo 'native\windows-worker\Cargo.toml') --bin gpubnb-windows-worker
+    Check-Exit 'worker'
+    Copy-Item -LiteralPath (Join-Path $repo 'native\windows-worker\target\release\gpubnb-windows-worker.exe') -Destination $output
+    $env:GPUBNB_BUILD_UNSIGNED_WORKER_SHA256=(Get-FileHash -LiteralPath (Join-Path $output 'gpubnb-windows-worker.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+    & cargo build --locked --release --manifest-path (Join-Path $repo 'native\windows-stream-helper\Cargo.toml') --features release-candidate --bin gpubnb-windows-stream
+    Check-Exit 'helper'
+    Copy-Item -LiteralPath (Join-Path $repo 'native\windows-stream-helper\target\release\gpubnb-windows-stream.exe') -Destination $output
+
     # Copy only tracked Agent sources, then generate build provenance in this copy.
     $agentRoot=Join-Path $work 'agent'
     $tracked=@(& git -C $repo ls-files agent);Check-Exit 'tracked-agent-sources'
@@ -43,6 +63,9 @@ try {
     $info=Join-Path $agentRoot 'gpubnb_agent\_build_info.py'
     $source=Get-Content -LiteralPath $info -Raw
     $source=[regex]::Replace($source,'BUILD_COMMIT = "[^"]+"',('BUILD_COMMIT = "'+$head+'"'))
+    $helperDigest=(Get-FileHash -LiteralPath (Join-Path $output 'gpubnb-windows-stream.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $source=[regex]::Replace($source,'BUILD_UNSIGNED_HELPER_SHA256 = "[^"]*"','BUILD_UNSIGNED_HELPER_SHA256 = "'+$helperDigest+'"')
+    if(-not $source.Contains('BUILD_UNSIGNED_HELPER_SHA256 = "'+$helperDigest+'"')){throw 'stage4_agent_digest_embedding_failed'}
     [IO.File]::WriteAllText($info,$source,[Text.UTF8Encoding]::new($false))
     $env:PYTHONPATH=$agentRoot
     & python -m PyInstaller --clean --noconfirm --onefile --name gpubnb-agent `
@@ -52,23 +75,6 @@ try {
         --hidden-import=win32timezone --collect-all cffi --collect-all nacl (Join-Path $agentRoot 'gpubnb_agent\__main__.py')
     Check-Exit 'frozen-agent'
 
-    # Media -> worker -> release-candidate helper. The pin is the supplied REAL
-    # public certificate fingerprint; no certificate or private key is used here.
-    $msbuild=(Get-Command msbuild.exe -ErrorAction Stop).Source
-    & $msbuild (Join-Path $repo 'native\windows-media\GPUbnbWindowsMedia.vcxproj') /m /t:Rebuild `
-        /p:Configuration=Release /p:Platform=x64 "/p:NvCodecHeadersDir=$headers" "/p:SourceCommit=$head" /p:RunCodeAnalysis=true
-    Check-Exit 'media-dll'
-    Copy-Item -LiteralPath (Join-Path $repo 'native\windows-media\bin\Release\GPUbnbWindowsMedia.dll') -Destination $output
-    $env:GPUBNB_SOURCE_COMMIT=$head
-    $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256=$PublisherSha256
-    $env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256=$PublisherSha256
-    & cargo build --locked --release --manifest-path (Join-Path $repo 'native\windows-worker\Cargo.toml') --bin gpubnb-windows-worker
-    Check-Exit 'worker'
-    Copy-Item -LiteralPath (Join-Path $repo 'native\windows-worker\target\release\gpubnb-windows-worker.exe') -Destination $output
-    & cargo build --locked --release --manifest-path (Join-Path $repo 'native\windows-stream-helper\Cargo.toml') --features release-candidate --bin gpubnb-windows-stream
-    Check-Exit 'helper'
-    Copy-Item -LiteralPath (Join-Path $repo 'native\windows-stream-helper\target\release\gpubnb-windows-stream.exe') -Destination $output
-
     $agent=(& (Join-Path $output 'gpubnb-agent.exe') build-info | Out-String) | ConvertFrom-Json;Check-Exit 'agent-build-info'
     $agentRuntime=(& (Join-Path $output 'gpubnb-agent.exe') runtime-check | Out-String) | ConvertFrom-Json;Check-Exit 'frozen-agent-runtime-check'
     $helper=(& (Join-Path $output 'gpubnb-windows-stream.exe') --build-policy --json | Out-String) | ConvertFrom-Json;Check-Exit 'helper-build-policy'
@@ -76,6 +82,9 @@ try {
     # ctypes calls ONLY the pure DLL build identity export, never a media probe.
     $mediaCode='import ctypes,json,sys; d=ctypes.CDLL(sys.argv[1]); f=d.GPUbnbMediaBuildIdentity; f.restype=ctypes.c_char_p; print(f().decode("ascii"))'
     $media=(& python -c $mediaCode (Join-Path $output 'GPUbnbWindowsMedia.dll') | Out-String) | ConvertFrom-Json;Check-Exit 'media-build-identity'
+    if($worker.unsignedMediaSha256 -cne $env:GPUBNB_BUILD_UNSIGNED_MEDIA_SHA256 -or
+       $helper.unsignedWorkerSha256 -cne $env:GPUBNB_BUILD_UNSIGNED_WORKER_SHA256 -or
+       $agent.unsignedHelperSha256 -cne $helperDigest){throw 'stage4_unsigned_build_chain_mismatch'}
     $identities=[ordered]@{agent=$agent;agentRuntime=$agentRuntime;helper=$helper;worker=$worker;media=$media}
     [IO.File]::WriteAllText((Join-Path $output 'build-identities.json'),($identities|ConvertTo-Json -Depth 10)+"`n",[Text.UTF8Encoding]::new($false))
     $proof=(& python (Join-Path $PSScriptRoot 'verify_stage4_package.py') create --directory $output --commit $head --publisher $PublisherSha256 | Out-String) | ConvertFrom-Json
@@ -99,5 +108,6 @@ try {
 } finally {
     $env:PYTHONPATH=$oldPythonPath;$env:GPUBNB_SOURCE_COMMIT=$oldSource
     $env:GPUBNB_WINDOWS_MEDIA_SIGNER_SHA256=$oldMedia;$env:GPUBNB_WINDOWS_WORKER_SIGNER_SHA256=$oldWorker
+    $env:GPUBNB_BUILD_UNSIGNED_MEDIA_SHA256=$oldMediaDigest;$env:GPUBNB_BUILD_UNSIGNED_WORKER_SHA256=$oldWorkerDigest
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
