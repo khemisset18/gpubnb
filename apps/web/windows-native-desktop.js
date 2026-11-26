@@ -1,7 +1,7 @@
 'use strict';
 
 import { WindowsNativeGamepadBridge } from './windows-native-gamepad.js?v=20261122-1';
-import { BrowserAVClock, WindowsNativeAudioPlayback } from './windows-native-audio.js?v=20261122-audio-2';
+import { BrowserAVClock, WindowsNativeAudioPlayback } from './windows-native-audio.js?v=20261126-bounded-audio';
 import {
   CanvasVideoFrameRenderer,
   WindowsNativeWebCodecsSession,
@@ -79,8 +79,9 @@ export class WindowsNativeDesktopClient {
     // first transport failure, but retain the later CloseEvent's real code.
     this.socketError = false;
     this.mediaQueue = Promise.resolve();
-    this.pressedKeys = new Set();
-    this.pressedButtons = new Set();
+    // Each wire key/button has independent physical and gamepad owners.
+    this.pressedKeys = new Map();
+    this.pressedButtons = new Map();
     this.avClock = avClockFactory({ latencyMs: 80 });
     if (!this.avClock || typeof this.avClock.observeVideo !== 'function') {
       fail('windows_native_av_clock_config');
@@ -106,7 +107,8 @@ export class WindowsNativeDesktopClient {
         renderer.render(frame, metadata);
         return;
       }
-      if (dueAt < now - 150) {
+      // Bound presentation resources even when a host clock jumps forward.
+      if (dueAt < now - 150 || dueAt > now + 250 || this.pendingVideoFrames.size >= 24) {
         try { frame?.close?.(); } catch {}
         return;
       }
@@ -315,14 +317,30 @@ export class WindowsNativeDesktopClient {
     this.audio.setVolume(value);
   }
 
-  key(code, keyUp = false) {
+  #changeHeld(held, value, keyUp, source, send) {
+    const owners = held.get(value);
+    if (keyUp) {
+      // Only a source that actually pressed an input may release it.
+      if (!owners?.has(source)) return false;
+      if (owners.size === 1 && !send(true)) return false;
+      owners.delete(source);
+      if (owners.size === 0) held.delete(value);
+      return true;
+    }
+    if (owners?.has(source)) {
+      // Preserve keyboard auto-repeat, but not repeated controller downs.
+      return source === 'manual' ? send(false) : true;
+    }
+    if (!owners && !send(false)) return false;
+    if (owners) owners.add(source);
+    else held.set(value, new Set([source]));
+    return true;
+  }
+
+  key(code, keyUp = false, source = 'manual') {
     const input = this.#requireInput();
     if (!input) return false;
-    const sent = input.key(code, keyUp);
-    if (!sent) return false;
-    if (keyUp) this.pressedKeys.delete(code);
-    else this.pressedKeys.add(code);
-    return true;
+    return this.#changeHeld(this.pressedKeys, code, keyUp, source, (up) => input.key(code, up));
   }
 
   pointerAbsolute(clientX, clientY) {
@@ -347,14 +365,10 @@ export class WindowsNativeDesktopClient {
     return input.mouseRelative(dx, dy);
   }
 
-  pointerButton(button, keyUp = false) {
+  pointerButton(button, keyUp = false, source = 'manual') {
     const input = this.#requireInput();
     if (!input) return false;
-    const sent = input.mouseButton(button, keyUp);
-    if (!sent) return false;
-    if (keyUp) this.pressedButtons.delete(button);
-    else this.pressedButtons.add(button);
-    return true;
+    return this.#changeHeld(this.pressedButtons, button, keyUp, source, (up) => input.mouseButton(button, up));
   }
 
   wheel(deltaY) {
@@ -371,10 +385,10 @@ export class WindowsNativeDesktopClient {
       this.pressedButtons.clear();
       return;
     }
-    for (const code of [...this.pressedKeys]) {
+    for (const code of this.pressedKeys.keys()) {
       try { input.key(code, true); } catch {}
     }
-    for (const button of [...this.pressedButtons]) {
+    for (const button of this.pressedButtons.keys()) {
       try { input.mouseButton(button, true); } catch {}
     }
     this.pressedKeys.clear();
@@ -402,16 +416,23 @@ export class WindowsNativeDesktopClient {
     // There is intentionally no virtual XInput injection or new privileged
     // protocol. The gamepad is polled only while the renter focuses the canvas.
     const gamepad = new WindowsNativeGamepadBridge({
-      key: (code, up) => this.key(code, up),
-      pointerButton: (button, up) => this.pointerButton(button, up),
+      key: (code, up) => this.key(code, up, 'gamepad'),
+      pointerButton: (button, up) => this.pointerButton(button, up, 'gamepad'),
       mouseRelative: (dx, dy) => this.mouseRelative(dx, dy),
     });
     let gamepadFrame = null;
+    let gamepadEpoch = this.streamEpoch;
     const pumpGamepad = () => {
       gamepadFrame = null;
       if (!keyboardArmed || this.closed || this.socketError || keyboardTarget.hidden === true) {
         gamepad.release();
         return;
+      }
+      // The old epoch was released centrally. Forget the bridge's local
+      // bookkeeping before accepting controller state in the new epoch.
+      if (gamepadEpoch !== this.streamEpoch) {
+        gamepad.release();
+        gamepadEpoch = this.streamEpoch;
       }
       let pads = [];
       try { pads = globalThis.navigator?.getGamepads?.() ?? []; } catch {}
