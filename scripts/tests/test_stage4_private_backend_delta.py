@@ -1,6 +1,7 @@
 """Adversarial tests for Stage 4 pinned private backend source-delta evidence."""
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -109,6 +110,12 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
         self.assertIn("--expect-api-source-changed", workflow)
         self.assertNotIn("--expect-api-source-unchanged", workflow)
         self.assertIn("--expect-known-gaming-web-snapshot", workflow)
+        self.assertIn('--review-base-commit "$REVIEW_BASE_SHA"', workflow)
+        self.assertIn("set -o pipefail", workflow)
+        self.assertIn('tee "$RUNNER_TEMP/stage4-source-review.json"', workflow)
+        self.assertIn("if: always()", workflow)
+        self.assertIn("stage4-source-review.json", workflow)
+        self.assertNotIn("continue-on-error:", workflow)
         self.assertNotIn("CANDIDATE_BRANCH", workflow)
         self.assertNotIn("--expect-web-source-changed", workflow)
         self.assertNotIn("32ffdc72ec7041310c4b07e286ac4c4c2818906c", workflow)
@@ -155,6 +162,49 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("stage4_delta_web_source_changed_review_required", result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["sourceExpectationStatus"], "BLOCKED")
+        self.assertEqual(report["sourceExpectationFailures"], [
+            "stage4_delta_web_source_changed_review_required",
+        ])
+        self.assertFalse(report["installationAuthorized"])
+        self.assertFalse(report["browserSessionProtocolCompatibilityAttested"])
+        self.assertFalse(report["publicBookabilityEnabled"])
+        self.assertEqual(report["reviewedWebTree"], self._git("rev-parse", head + ":apps/web"))
+
+    def test_incremental_review_is_distinct_from_render_baseline(self) -> None:
+        self._write("apps/api/src/server.ts", "export const protocol = 2;\n")
+        prior = self._commit("previous API development")
+        self._write("apps/web/index.js", "console.log('new gaming')\n")
+        head = self._commit("browser update")
+        report = make_report(self.repo, self.base, head, review_base=prior)
+        self.assertEqual(report["privateRenderObservedCommit"], self.base)
+        self.assertEqual(report["reviewedSourceCommit"], head)
+        self.assertEqual(report["reviewedRootTree"], self._git("rev-parse", head + "^{tree}"))
+        self.assertEqual(report["sourceEvidenceSchemaVersion"], 2)
+        self.assertFalse(report["apiRuntimeInputsIdenticalAtSource"])
+        self.assertEqual(report["incrementalReview"]["baseCommit"], prior)
+        self.assertEqual(report["incrementalReview"]["changedPaths"], ["apps/web/index.js"])
+        self.assertTrue(report["incrementalReview"]["apiRuntimeInputsIdenticalAtSource"])
+        self.assertFalse(report["installationAuthorized"])
+        self.assertFalse(report["renderRunningImageCommitIndependentlyAttested"])
+        with self.assertRaises((ValueError, subprocess.CalledProcessError)):
+            make_report(self.repo, self.base, prior, review_base=head)
+
+    def test_cli_no_expectation_is_explicitly_not_checked(self) -> None:
+        script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
+        result = subprocess.run(
+            [sys.executable, str(script), "--repo", str(self.repo),
+             "--private-render-commit", self.base, "--pc1-candidate-commit", self.base,
+             "--review-base-commit", self.base],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["sourceExpectationStatus"], "NOT_CHECKED")
+        self.assertEqual(report["sourceExpectationFailures"], [])
+        self.assertFalse(report["installationAuthorized"])
+        self.assertEqual(report["incrementalReview"]["changedPaths"], [])
 
     def test_identical_source_pins_are_valid_and_do_not_hide_changes(self) -> None:
         self.assertEqual(source_delta(self.repo, self.base, self.base), [])
@@ -176,6 +226,10 @@ class Stage4PrivateBackendDeltaTests(unittest.TestCase):
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["sourceExpectationStatus"], "MATCHED")
+        self.assertEqual(report["sourceExpectationFailures"], [])
+        self.assertFalse(report["installationAuthorized"])
 
     def test_cli_detects_api_or_browser_changes_against_live_source(self) -> None:
         script = Path(__file__).resolve().parents[1] / "stage4_private_backend_delta.py"
