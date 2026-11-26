@@ -173,6 +173,62 @@ class PrivateGamingConsentTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "native_console_local_opt_in_required"):
                 selected_capture_backend(desktop_session, build_commit=commit)
 
+    def test_installation_inventory_is_read_only_and_ignores_dev_helper(self):
+        from pathlib import Path
+        from gpubnb_agent import windows_native_workspace as workspace
+
+        root = Path(self.directory.name)
+        helper = root / "gpubnb-windows-stream.exe"
+        with patch.object(workspace.platform, "system", return_value="Windows"), \
+             patch.object(workspace.platform, "machine", return_value="AMD64"), \
+             patch.object(workspace, "WINDOWS_STREAM_HELPER_INSTALL_PATH", str(helper)), \
+             patch.object(workspace, "discover_native_application", return_value=None), \
+             patch.object(workspace, "run_command", side_effect=AssertionError("no executable")):
+            with patch.dict(os.environ, {
+                workspace.WINDOWS_STREAM_HELPER_DEV_ALLOW_ENV: "1",
+                workspace.WINDOWS_STREAM_HELPER_DEV_PATH_ENV: str(root / "dev.exe"),
+            }):
+                (root / "dev.exe").write_bytes(b"not an executable")
+                result = workspace.private_gaming_installation_inventory()
+                self.assertTrue(result["supportedPlatform"])
+                self.assertFalse(result["streamHelperPresent"])
+                self.assertFalse(result["steamPresent"])
+                helper.write_bytes(b"presence only")
+                (root / "gpubnb-windows-worker.exe").write_bytes(b"presence only")
+                result = workspace.private_gaming_installation_inventory()
+                self.assertTrue(result["streamHelperPresent"])
+                self.assertTrue(result["workerPresent"])
+                self.assertFalse(result["mediaLibraryPresent"])
+                self.assertFalse(consent_path().exists())
+                self.assertIsNone(private_console_proof_scope())
+
+    def test_installation_inventory_unsupported_platform_does_not_discover_steam(self):
+        from gpubnb_agent import windows_native_workspace as workspace
+
+        for system, machine in [("Linux", "x86_64"), ("Windows", "ARM64")]:
+            with patch.object(workspace.platform, "system", return_value=system), \
+                 patch.object(workspace.platform, "machine", return_value=machine), \
+                 patch.object(workspace, "discover_native_application", side_effect=AssertionError("no discovery")):
+                self.assertTrue(all(value is False for value in workspace.private_gaming_installation_inventory().values()))
+
+    def test_cli_status_includes_inventory_without_mutating_consent(self):
+        from gpubnb_agent.cli import parser
+        from gpubnb_agent import windows_native_workspace as workspace
+
+        command = parser().parse_args(["private-gaming-consent", "status"])
+        inventory = {
+            "supportedPlatform": True, "streamHelperPresent": True,
+            "workerPresent": True, "mediaLibraryPresent": True,
+            "steamPresent": False,
+        }
+        output = io.StringIO()
+        with patch.object(workspace, "private_gaming_installation_inventory", return_value=inventory), redirect_stdout(output):
+            self.assertEqual(command.handler(command), 0)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["installationInventory"], inventory)
+        self.assertFalse(report["enabled"])
+        self.assertFalse(consent_path().exists())
+
     def test_cli_requires_owner_confirmation_to_enable(self):
         from gpubnb_agent.cli import parser
 
