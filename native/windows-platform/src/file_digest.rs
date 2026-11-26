@@ -19,9 +19,7 @@ pub enum FileDigestError {
 const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
 
 #[cfg(target_os = "windows")]
-pub(super) fn sha256_reader(
-    reader: impl std::io::Read,
-) -> Result<[u8; 32], FileDigestError> {
+pub(super) fn sha256_reader(reader: impl std::io::Read) -> Result<[u8; 32], FileDigestError> {
     windows::sha256_reader(reader)
 }
 
@@ -77,7 +75,7 @@ mod windows {
     }
 
     pub(super) fn sha256_reader(mut reader: impl Read) -> Result<[u8; 32], FileDigestError> {
-        let algorithm_id = [b'S' as u16, b'H' as u16, b'A' as u16, b'2' as u16, b'5' as u16, b'6' as u16, 0];
+        let algorithm_id: Vec<u16> = "SHA256".encode_utf16().chain(Some(0)).collect();
         let mut raw = ptr::null_mut();
         // SAFETY: output handle is writable; algorithm_id is NUL terminated.
         if unsafe { BCryptOpenAlgorithmProvider(&mut raw, algorithm_id.as_ptr(), ptr::null(), 0) }
@@ -92,7 +90,13 @@ mod windows {
         // when the object pointer and length are both zero. No secret is needed.
         if unsafe {
             BCryptCreateHash(
-                algorithm.0, &mut raw_hash, ptr::null_mut(), 0, ptr::null(), 0, 0,
+                algorithm.0,
+                &mut raw_hash,
+                ptr::null_mut(),
+                0,
+                ptr::null(),
+                0,
+                0,
             )
         } != SUCCESS
             || raw_hash.is_null()
@@ -103,7 +107,9 @@ mod windows {
         let mut buffer = [0u8; 64 * 1024];
         let mut total = 0u64;
         loop {
-            let count = reader.read(&mut buffer).map_err(|_| FileDigestError::ReadFailed)?;
+            let count = reader
+                .read(&mut buffer)
+                .map_err(|_| FileDigestError::ReadFailed)?;
             if count == 0 {
                 break;
             }
