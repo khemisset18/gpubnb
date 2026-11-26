@@ -116,7 +116,11 @@ export class WindowsNativeDesktopClient {
       this.pendingVideoFrames.add(pending);
       const render = () => {
         this.pendingVideoFrames.delete(pending);
-        if (this.closed || this.socketError) {
+        const currentEpoch = this.media?.streamEpoch;
+        const now = globalThis.performance?.now?.() ?? Date.now();
+        if (this.closed || this.socketError ||
+            (typeof currentEpoch === 'bigint' && metadata.streamEpoch !== currentEpoch) ||
+            dueAt < now - 150) {
           try { frame?.close?.(); } catch {}
           return;
         }
