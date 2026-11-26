@@ -77,7 +77,7 @@ export function safeNativeDesktopErrorCode(error) {
   return SAFE_NATIVE_DESKTOP_ERROR_CODES.has(message) ? message : 'windows_native_client_failed';
 }
 
-import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-av-audio-1';
+import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261126-av-input-1';
 import { Stage4VideoContinuity } from './windows-native-continuity.js?v=20261016-1';
 
 const NATIVE_RECONNECT_DELAYS_MS = Object.freeze([250, 500, 1000, 2000, 5000]);
@@ -220,6 +220,7 @@ export function mountWindowsNativeDesktop({
   let reconnectStartedAt = null;
   let pageHidden = false;
   let stopped = false;
+  let serverStopConfirmed = false;
   const proofTimer = proof ? setIntervalFn(showProof, 1_000) : null;
   showProof();
 
@@ -254,8 +255,7 @@ export function mountWindowsNativeDesktop({
     const timestamp = now();
     if (reconnectStartedAt === null) reconnectStartedAt = timestamp;
     if (timestamp - reconnectStartedAt >= NATIVE_RECONNECT_WINDOW_MS) {
-      stopped = true;
-      setStatus('Session vidéo fermée');
+      stop(gamingWorkspace ? 'Flux du jeu fermé — arrêt de la session toujours disponible.' : 'Session vidéo fermée — arrêt de la session toujours disponible.');
       return;
     }
 
@@ -319,9 +319,7 @@ export function mountWindowsNativeDesktop({
           // Render sends 1008 when the workspace authority expires/revokes.
           // Never retry a revoked browser session or obscure the security gate.
           if (state.closeCode === 1008) {
-            stopped = true;
-            if (proofTimer !== null) clearIntervalFn(proofTimer);
-            setStatus(gamingWorkspace
+            stop(gamingWorkspace
               ? 'Session non autorisée — ouvrez une nouvelle réservation'
               : 'Session vidéo non autorisée — ouvrir une nouvelle session');
             return;
@@ -407,13 +405,14 @@ export function mountWindowsNativeDesktop({
     pointerLockButton?.removeEventListener?.('click', togglePointerLock);
     audioEnableButton?.removeEventListener?.('click', enableAudio);
     audioVolume?.removeEventListener?.('input', changeAudioVolume);
-    stopSessionButton?.removeEventListener?.('click', requestSessionStop);
+    // Closing the local viewer is not confirmation of server-side STOP.
+    // Keep authenticated STOP available until the API acknowledges it.
     setStatus(statusMessage);
   };
 
   let stopRequestInFlight = false;
   const requestSessionStop = async () => {
-    if (stopped || stopRequestInFlight) return;
+    if (serverStopConfirmed || stopRequestInFlight) return;
     if (typeof apiFetch !== 'function' || !apiBase) {
       setStatus('Arrêt indisponible — ouvrez « Gérer la session ».');
       return;
@@ -434,9 +433,13 @@ export function mountWindowsNativeDesktop({
         },
       );
       if (!response?.ok) throw new Error('session_stop_failed');
-      stop(gamingWorkspace
-        ? 'Workspace arrêté — GPUbnb libère les ressources.'
-        : 'Arrêt confirmé — GPUbnb libère la session.');
+      serverStopConfirmed = true;
+      const message = gamingWorkspace
+        ? 'Arrêt demandé au serveur — GPUbnb libère les ressources.'
+        : 'Arrêt confirmé — GPUbnb libère la session.';
+      if (stopped) setStatus(message);
+      else stop(message);
+      stopSessionButton?.removeEventListener?.('click', requestSessionStop);
     } catch {
       stopRequestInFlight = false;
       if (stopSessionButton) stopSessionButton.disabled = false;
@@ -444,7 +447,7 @@ export function mountWindowsNativeDesktop({
     }
   };
 
-  closeButton.addEventListener('click', stop, { once: true });
+  closeButton.addEventListener('click', () => stop(), { once: true });
   stopSessionButton?.addEventListener('click', requestSessionStop);
   windowObject.addEventListener?.('pagehide', onPageHide);
   windowObject.addEventListener?.('pageshow', onPageShow);
