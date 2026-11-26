@@ -208,3 +208,55 @@ test('audio suspension and output-device changes stop queued sound until a fresh
   playback.close();
   assert.equal(deviceListeners.has('devicechange'), false);
 });
+
+test('audio playout drops far-future and oversized-duration packets before allocation', async () => {
+  const clock = new BrowserAVClock({ latencyMs: 40, now: () => 100 });
+  clock.observeVideo(1_000_000n, 100);
+  const { context, created } = fakeAudioContext();
+  const playback = new WindowsNativeAudioPlayback({ clock, audioContextFactory: () => context, now: () => 100 });
+  playback.setStreamEpoch(1n);
+  await playback.resume();
+  assert.equal(playback.push(audioPacket({ audioQpc: 11_000_000n, videoQpc: 11_000_000n })), false);
+  assert.equal(playback.push(audioPacket({ sampleRate: 8000, frames: 4000, payload: new Uint8Array(8000) })), false);
+  assert.equal(created.buffers.length, 0);
+  // Several packets legitimately share one video frame sequence.
+  assert.equal(playback.push(audioPacket()), true);
+  assert.equal(playback.push(audioPacket()), true);
+  for (let i = 0; i < 62; i++) assert.equal(playback.push(audioPacket()), true);
+  assert.equal(playback.sources.size, 64);
+  assert.equal(playback.push(audioPacket()), false);
+  assert.equal(created.buffers.length, 64);
+  playback.close();
+});
+
+test('audio discontinuity cancels previously scheduled sound before accepting a new timeline', async () => {
+  const clock = new BrowserAVClock({ latencyMs: 40, now: () => 100 });
+  clock.observeVideo(1_000_000n, 100);
+  const { context, created } = fakeAudioContext();
+  const playback = new WindowsNativeAudioPlayback({ clock, audioContextFactory: () => context, now: () => 100 });
+  playback.setStreamEpoch(1n);
+  await playback.resume();
+  playback.push(audioPacket());
+  assert.equal(playback.push(audioPacket({ flags: 2, sequence: 2n })), true);
+  assert.equal(created.sources[0].stopped, true);
+  assert.equal(playback.sources.size, 1);
+  playback.close();
+});
+
+test('STOP during pending audio resume cannot re-enable playback', async () => {
+  const states = [];
+  const clock = new BrowserAVClock({ latencyMs: 40, now: () => 100 });
+  clock.observeVideo(1_000_000n, 100);
+  const { context, created } = fakeAudioContext();
+  let resolveResume;
+  context.resume = () => new Promise(resolve => { resolveResume = resolve; });
+  const playback = new WindowsNativeAudioPlayback({ clock, audioContextFactory: () => context, now: () => 100, onState: state => states.push(state.audioState) });
+  playback.setStreamEpoch(1n);
+  playback.push(audioPacket());
+  const pending = playback.resume();
+  playback.close();
+  resolveResume();
+  assert.equal(await pending, false);
+  assert.equal(created.sources.length, 0);
+  assert.equal(states.at(-1), 'closed');
+});
