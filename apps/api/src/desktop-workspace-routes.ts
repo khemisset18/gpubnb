@@ -32,7 +32,8 @@ import { evaluateWorkspaceAccess } from './workspace-access-policy.js';
 import { issueWorkspaceAccessGrant } from './workspace-access.js';
 import { isWorkspaceGatewayLive } from './workspace-gateway-liveness.js';
 import {
-  allocateWindowsNativeQualificationBookingResources,
+  allocateWindowsNativeQualificationBookingResourcesInTransaction,
+  isResourceConflict,
   ResourceAllocationError,
 } from './resource-allocation-service.js';
 import { preparationPhase, safeConnection, selectedWorkspaceSessionScope } from './workspace-renter-routes.js';
@@ -462,7 +463,7 @@ async function createWindowsNativeQualificationBooking(
       listing: {
         status: { in: windowsNativePrivateQualificationListingStatuses },
         resourceMode: ListingResourceMode.SELECTED_ACCELERATORS,
-        machine: { ownerId: renterId, connectivity: MachineConnectivity.ONLINE },
+        machine: { ownerId: renterId, connectivity: MachineConnectivity.ONLINE, moderationStatus: ModerationStatus.CLEAR },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -472,9 +473,43 @@ async function createWindowsNativeQualificationBooking(
       startsAt: true,
       endsAt: true,
       expectedSeconds: true,
+      listing: {
+        select: {
+          machineId: true,
+          accelerators: { select: { acceleratorId: true } },
+        },
+      },
+      acceleratorAllocations: {
+        where: { status: { in: activeAllocations } },
+        select: {
+          acceleratorId: true,
+          accelerator: { select: { machineId: true } },
+          startsAt: true,
+          endsAt: true,
+        },
+        take: 2,
+      },
+      machineAllocation: { select: { id: true } },
     },
   });
-  if (existing) return { booking: existing, created: false };
+  if (existing) {
+    // Retrying a private booking may reuse only a committed exact-GPU
+    // allocation. A legacy orphan or a released allocation is not success.
+    // The session endpoint separately revalidates the live signed proof.
+    const allocation = existing.acceleratorAllocations[0];
+    if (existing.machineAllocation !== null
+        || existing.acceleratorAllocations.length !== 1
+        || existing.listing.accelerators.length !== 1
+        || !allocation
+        || allocation.acceleratorId !== existing.listing.accelerators[0]?.acceleratorId
+        || allocation.accelerator.machineId !== existing.listing.machineId
+        || allocation.startsAt.getTime() !== existing.startsAt.getTime()
+        || allocation.endsAt.getTime() !== existing.endsAt.getTime()) {
+      return { error: 'windows_native_qualification_allocation_missing' as const };
+    }
+    const { id, status, startsAt, endsAt, expectedSeconds } = existing;
+    return { booking: { id, status, startsAt, endsAt, expectedSeconds }, created: false };
+  }
 
   const candidates = await db.gpuListing.findMany({
     where: {
@@ -715,7 +750,7 @@ async function createWindowsNativeQualificationBooking(
       });
       if (overlap !== 0) throw new Error('windows_native_qualification_host_reserved');
 
-      return tx.booking.create({
+      const created = await tx.booking.create({
         data: {
           buyerId: renterId,
           listingId: fresh.id,
@@ -735,8 +770,28 @@ async function createWindowsNativeQualificationBooking(
           expectedSeconds: true,
         },
       });
+      // Booking and its exact allocation commit together; never expose or
+      // delete a separately committed booking after an allocation error.
+      await allocateWindowsNativeQualificationBookingResourcesInTransaction(tx, {
+        bookingId: created.id,
+        buyerId: renterId,
+        acceleratorIds: [accelerator.id],
+      });
+      return created;
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5_000,
+      timeout: 10_000,
+      maxAttempts: 6,
+      baseDelayMs: 40,
     });
   } catch (error) {
+    if (error instanceof ResourceAllocationError) {
+      return { error: `windows_native_qualification_${error.code}` };
+    }
+    if (isResourceConflict(error)) {
+      return { error: 'windows_native_qualification_resource_conflict' as const };
+    }
     if (
       error instanceof Error
       && (
@@ -745,19 +800,6 @@ async function createWindowsNativeQualificationBooking(
       )
     ) {
       return { error: error.message };
-    }
-    throw error;
-  }
-
-  try {
-    await allocateWindowsNativeQualificationBookingResources(db, {
-      bookingId: booking.id,
-      buyerId: renterId,
-    });
-  } catch (error) {
-    await db.booking.delete({ where: { id: booking.id } }).catch(() => {});
-    if (error instanceof ResourceAllocationError) {
-      return { error: `windows_native_qualification_${error.code}` };
     }
     throw error;
   }

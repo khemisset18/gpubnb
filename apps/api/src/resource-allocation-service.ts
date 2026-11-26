@@ -72,7 +72,7 @@ function normalizedIds(ids: string[] | undefined): string[] {
   return [...new Set(ids ?? [])].sort();
 }
 
-function isResourceConflict(error: unknown): boolean {
+export function isResourceConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
   return error.code === 'P2002' || error.code === 'P2010' || error.code === 'P2034';
 }
@@ -343,6 +343,22 @@ export async function allocateWindowsNativeQualificationBookingResources(
   input: AllocateBookingResourcesInput,
 ): Promise<BookingResourceAllocation> {
   return allocateBookingResourcesWithPolicy(db, {
+    ...input,
+    allowHiddenWindowsNativeQualification: true,
+  });
+}
+
+// A caller that creates a private qualification booking must allocate its
+// exact GPU within the same serializable transaction. Do not retry or translate
+// transaction errors here: the outer transaction owns rollback and retries.
+export async function allocateWindowsNativeQualificationBookingResourcesInTransaction(
+  tx: Prisma.TransactionClient,
+  input: AllocateBookingResourcesInput & { acceleratorIds: [string] },
+): Promise<BookingResourceAllocation> {
+  if (input.acceleratorIds.length !== 1 || !input.acceleratorIds[0]) {
+    throw new ResourceAllocationError('accelerator_count_out_of_range');
+  }
+  return allocateInTransaction(tx, {
     ...input,
     allowHiddenWindowsNativeQualification: true,
   });
