@@ -56,6 +56,18 @@ pub struct PrivateGamingConsentStatus {
     pub consented_at: Option<String>,
     #[serde(default)]
     pub environment_blocked: bool,
+    #[serde(default)]
+    pub installation_inventory: Option<PrivateGamingInstallationInventory>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivateGamingInstallationInventory {
+    pub supported_platform: bool,
+    pub stream_helper_present: bool,
+    pub worker_present: bool,
+    pub media_library_present: bool,
+    pub steam_present: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -517,6 +529,24 @@ mod tests {
         };
 
         (directory, executable)
+    }
+
+    #[test]
+    fn private_gaming_inventory_is_optional_and_not_consent() {
+        let old: PrivateGamingConsentStatus =
+            serde_json::from_str(r#"{"enabled":false,"consentedAt":null}"#).unwrap();
+        assert!(old.installation_inventory.is_none());
+        let status: PrivateGamingConsentStatus = serde_json::from_str(
+            r#"{"enabled":false,"consentedAt":null,"installationInventory":{
+                "supportedPlatform":true,"streamHelperPresent":true,
+                "workerPresent":true,"mediaLibraryPresent":true,"steamPresent":false
+            }}"#,
+        )
+        .unwrap();
+        assert!(!status.enabled);
+        let inventory = status.installation_inventory.unwrap();
+        assert!(inventory.media_library_present);
+        assert!(!inventory.steam_present);
     }
 
     #[test]

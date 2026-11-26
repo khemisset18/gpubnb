@@ -1180,7 +1180,11 @@ def command_private_gaming_consent(args: argparse.Namespace) -> int:
     )
 
     if args.consent_action == "status":
-        print_json(private_gaming_consent_status())
+        from .windows_native_workspace import private_gaming_installation_inventory
+
+        result = private_gaming_consent_status()
+        result["installationInventory"] = private_gaming_installation_inventory()
+        print_json(result)
         return 0
     if args.consent_action == "enable":
         result = set_private_gaming_consent(True, confirmed=args.confirmed)

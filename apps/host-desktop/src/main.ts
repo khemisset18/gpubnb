@@ -8,7 +8,19 @@ type Lifecycle = 'setup_required' | 'ready' | 'online' | 'emergency_stopped';
 type Check = { id: string; label: string; ok: boolean; detail: string; actionLabel?: string | null };
 type PairingConfiguration = { configured: boolean; browserUrl?: string | null; storesPassword: boolean; explanation: string };
 type AgentStatus = { installed: boolean; linked: boolean; running: boolean; serviceInstalled?: boolean; serviceRunning?: boolean; machineId?: string | null; detail: string };
-type PrivateGamingConsentStatus = { enabled: boolean; consentedAt?: string | null; environmentBlocked?: boolean };
+type PrivateGamingInstallationInventory = {
+  supportedPlatform: boolean;
+  streamHelperPresent: boolean;
+  workerPresent: boolean;
+  mediaLibraryPresent: boolean;
+  steamPresent: boolean;
+};
+type PrivateGamingConsentStatus = {
+  enabled: boolean;
+  consentedAt?: string | null;
+  environmentBlocked?: boolean;
+  installationInventory?: PrivateGamingInstallationInventory | null;
+};
 type GpuDevice = { index: number; uuid: string; model: string; driverVersion: string; vramMib: number };
 type NativeDiagnostic = { canHost: boolean; reason: string; gpus?: GpuDevice[] };
 type GpuProcessClassification = 'SYSTEM_PROTECTED' | 'GPUBNB_PROTECTED' | 'USER_APPLICATION' | 'UNKNOWN';
@@ -405,12 +417,20 @@ const renderPrivateGamingConsent = (
     : consent?.environmentBlocked
       ? '<p class="gaming-consent-error">Une configuration locale explicite du service désactive le Gaming privé.</p>'
       : '';
+  const inventory = consent?.installationInventory;
+  const nativePresent = inventory?.streamHelperPresent === true
+    && inventory.workerPresent === true && inventory.mediaLibraryPresent === true;
+  const installationHint = !inventory
+    ? '<p class="gaming-consent-prerequisite">Diagnostic des composants Gaming indisponible.</p>'
+    : inventory.supportedPlatform !== true
+      ? '<p class="gaming-consent-error">Le moteur Gaming actuel nécessite Windows x64.</p>'
+      : `<ul class="checks"><li>Composants Gaming : ${nativePresent ? 'présents (signature et fonctionnement non vérifiés)' : 'installation Host incomplète — une version complète est requise'}</li><li>Steam : ${inventory.steamPresent === true ? 'détecté' : 'non détecté — le moteur actuel nécessite Steam et des jeux disponibles'}</li></ul>`;
   const explanation = consent?.enabled
     ? '<p>Le consentement local est enregistré. Une autorisation distincte du site reste nécessaire; aucun paiement ni partage public ne démarre ici.</p>'
     : '<p>Le locataire se connecte à son propre compte Steam et apporte les jeux qu’il possède. L’essai ouvre une session dédiée sur l’écran du PC; votre affichage personnel peut être interrompu.</p>';
   return `<section class="gaming-consent-card"><div class="gaming-consent-heading"><div><p class="eyebrow">Cloud Gaming</p><h2>Essai privé sans paiement</h2></div>${state}</div>
     ${explanation}<p>Cette option ne partage ni votre compte Steam ni votre session personnelle. Elle n’autorise pas la location publique.</p>
-    ${readiness}${error}<div class="gaming-consent-actions">${action}</div></section>`;
+    ${readiness}${error}${installationHint}<div class="gaming-consent-actions">${action}</div></section>`;
 };
 
 const miningStateLabel = (state: string): string => ({
