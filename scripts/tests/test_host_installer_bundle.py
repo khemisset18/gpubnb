@@ -85,6 +85,7 @@ class HostInstallerBundleContractTests(unittest.TestCase):
             ".github/workflows/stage4-private-backend-source-delta.yml",
             "apps/host-desktop/**",
             "native/windows-media/**",
+            "native/windows-platform/**",
             "native/windows-worker/**",
             "native/windows-stream-helper/**",
         ):
