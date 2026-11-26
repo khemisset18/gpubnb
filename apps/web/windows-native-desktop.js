@@ -1,6 +1,6 @@
 'use strict';
 
-import { WindowsNativeGamepadBridge } from './windows-native-gamepad.js?v=20261122-1';
+import { WindowsNativeGamepadBridge } from './windows-native-gamepad.js?v=20261126-pacing-1';
 import { BrowserAVClock, WindowsNativeAudioPlayback } from './windows-native-audio.js?v=20261126-bounded-audio';
 import {
   CanvasVideoFrameRenderer,
@@ -426,7 +426,7 @@ export class WindowsNativeDesktopClient {
     });
     let gamepadFrame = null;
     let gamepadEpoch = this.streamEpoch;
-    const pumpGamepad = () => {
+    const pumpGamepad = (timestamp) => {
       gamepadFrame = null;
       if (!keyboardArmed || this.closed || this.socketError || keyboardTarget.hidden === true) {
         gamepad.release();
@@ -440,7 +440,7 @@ export class WindowsNativeDesktopClient {
       }
       let pads = [];
       try { pads = globalThis.navigator?.getGamepads?.() ?? []; } catch {}
-      try { gamepad.update(pads); } catch {
+      try { gamepad.update(pads, timestamp); } catch {
         // A revoked or failed input transport must stop gamepad polling rather
         // than continue to inject held commands on a later frame.
         disarmKeyboard();
