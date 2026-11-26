@@ -17,6 +17,7 @@ on:
       - scripts/windows-native-stage4-failure-qualification.ps1
       - apps/host-desktop/**
       - native/windows-media/**
+      - native/windows-platform/**
       - native/windows-worker/**
       - native/windows-stream-helper/**
       - Cargo.toml
@@ -44,6 +45,7 @@ on:
       - scripts/windows-native-stage4-failure-qualification.ps1
       - apps/host-desktop/**
       - native/windows-media/**
+      - native/windows-platform/**
       - native/windows-worker/**
       - native/windows-stream-helper/**
       - Cargo.toml
