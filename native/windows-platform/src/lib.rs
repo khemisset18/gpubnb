@@ -182,12 +182,12 @@ pub fn open_application_for_verification(
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use super::{ApplicationFileEvidence, FileIdentity, PlatformError, VerifiedApplicationFile};
+    use crate::file_digest::{self, FileDigestError};
     use std::ffi::{OsStr, c_void};
     use std::mem::{MaybeUninit, size_of};
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::fs::OpenOptionsExt;
     use std::os::windows::io::AsRawHandle;
-    use crate::file_digest::{self, FileDigestError};
     use std::path::Path;
 
     type Handle = isize;
