@@ -77,7 +77,7 @@ export function safeNativeDesktopErrorCode(error) {
   return SAFE_NATIVE_DESKTOP_ERROR_CODES.has(message) ? message : 'windows_native_client_failed';
 }
 
-import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261122-av-audio-1';
+import { WindowsNativeDesktopClient } from './windows-native-desktop.js?v=20261126-av-input-1';
 import { Stage4VideoContinuity } from './windows-native-continuity.js?v=20261016-1';
 
 const NATIVE_RECONNECT_DELAYS_MS = Object.freeze([250, 500, 1000, 2000, 5000]);
