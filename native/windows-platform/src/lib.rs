@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+pub mod file_digest;
 pub mod gpu_identity;
 pub mod idd_control;
 pub mod input;
@@ -120,6 +121,19 @@ impl VerifiedApplicationFile {
         self.evidence
     }
 
+    /// Measure the full file while retaining the existing file/ancestor fence.
+    /// This does not grant trust or change the Authenticode launch policy.
+    pub fn file_sha256(&self) -> Result<[u8; 32], file_digest::FileDigestError> {
+        #[cfg(target_os = "windows")]
+        {
+            windows_impl::file_sha256(self)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(file_digest::FileDigestError::WindowsRequired)
+        }
+    }
+
     pub fn signer_sha256(&self) -> Result<[u8; 32], PlatformError> {
         #[cfg(target_os = "windows")]
         {
@@ -171,6 +185,9 @@ mod windows_impl {
     use std::ffi::{OsStr, c_void};
     use std::mem::{MaybeUninit, size_of};
     use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::io::AsRawHandle;
+    use crate::file_digest::{self, FileDigestError};
     use std::path::Path;
 
     type Handle = isize;
@@ -557,6 +574,33 @@ mod windows_impl {
         signer_result
     }
 
+    pub(super) fn file_sha256(
+        verified: &VerifiedApplicationFile,
+    ) -> Result<[u8; 32], FileDigestError> {
+        // Reopen for reading without sharing writes/deletes. The original
+        // verification and ancestor handles remain live throughout; compare
+        // the reopened file's identity before reading any bytes.
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(verified.path())
+            .map_err(|_| FileDigestError::OpenFailed)?;
+        let handle = file.as_raw_handle() as Handle;
+        let attributes: FileAttributeTagInfo =
+            file_info(handle, FILE_ATTRIBUTE_TAG_INFO_CLASS)
+                .map_err(|_| FileDigestError::ReadFailed)?;
+        let identity: FileIdInfo =
+            file_info(handle, FILE_ID_INFO_CLASS).map_err(|_| FileDigestError::ReadFailed)?;
+        if attributes.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            || identity.volume_serial_number != verified.evidence().identity.volume_serial
+            || identity.file_id.identifier != verified.evidence().identity.file_id
+        {
+            return Err(FileDigestError::IdentityMismatch);
+        }
+        file_digest::sha256_reader(file)
+    }
+
     pub(super) fn open_application_for_verification(
         path: &Path,
     ) -> Result<VerifiedApplicationFile, PlatformError> {
@@ -627,6 +671,45 @@ mod windows_impl {
         }
 
         #[test]
+        fn full_file_digest_is_exact_and_preserves_write_fence() {
+            use std::io::Write;
+            use std::time::{SystemTime, UNIX_EPOCH};
+
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "gpubnb-digest-{}-{nonce}.bin",
+                std::process::id()
+            ));
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .expect("new test file");
+            file.write_all(b"abc").expect("write fixture");
+            drop(file);
+
+            let opened = open_application_for_verification(&path).expect("open fixture");
+            let expected = [
+                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d,
+                0xae, 0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10,
+                0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+            ];
+            assert_eq!(opened.file_sha256(), Ok(expected));
+            assert_eq!(opened.file_sha256(), Ok(expected));
+            assert!(std::fs::OpenOptions::new().write(true).open(&path).is_err());
+            drop(opened);
+
+            std::fs::write(&path, b"abcd").expect("replace test content");
+            let changed = open_application_for_verification(&path).expect("open changed fixture");
+            assert_ne!(changed.file_sha256().expect("changed digest"), expected);
+            drop(changed);
+            std::fs::remove_file(&path).expect("remove fixture");
+        }
+
+        #[test]
         fn current_executable_has_stable_identity_on_fixed_runner_volume() {
             let exe = std::env::current_exe().expect("current exe");
             let opened = open_application_for_verification(&exe).expect("open current exe");
@@ -660,6 +743,10 @@ mod non_windows_tests {
                 final_component_reparse_point: false,
             },
         };
+        assert_eq!(
+            fake.file_sha256(),
+            Err(file_digest::FileDigestError::WindowsRequired)
+        );
         assert_eq!(
             fake.verify_authenticode(),
             Err(PlatformError::WindowsRequired)
