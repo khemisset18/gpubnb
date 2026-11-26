@@ -619,3 +619,78 @@ test('closing the local viewer leaves server STOP available and allows retry', a
   assert.equal(stopButton.handlers.has('click'),false);
   assert.match(status.textContent,/Arrêt confirmé/u);
 });
+
+test('synchronous viewer failures clean up and leave authenticated STOP available', async () => {
+  for (const phase of ['factory', 'bind', 'start', 'reconnect']) {
+    const button = () => ({
+      disabled: false, handlers: new Map(),
+      addEventListener(name, fn) { this.handlers.set(name, fn); },
+      removeEventListener(name, fn) { if (this.handlers.get(name) === fn) this.handlers.delete(name); },
+    });
+    const close = button();
+    const stop = button();
+    const status = {textContent: ''};
+    const proof = {textContent: ''};
+    const listeners = new Map();
+    const timers = [];
+    let clears = 0, closed = 0, unbound = 0, calls = 0, requests = 0;
+    let clientOptions;
+    const failure = new Error(phase === 'factory' ? 'windows_native_webcodecs_unavailable' : 'secret-token-must-not-leak');
+    const mounted = mountWindowsNativeDesktop({
+      documentObject: {
+        body: {dataset: {workspaceKind: 'gaming'}},
+        querySelector(selector) {
+          return {'#nativeDesktopCanvas': {}, '#nativeDesktopStatus': status,
+            '#nativeDesktopClose': close, '#nativeDesktopStopSession': stop,
+            '#nativeDesktopContinuity': proof}[selector] ?? null;
+        },
+        addEventListener() {}, removeEventListener() {},
+      },
+      windowObject: {
+        GPUBNB_API_URL: 'https://api.example.test',
+        addEventListener(name, fn) {listeners.set(name, fn);},
+        removeEventListener(name, fn) {if (listeners.get(name) === fn) listeners.delete(name);},
+      },
+      locationObject: {href: 'https://example.test/gaming-workspace.html?session=sess-1',search: '?session=sess-1'},
+      clientFactory(options) {
+        clientOptions = options;
+        calls++;
+        if (phase === 'factory' || (phase === 'reconnect' && calls > 1)) throw failure;
+        return {
+          bindDom() {
+            if (phase === 'bind') throw failure;
+            return () => {unbound++;};
+          },
+          start() {if (phase === 'start') throw failure;},
+          close() {closed++;},
+        };
+      },
+      setIntervalFn: () => 1,
+      clearIntervalFn: (id) => {assert.equal(id,1); clears++;},
+      setTimeoutFn: (fn) => {timers.push(fn); return timers.length;},
+      clearTimeoutFn() {},
+      apiFetch: async (url, options) => {
+        requests++;
+        assert.equal(url, 'https://api.example.test/workspace-sessions/sess-1/stop');
+        assert.equal(options.credentials,'include');
+        return {ok:true};
+      },
+    });
+    if (phase === 'reconnect') {
+      clientOptions.onState({state:'closed',closeCode:1006});
+      assert.equal(timers.length,1);
+      timers[0]();
+    }
+    assert.equal(mounted.client,null,phase);
+    assert.equal(clears,1,phase);
+    assert.equal(listeners.size,0,phase);
+    assert.equal(closed,phase === 'bind' || phase === 'start' ? 1 : 0,phase);
+    assert.equal(unbound,phase === 'start' || phase === 'reconnect' ? 1 : 0,phase);
+    assert.match(status.textContent,/arrêt de la session disponible/u);
+    assert.doesNotMatch(status.textContent,/secret-token/u);
+    assert.equal(timers.length,phase === 'reconnect' ? 1 : 0);
+    await stop.handlers.get('click')();
+    assert.equal(requests,1);
+    assert.equal(stop.handlers.has('click'),false);
+  }
+});
