@@ -473,11 +473,21 @@ jobs:
               throw "Installed native component hash mismatch: $name"
             }
           }
+          $installedIdentities = Get-Content -LiteralPath (Join-Path $payloadRoot 'build-identities.json') -Raw | ConvertFrom-Json
           $installedBuildInfo = (& $installedSidecar build-info | Out-String) | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Installed agent build-info command failed.' }
           if (-not $installedBuildInfo.frozen) { throw 'Installed agent does not report itself as frozen.' }
           if ($installedBuildInfo.buildCommit -ne $expectedCommit) {
             throw "Installed Agent build commit mismatch: expected $expectedCommit, got $($installedBuildInfo.buildCommit)."
+          }
+          $installedHelperHash = (Get-FileHash -LiteralPath (Join-Path $nativeInstallDirectory 'gpubnb-windows-stream.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installedWorkerHash = (Get-FileHash -LiteralPath (Join-Path $nativeInstallDirectory 'gpubnb-windows-worker.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installedMediaHash = (Get-FileHash -LiteralPath (Join-Path $nativeInstallDirectory 'GPUbnbWindowsMedia.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($installedBuildInfo.unsignedHelperSha256 -cne $installedHelperHash -or
+              $installedIdentities.agent.unsignedHelperSha256 -cne $installedHelperHash -or
+              $installedIdentities.helper.unsignedWorkerSha256 -cne $installedWorkerHash -or
+              $installedIdentities.worker.unsignedMediaSha256 -cne $installedMediaHash) {
+            throw 'host_preflight_installed_unsigned_build_chain_mismatch'
           }
           $service = Get-CimInstance Win32_Service -Filter "Name='GPUbnbAgent'"
           if (-not $service) { throw 'The installer did not register the GPUbnbAgent service.' }
@@ -653,6 +663,8 @@ jobs:
             installedDesktopVerified = $true
             serviceProcessImageVerified = $true
             nativeComponentsVerified = 4
+            unsignedBuildChainEvidenceVerified = $true
+            runtimeDigestAuthorizationEnabled = $false
             installUninstallSmokePassed = $true
             signatureStatus = 'unsigned'
             installable = $false
@@ -682,7 +694,9 @@ jobs:
           if ($evidence.sourceCommit -cne $commit -or
               $evidence.publisherSha256 -cne $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER -or
               $evidence.installable -cne $false -or
-              $evidence.signatureStatus -cne 'unsigned') {
+              $evidence.signatureStatus -cne 'unsigned' -or
+              $evidence.unsignedBuildChainEvidenceVerified -cne $true -or
+              $evidence.runtimeDigestAuthorizationEnabled -cne $false) {
             throw 'host_handoff_invalid_smoke_evidence'
           }
           & ./scripts/verify-stage4-package.ps1 -PackageDirectory $native -ExpectedManifestSha256 $evidence.stage4ManifestSha256 -ExpectedCommit $commit -ExpectedPublisherSha256 $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
