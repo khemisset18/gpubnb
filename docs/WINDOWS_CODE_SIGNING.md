@@ -25,6 +25,36 @@ The intended release order is:
 
 This ordering ensures hashes describe the final signed bytes rather than a pre-signing intermediate.
 
+## Free, private Gaming test certificate (not a release identity)
+
+For a first-time owner who does not have a code-signing certificate, the
+private preparation tool supports `-CreateInitial` without an old publisher
+pin. This is separate from `-CreateReplacement` for known historical pins.
+
+On a separately authorized Windows x64 signing environment, using reviewed
+source, the operator can preview the preparation:
+
+```powershell
+$out = Join-Path $env:USERPROFILE 'GPUbnb-private-cert'
+.\scripts\stage4-private-certificate.ps1 -CreateInitial -OutputDirectory $out -WhatIf
+```
+
+Actual creation requires explicit local authorization and the same command
+without `-WhatIf`. The output directory must be new. Default validity is
+14 days (7–30 days supported). The private RSA 3072 CNG key remains
+nonexportable in CurrentUser/My; the output contains only the public CER,
+preparation report and checksums. Existing certificates remain untouched.
+Do not transmit a private key, PFX, password or signing secret.
+
+The new SHA-256 publisher fingerprint must be independently reviewed before
+rebuilding the candidate with that exact pin. Creating the certificate does
+not add trust, sign a binary, approve an installer, or change quarantine.
+The self-signed identity is initially untrusted, and a valid machine-context
+trust policy, exact package provenance, and independent installation review
+remain required. Never disable Windows protections to use it. It is not
+accepted for a promoted release or production driver signing. Do not run
+this procedure on PC1 as part of CI or without distinct authorization.
+
 ## Fail-closed policy
 
 Development and pre-qualification candidates may remain unsigned while external signing infrastructure is not provisioned. That state must be explicit.

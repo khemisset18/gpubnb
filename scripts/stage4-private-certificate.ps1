@@ -1,17 +1,27 @@
 #Requires -Version 5.1
-# Inspect the REAL local certificate by exact public pin. Creation is opt-in;
+# Inspect the REAL local certificate by exact public pin. Initial or replacement creation is opt-in;
 # no trust store, Windows policy, driver, service or installed binary is changed.
 [CmdletBinding(SupportsShouldProcess=$true,DefaultParameterSetName='Inspect')]
 param(
-    [Parameter(Mandatory=$true)][string]$ExpectedPublisherSha256,
+    [Parameter(Mandatory=$true,ParameterSetName='Inspect')]
+    [Parameter(Mandatory=$true,ParameterSetName='Replacement')]
+    [string]$ExpectedPublisherSha256,
+    [Parameter(Mandatory=$true,ParameterSetName='Initial')][switch]$CreateInitial,
     [Parameter(Mandatory=$true,ParameterSetName='Replacement')][switch]$CreateReplacement,
-    [Parameter(Mandatory=$true,ParameterSetName='Replacement')][string]$OutputDirectory,
-    [Parameter(ParameterSetName='Replacement')][ValidateRange(7,30)][int]$ValidityDays=14
+    [Parameter(Mandatory=$true,ParameterSetName='Replacement')]
+    [Parameter(Mandatory=$true,ParameterSetName='Initial')]
+    [string]$OutputDirectory,
+    [Parameter(ParameterSetName='Replacement')]
+    [Parameter(ParameterSetName='Initial')]
+    [ValidateRange(7,30)][int]$ValidityDays=14
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitProcess){throw 'stage4_private_windows_x64_required'}
 . (Join-Path $PSScriptRoot 'stage4-package-common.ps1')
+$initial = $PSCmdlet.ParameterSetName -ceq 'Initial'
+if ($initial -and -not $CreateInitial) { throw 'stage4_initial_creation_requires_explicit_switch' }
+if (-not $initial) {
 if($ExpectedPublisherSha256 -cnotmatch '^[0-9a-f]{64}$' -or $ExpectedPublisherSha256 -match '^(.)\1{63}$'){
     throw 'stage4_real_publisher_pin_required'
 }
@@ -25,6 +35,10 @@ if(-not $CreateReplacement){
     [ordered]@{mode='read_only';certificate=$status;certificateCreated=$false;trustChanged=$false;
         signingPerformed=$false;installationPerformed=$false} | ConvertTo-Json -Depth 6
     return
+}
+} else {
+    # Initial setup needs no historical pin; it grants no signing or trust.
+    $status=$null
 }
 $target=Assert-Stage4NewOutput $OutputDirectory $PSScriptRoot
 # Validate commands and paths before creating a key. Existing certificates remain.
@@ -47,7 +61,7 @@ try {
         -KeyExportPolicy NonExportable -NotBefore (Get-Date).AddMinutes(-5) -NotAfter (Get-Date).AddDays($ValidityDays)
     if(-not $created.HasPrivateKey){throw 'stage4_replacement_private_key_missing'}
     $pin=$created.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()
-    if($pin -ceq $ExpectedPublisherSha256){throw 'stage4_replacement_must_have_new_pin'}
+    if(-not $initial -and $pin -ceq $ExpectedPublisherSha256){throw 'stage4_replacement_must_have_new_pin'}
     # Verify the actual CNG key policy, without attempting to export private bytes.
     $key=[Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($created)
     try {
@@ -71,7 +85,8 @@ try {
         certificateStore='CurrentUser/My';keyAlgorithm='RSA';keyBits=3072;keyExportPolicy='NonExportable';
         certificateCreated=$true;privateKeyExported=$false;trustChanged=$false;buildRequired=$true;
         signingPerformed=$false;installationPerformed=$false;readyToInstall=$false;
-        previousPublisherSha256=$ExpectedPublisherSha256;previousCertificatePreserved=$true;
+        creationMode=$(if($initial){'initial'}else{'replacement'});
+        previousPublisherSha256=$(if($initial){$null}else{$ExpectedPublisherSha256});previousCertificatePreserved=$true;
         publicCertificateFile='stage4-private-public.cer';publicBookabilityEnabled=$false}
     $reportPath=Join-Path $target 'certificate-preparation.json'
     [IO.File]::WriteAllText($reportPath,($report|ConvertTo-Json -Depth 6)+"`n",[Text.UTF8Encoding]::new($false))
