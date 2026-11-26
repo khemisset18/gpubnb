@@ -11,7 +11,7 @@ foreach($name in @('GPUBNB_CODESIGN_THUMBPRINT','GPUBNB_CODESIGN_PFX_BASE64','GP
 $scriptPath=Join-Path (Split-Path -Parent $PSScriptRoot) 'stage4-private-certificate.ps1'
 $directory=Join-Path ([IO.Path]::GetTempPath()) ('stage4-certificate-rehearsal-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($directory)
-$old=$null;$replacement=$null
+$old=$null;$replacement=$null;$initial=$null
 function Get-TrustSnapshot {
     $values=@()
     foreach($store in @('Cert:\CurrentUser\Root','Cert:\CurrentUser\TrustedPublisher','Cert:\LocalMachine\Root','Cert:\LocalMachine\TrustedPublisher')){
@@ -50,8 +50,32 @@ try {
     }
     if(-not $rejected){throw 'stage4_certificate_replacement_reused_output'}
     Write-Host 'PASS existing output rejected before creating another key'
+    $count=@(Get-ChildItem Cert:\CurrentUser\My).Count
+    $firstPreview=Join-Path $directory 'initial-preview'
+    & $scriptPath -CreateInitial -OutputDirectory $firstPreview -WhatIf | Out-Null
+    if((Test-Path -LiteralPath $firstPreview) -or @(Get-ChildItem Cert:\CurrentUser\My).Count -ne $count){throw 'stage4_initial_whatif_mutated_machine'}
+    $firstOut=Join-Path $directory 'initial'
+    $first=& $scriptPath -CreateInitial -OutputDirectory $firstOut | ConvertFrom-Json
+    $initial=Get-Item -LiteralPath ('Cert:\CurrentUser\My\'+$first.thumbprint)
+    if($first.creationMode -cne 'initial' -or $null -ne $first.previousPublisherSha256 -or
+        -not $first.certificateCreated -or $first.privateKeyExported -or $first.trustChanged -or
+        $first.signingPerformed -or $first.installationPerformed -or $first.readyToInstall -or
+        $first.publicBookabilityEnabled -or -not $first.buildRequired){
+        throw 'stage4_initial_certificate_report_failed'
+    }
+    if($first.publisherSha256 -ceq $oldPin -or $first.publisherSha256 -ceq $report.publisherSha256 -or
+        (Get-FileHash -LiteralPath (Join-Path $firstOut 'stage4-private-public.cer') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $first.publisherSha256){
+        throw 'stage4_initial_certificate_public_identity_mismatch'
+    }
+    $firstAudit=& $scriptPath -ExpectedPublisherSha256 $first.publisherSha256 | ConvertFrom-Json
+    if($firstAudit.certificate.signingReady -or $firstAudit.certificate.blockers[0] -cne 'stage4_private_certificate_chain_not_trusted'){
+        throw 'stage4_initial_certificate_must_still_require_trust'
+    }
+    if((Get-TrustSnapshot) -cne $before){throw 'stage4_initial_certificate_modified_trust'}
+    if(@(Get-ChildItem Cert:\CurrentUser\My).Count -ne ($count+1)){throw 'stage4_initial_certificate_count_mismatch'}
+    Write-Host 'PASS first-time certificate preparation uses no historical pin, exports only public identity and leaves trust unchanged'
 }finally{
-    foreach($cert in @($replacement,$old)){
+    foreach($cert in @($initial,$replacement,$old)){
         if($null -ne $cert){Remove-Item -LiteralPath ('Cert:\CurrentUser\My\'+$cert.Thumbprint) -DeleteKey -Force -ErrorAction SilentlyContinue}
     }
     Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
