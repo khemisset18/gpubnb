@@ -86,7 +86,7 @@ jobs:
             # Historical public pin is a reproducible CI fixture, never trust approval.
             $publisher = '3060de709bd0db7fa8588b7480a8a04f94b2a7df005ee48361cbdcd39b0e9619'
           }
-          if ($publisher -cnotmatch '^[0-9a-f]{64}$' -or $publisher -match '^(.)\1{63}$') {
+          if ($publisher.Length -ne 64 -or $publisher -cnotmatch '^[0-9a-f]{64}$' -or $publisher -match '^(.)\1{63}$') {
             throw 'host_preflight_explicit_publisher_sha256_invalid'
           }
           "GPUBNB_PREFLIGHT_BUILD_PUBLISHER=$publisher" | Add-Content -Path $env:GITHUB_ENV -Encoding utf8
@@ -637,7 +637,8 @@ jobs:
           if (-not $?) { throw 'host_handoff_stage4_verification_failed' }
           python scripts/verify_stage4_package.py verify --directory $native --manifest-sha256 $evidence.stage4ManifestSha256 --commit $commit --publisher $env:GPUBNB_PREFLIGHT_BUILD_PUBLISHER
           if ($LASTEXITCODE -ne 0) { throw 'host_handoff_independent_verification_failed' }
-          $app = 'target/release/gpubnb-host-desktop.exe'
+          $app = @('target/release/gpubnb-host-desktop.exe','apps/host-desktop/src-tauri/target/release/gpubnb-host-desktop.exe') | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $app) { throw 'host_handoff_desktop_binary_missing' }
           $tunnel = 'services/edge/target/release/gpubnb-host-tunnel.exe'
           foreach ($file in @($app,$tunnel)) {
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "host_handoff_component_missing:$file" }
