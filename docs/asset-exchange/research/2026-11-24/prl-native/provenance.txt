@@ -1,0 +1,30 @@
+3db05e0de0ca90c3a043abd927b968cf53bcd4c8
+[GNUPG:] NEWSIG
+[GNUPG:] KEY_CONSIDERED 968479A1AFF927E37D1A566BB5690EEEBB952194 0
+[GNUPG:] SIG_ID /at8i4N0Y0bozOyI8nq9ug/J6MI 2026-11-23 1795434635
+[GNUPG:] GOODSIG B5690EEEBB952194 GitHub <noreply@github.com>
+[GNUPG:] VALIDSIG 968479A1AFF927E37D1A566BB5690EEEBB952194 2026-11-23 1795434635 0 4 0 1 8 00 968479A1AFF927E37D1A566BB5690EEEBB952194
+[GNUPG:] TRUST_UNDEFINED 0 pgp
+GitHub REST verified True valid
+pearld version 1.5.8+3db05e0
+prlctl version 1.5.8+3db05e0
+postgres (PostgreSQL) 16.16
+go version go1.26.10 linux/amd64
+v24.22.3
+11.19.1
+Python 3.12.14
+OpenSSL 3.5.7 9 Jun 2026 (Library: OpenSSL 3.5.7 9 Jun 2026)
+7c9de0aaafe609a094e0429e3937f7cebb561fdc729218a60fad41555e622a0e  runtime/pearl/pearl-linux-amd64-v1.5.8.tar.gz
+7e27cab4eaa18e5bf5917e6ac162b2efc252ed989e96a3bcc045f9c687c99b8c  runtime/pearl/checksums.txt
+bd025be5b17dbe9b1f224f5bd5aadd1bd74406073e956a7847dc9d07782bcca9  runtime/pearl/pearld
+05a27f65186cabe278f0180261363f7660b4b3bdd66dcc2c1d441f7124f964f9  runtime/pearl/prlctl
+840984dc2f335707dc61390654ab7614aba0622c280ba43ec9f8a4066614fe0f  runtime/pearl/edge-tools/fixture
+4ef30d28fdf3fcaa6545ff4f865b6580e793e4a8ac7fd73fb133dc5ca90ffa8b  runtime/pearl/edge-tools/verifyrefund
+ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5  runtime/go-tools/go1.26.10.linux-amd64.tar.gz
+9d5cd8633043b75740d5d59749c6b7365e6aeb53c47098b1a5e80bb18f87881a  runtime/pg/postgresql-16.16.tar.bz2
+bd5c8086ae4af23321ba61fc826027993dbd1e249fa701ca1fa76c8da0311283  runtime/pg/install/bin/postgres
+7fef5b14cd920ad0a7ac9a8cff4b352d171fb776c123acb2e50943b4e80bf215  runtime/pg/install/bin/initdb
+82ea40fa4f5f1828dee95d94ad652a9450046f25f7d4c0455d041127dc98264b  runtime/pg/install/bin/psql
+6216ab7e657a3d838a6c14a634e9c0a7abf2a2e304f370d1059a36ab4ca37cbf  runtime/pg/install/bin/pg_controldata
+79e7ab5db738c48777b696e374f8b428f0647debfb424f44d2f426370407fe2f  runtime/gh-tool/gh.tar.gz
+65ca537f6ed8a47fd0e560c421baa1f6c1efb8b25fc200d8c5c02c0e92eb2b9c  runtime/gh-tool/roots.jsonl

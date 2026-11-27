@@ -1,0 +1,4 @@
+Original Regtest commitment e482b538ef45e4828a9c1107eb687613165e5adb6184427edec9a568b26ff94c
+Consistently relabeled Simnet intent 0ac3a5974eb19b82aae441d83950cae5546fe9e1088b8011344934073dd55445
+Offline VM returned the same refund TXID 3ba1063fd54bfd20b77c5507a38527e81e522162fc25dfd6a9298d18df18f08e
+Pinned-intent qualification refused before node startup 1 RuntimeError: recovery intent differs from preparation receipt

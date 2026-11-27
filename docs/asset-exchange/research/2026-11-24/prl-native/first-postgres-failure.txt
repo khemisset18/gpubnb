@@ -1,0 +1,48 @@
+initdb postgres (PostgreSQL) 16.16 system_identifier=7711505800831463442 database=prl_scratch_38b6517268a4fbd9 mode=700
+Owned loopback + SCRAM; empty template0 database; non-superuser schema owner
+[PRL scratch] Applying 001..009 in the private disposable DB
+  asset-exchange/db/migrations/001_foundation.sql
+  asset-exchange/db/migrations/002_atomic_offer_operations.sql
+  asset-exchange/db/migrations/003_atomic_offer_publish.sql
+  asset-exchange/db/migrations/004_exchange_sessions.sql
+  asset-exchange/db/migrations/005_sso_replay.sql
+  asset-exchange/db/migrations/006_admin_fee_policy.sql
+  asset-exchange/db/migrations/007_signed_cancellation.sql
+  asset-exchange/db/migrations/008_financial_immutability.sql
+  asset-exchange/db/migrations/009_trade_terms_signatures.sql
+[PRL scratch] Seeding fake historical records BEFORE quarantine
+[PRL scratch] Applying migrations 010/011/012 ONLY in this disposable DB
+[PRL scratch] Checking PRL replay, SQL triggers and non-PRL behaviour
+BEGIN
+SET
+SET
+SET
+DO
+DO
+ROLLBACK
+[PRL scratch] Checking PostgreSQL-native publication, cancellation and terms replay
+BEGIN
+SET
+SET
+SET
+DO
+psql:asset-exchange/db/test/idempotency_replay_after_012.sql:241: ERROR:  idempotency replay cancellation identity mismatch
+CONTEXT:  PL/pgSQL function cancel_offer_atomic(text,text,text,character,bytea,text,character) line 43 at RAISE
+SQL statement "SELECT cancel_offer_atomic(
+      'ae-test-01','replay-publish-0001','maker:test:012',repeat('f',64)::char(64),
+      decode('cc','hex'),'cancel-replay-key-0001',repeat('d',64)::char(64)
+    )"
+PL/pgSQL function inline_code_block line 137 at PERFORM
+postmaster stopped, exit=0
+disposing owned temporary directory prl-fresh-9x9cuk7d
+Traceback (most recent call last):
+  File "/workspace/scratch/3285715d1c94/prl/asset-exchange/db/test/prl_disposable.py", line 108, in <module>
+    campaign(args.pg_bin.resolve(strict=True), work)
+  File "/workspace/scratch/3285715d1c94/prl/asset-exchange/db/test/prl_disposable.py", line 80, in campaign
+    run(["bash", "-euc", """
+  File "/workspace/scratch/3285715d1c94/prl/asset-exchange/db/test/prl_disposable.py", line 16, in run
+    return subprocess.run(argv, env=env, cwd=ROOT, text=True, check=True, **options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['bash', '-euc', '\n                source asset-exchange/db/test/prl_scratch_replay_run.sh\n                source asset-exchange/db/test/concurrency.sh\n                psql_scratch() { psql -Xw -v ON_ERROR_STOP=1 "$@"; }\n                psql_ci() { psql_scratch "$@"; }\n                run_replay_cases\n                psql_scratch -f asset-exchange/db/test/prl_lab_privileges.sql\n                run_concurrency_cases\n            ']' returned non-zero exit status 3.

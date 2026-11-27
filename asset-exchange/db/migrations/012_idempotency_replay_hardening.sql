@@ -110,9 +110,6 @@ BEGIN
 
   -- Expiry is checked after the replay branch: a retry can return the exact
   -- durable publication result after expiration, while a fresh write cannot.
-  IF p_expires_at <= clock_timestamp() THEN
-    RAISE EXCEPTION 'cannot publish expired offer' USING ERRCODE = '55000';
-  END IF;
   PERFORM asset_exchange.reject_unqualified_prl_asset_keys(
     p_give_asset_key, p_want_asset_key
   );
@@ -129,6 +126,10 @@ BEGIN
      OR v_operator.policy_epoch <> p_policy_epoch THEN
     RAISE EXCEPTION 'offer publication blocked by current policy epoch/state'
       USING ERRCODE = '55000';
+  END IF;
+
+  IF p_expires_at <= clock_timestamp() THEN
+    RAISE EXCEPTION 'cannot publish expired offer' USING ERRCODE = '55000';
   END IF;
 
   INSERT INTO asset_exchange.offers (
@@ -262,6 +263,7 @@ DECLARE
   v_operator asset_exchange.operator_state%ROWTYPE;
   v_existing asset_exchange.idempotency_records%ROWTYPE;
   v_scope text;
+  v_replay boolean;
   v_sequence bigint;
   v_event_type text;
   v_previous_state text;
@@ -287,16 +289,33 @@ BEGIN
   SELECT * INTO v_existing
   FROM asset_exchange.idempotency_records
   WHERE scope = v_scope AND idempotency_key = p_idempotency_key;
-  IF FOUND THEN
-    IF v_existing.request_hash IS DISTINCT FROM p_request_hash THEN
-      RAISE EXCEPTION 'idempotency key reused with different request'
-        USING ERRCODE = '23505';
+  v_replay := FOUND;
+  IF v_replay AND v_existing.request_hash IS DISTINCT FROM p_request_hash THEN
+    RAISE EXCEPTION 'idempotency key reused with different request'
+      USING ERRCODE = '23505';
+  END IF;
+
+  SELECT t.* INTO v_trade
+  FROM asset_exchange.trades AS t
+  WHERE t.trade_id = p_trade_id AND t.deployment_id = p_deployment_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    IF v_replay THEN
+      RAISE EXCEPTION 'idempotency replay terms identity mismatch' USING ERRCODE = '55000';
     END IF;
-    SELECT t.* INTO v_trade
-    FROM asset_exchange.trades AS t
-    WHERE t.trade_id = p_trade_id AND t.deployment_id = p_deployment_id
-    FOR UPDATE;
-    IF NOT FOUND OR v_existing.result_ref IS DISTINCT FROM p_trade_id
+    IF EXISTS (SELECT FROM asset_exchange.trades AS t WHERE t.trade_id = p_trade_id) THEN
+      RAISE EXCEPTION 'deployment mismatch' USING ERRCODE = '22023';
+    END IF;
+    RAISE EXCEPTION 'trade not found' USING ERRCODE = 'P0002';
+  END IF;
+  PERFORM asset_exchange.reject_unqualified_prl_asset_keys(o.give_asset_key, o.want_asset_key)
+  FROM asset_exchange.offers AS o
+  WHERE o.offer_id = v_trade.offer_id AND o.deployment_id = v_trade.deployment_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'settlement offer identity unavailable' USING ERRCODE = '55000';
+  END IF;
+  IF v_replay THEN
+    IF v_existing.result_ref IS DISTINCT FROM p_trade_id
        OR (p_role = 'MAKER' AND v_trade.maker_subject IS DISTINCT FROM p_actor_subject)
        OR (p_role = 'TAKER' AND v_trade.taker_subject IS DISTINCT FROM p_actor_subject)
        OR v_trade.terms_hash IS DISTINCT FROM p_terms_hash
@@ -309,16 +328,6 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT t.* INTO v_trade
-  FROM asset_exchange.trades AS t
-  WHERE t.trade_id = p_trade_id
-  FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'trade not found' USING ERRCODE = 'P0002';
-  END IF;
-  IF v_trade.deployment_id <> p_deployment_id THEN
-    RAISE EXCEPTION 'deployment mismatch' USING ERRCODE = '22023';
-  END IF;
   IF v_trade.state NOT IN ('ACCEPTED_PENDING_TERMS','TERMS_SIGNED') THEN
     RAISE EXCEPTION 'trade is not accepting settlement terms signatures'
       USING ERRCODE = '55000';

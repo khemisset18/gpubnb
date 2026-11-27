@@ -1,0 +1,6 @@
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c52", "network": "regtest", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "public-checkpoint-restored", "funding": "7de9968af526b656f28f55f86c74bb34a7d09ad172334cabace80e3d6509c2c8", "height": 104, "tip": "ab06c3068480ef23e6f419bdeeecd0ff8690bca9e79583794d6d23c81ff1a0c6"}
+{"block": "27f0ae47e485acfe4de1ea9ed70a74e482adfeca6fd2fbc39ec4971e7e75c2a1", "case": "public-payment-confirmed", "grains": 998500, "height": 105, "txid": "38899aeec15c8cbe970311eb34beff7516607a95722bf5c90d977a6ccb013e4a"}
+{"block": "bf16d0b53ac9fb1d00f39bffc90058c7ea0ebe82fc9d751eda7464306b78b0c2", "case": "public-payment-confirmed", "grains": 996500, "height": 106, "txid": "d67ec761de8979cf16704c2862f53961e77c4ee39fd7c121053dfb90b83808fe"}
+{"case": "node-stopped", "exit": 0, "network": "regtest"}
+{"case": "public-recovery-complete", "generated": false, "network": "regtest"}

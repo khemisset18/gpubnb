@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { assertStoredOfferAssetPolicy, createOfferService } from "../../api/src/offer-service.mjs";
 
 const BTC="bitcoin|regtest|NATIVE|BTC_NATIVE|8";
@@ -38,7 +39,7 @@ async function rejectBeforeVerifier(row,code="PRL_ACCEPT_UNQUALIFIED") {
   const {service,calls}=harness(row);
   await assert.rejects(()=>service.acceptOffer({
     actor,acceptance:acceptance(),signature:placeholder,
-    idempotencyKey:"prl-historical-test-0001"
+    idempotencyKey:randomUUID()
   }),err=>err?.code===code);
   assert.deepEqual(calls,{get:1,verify:0,accept:0});
 }
@@ -84,7 +85,7 @@ test("existing non PRL verifier still reached, but no signing or write",async()=
   const {service,calls}=harness(stored());
   await assert.rejects(()=>service.acceptOffer({
     actor,acceptance:acceptance(),signature:placeholder,
-    idempotencyKey:"prl-historical-test-0002"
+    idempotencyKey:randomUUID()
   }),err=>err?.code==="ACCEPT_SIGNATURE_INVALID");
   assert.deepEqual(calls,{get:1,verify:1,accept:0});
 });

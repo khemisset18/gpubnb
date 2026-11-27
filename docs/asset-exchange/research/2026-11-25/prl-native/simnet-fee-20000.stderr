@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/workspace/scratch/3285715d1c94/runtime/guard-source/asset-exchange/qualification/pearl/native/qualify.py", line 318, in <module>
+    assess(args.pearld.resolve(strict=True), args.verify_refund.resolve(strict=True),
+  File "/workspace/scratch/3285715d1c94/runtime/guard-source/asset-exchange/qualification/pearl/native/qualify.py", line 174, in assess
+    check_refund_relay_before_funding(b, "b", quote, f["fundingTxid"])
+  File "/workspace/scratch/3285715d1c94/runtime/guard-source/asset-exchange/qualification/pearl/native/qualify.py", line 75, in check_refund_relay_before_funding
+    require(covered, "funding refused: verified refund fee below observer relay floor")
+  File "/workspace/scratch/3285715d1c94/runtime/guard-source/asset-exchange/qualification/pearl/native/private_node.py", line 22, in require
+    raise RuntimeError(message)
+RuntimeError: funding refused: verified refund fee below observer relay floor

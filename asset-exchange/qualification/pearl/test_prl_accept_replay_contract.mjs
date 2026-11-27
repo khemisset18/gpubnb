@@ -37,7 +37,7 @@ test("011 is one additive transaction with no replacement of cancel function", (
 });
 test("010 creates the trusted shared key guard before 011 references it", () => {
   assert.match(quarantine, /CREATE FUNCTION asset_exchange\.reject_unqualified_prl_asset_keys/);
-  assert.match(quarantine, /v_parts\[4\] <> btrim\(v_parts\[4\]\)/);
+  assert.match(quarantine, /v_parts\[4\] <> btrim\(v_parts\[4\], v_trim_chars\)/);
   assert.match(newFn, /PERFORM asset_exchange\.reject_unqualified_prl_asset_keys/);
 });
 test("replay branch checks request hash before offer lookup", () => {

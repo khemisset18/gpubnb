@@ -1,0 +1,4 @@
+pearl-linux-amd64-v1.5.8.tar.gz 7c9de0aaafe609a094e0429e3937f7cebb561fdc729218a60fad41555e622a0e
+checksums.txt 7e27cab4eaa18e5bf5917e6ac162b2efc252ed989e96a3bcc045f9c687c99b8c
+PASS GitHub release signing chain and SAN, RFC3161 timestamp, ECDSA DSSE, tag, commit and artifact hashes
+2026-11-23T12:02:58+00:00 https://dotcom.releases.github.com pearl-research-labs/pearl v1.5.8 3db05e0de0ca90c3a043abd927b968cf53bcd4c8

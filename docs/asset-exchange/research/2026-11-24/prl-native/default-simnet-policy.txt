@@ -1,0 +1,17 @@
+{"case": "independent-verifier-before-funding", "receipt_sha256": "633eefe621e7f5eb07697164d9e1afca6ded0784eb3836f68de283b8378b0fe6", "refund": "e8a8d422507186fa54fa06d8594ccebd772d1e4066ec423883023a89f7af60c5", "wrong_amount_rejected": true, "wrong_destination_rejected": true, "wrong_magic_rejected": true}
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c53", "network": "simnet", "peers": 0, "restart": false}
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c53", "network": "simnet", "peers": 0, "restart": false}
+{"case": "two-independently-validated-chains", "height": 100, "tip": "266c091cd5ecfe6aad3d38091d7df66307f3c043ff51409e9ee1df2e0f029f03"}
+{"block": "9b855aab6b895756d8fbf028690a90c90f47d1ae935d0bf57874e73fa258bddb", "case": "funding-confirmed", "txid": "8857b754fe982e12bf3dd627dbfab3bf4726ce7d0b4c24e3550badf90e31a4e0", "value_grains": 1000000}
+{"case": "node-stopped", "exit": 0, "network": "simnet"}
+{"case": "node-stopped", "exit": 0, "network": "simnet"}
+Traceback (most recent call last):
+  File "/workspace/scratch/3285715d1c94/prl/asset-exchange/qualification/pearl/native/qualify.py", line 153, in <module>
+    assess(args.pearld.resolve(strict=True), args.verify_refund.resolve(strict=True),
+  File "/workspace/scratch/3285715d1c94/prl/asset-exchange/qualification/pearl/native/qualify.py", line 85, in assess
+    reject(a, f["refund"], "refund-premature", ("final", "lock"))
+  File "/workspace/scratch/3285715d1c94/prl/asset-exchange/qualification/pearl/native/qualify.py", line 20, in reject
+    require(result.get("allowed") is False and any(s in reason.lower() for s in expected),
+  File "/workspace/scratch/3285715d1c94/prl/asset-exchange/qualification/pearl/native/private_node.py", line 22, in require
+    raise RuntimeError(message)
+RuntimeError: refund-premature: unexpected mempool outcome {'txid': 'e8a8d422507186fa54fa06d8594ccebd772d1e4066ec423883023a89f7af60c5', 'wtxid': '2e68b1a7bd19d730d06254e3b04c851cb2d21d997ace14ca3303830eea069d2a', 'package-error': '', 'allowed': True, 'vsize': 138, 'fees': {'base': Decimal('0.000015'), 'effective-feerate': Decimal('0.00010869'), 'effective-includes': None}}

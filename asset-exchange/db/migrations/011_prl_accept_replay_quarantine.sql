@@ -1,5 +1,5 @@
 -- GPUbnb Asset Exchange / Pearl PRL idempotent replay quarantine
--- ADDITIVE FUNCTION REPLACEMENT; NOT TESTED ON POSTGRES, NOT DEPLOYED.
+-- ADDITIVE FUNCTION REPLACEMENT; NOT DEPLOYED.
 -- Requires migrations 001-010 in a strictly isolated disposable Exchange DB.
 -- Preserves public SQL signature and the non-PRL acceptance flow.
 BEGIN;
@@ -28,7 +28,17 @@ DECLARE
   v_existing asset_exchange.idempotency_records%ROWTYPE;
   v_scope text := 'accept_offer:' || p_deployment_id || ':' || p_taker_subject;
 BEGIN
-  IF p_acceptance_signature IS NULL OR octet_length(p_acceptance_signature) = 0 THEN
+  IF p_deployment_id IS NULL OR p_deployment_id !~ '^[a-z0-9][a-z0-9._:-]{2,127}$'
+     OR p_offer_id IS NULL OR length(p_offer_id) NOT BETWEEN 8 AND 128
+     OR p_trade_id IS NULL OR length(p_trade_id) NOT BETWEEN 8 AND 128
+     OR p_taker_subject IS NULL OR length(p_taker_subject) NOT BETWEEN 3 AND 256
+     OR p_taker_subject <> btrim(p_taker_subject)
+     OR p_policy_epoch IS NULL OR p_policy_epoch < 0
+     OR p_offer_hash IS NULL OR p_offer_hash::text !~ '^[0-9a-f]{64}$'
+     OR p_acceptance_hash IS NULL OR p_acceptance_hash::text !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'invalid acceptance identity or evidence' USING ERRCODE = '22023';
+  END IF;
+  IF p_acceptance_signature IS NULL OR octet_length(p_acceptance_signature) NOT BETWEEN 1 AND 8192 THEN
     RAISE EXCEPTION 'acceptance signature required' USING ERRCODE = '22023';
   END IF;
 

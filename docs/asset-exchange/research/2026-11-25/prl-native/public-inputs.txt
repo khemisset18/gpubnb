@@ -1,0 +1,24 @@
+regtest public refund verified sha256=a14ceeb72f0df9775d1b809c707f688895b266b93a23e7a7233edb046927d365 txid=38899aeec15c8cbe970311eb34beff7516607a95722bf5c90d977a6ccb013e4a
+regtest verifyrefund trailing JSON: exit=2 panic: malformed recovery input
+regtest verifyrefund truncated JSON: exit=2 panic: malformed recovery input
+regtest verifyrefund unknown field: exit=2 panic: malformed recovery input
+regtest verifyrefund capsule size: exit=2 panic: oversize or unreadable recovery input
+regtest verifyrefund transaction size: exit=2 panic: oversize fixture transaction
+regtest verifyrefund changed destination: exit=2 panic: wrong refund destination
+regtest verifyrefund changed amount: exit=2 panic: wrong amount or fee
+regtest recipient other lab recipient: exit=2 panic: refund does not pay the agreed lab recipient
+regtest recipient public-network label: exit=2 panic: private network required
+regtest recipient second object: exit=2 panic: malformed recipient request
+regtest recipient input size: exit=2 panic: oversize recipient request
+simnet public refund verified sha256=f4f89724554083dfb78ccfcc5572fd2b4675eb62aad137bb0ee4084df9d9cbf1 txid=1d516dbdcefe85c2a56c0bc26cabe6b184ca3d4404ee357285bc86c6c2e730a8
+simnet verifyrefund trailing JSON: exit=2 panic: malformed recovery input
+simnet verifyrefund truncated JSON: exit=2 panic: malformed recovery input
+simnet verifyrefund unknown field: exit=2 panic: malformed recovery input
+simnet verifyrefund capsule size: exit=2 panic: oversize or unreadable recovery input
+simnet verifyrefund transaction size: exit=2 panic: oversize fixture transaction
+simnet verifyrefund changed destination: exit=2 panic: wrong refund destination
+simnet verifyrefund changed amount: exit=2 panic: wrong amount or fee
+simnet recipient other lab recipient: exit=2 panic: refund does not pay the agreed lab recipient
+simnet recipient public-network label: exit=2 panic: private network required
+simnet recipient second object: exit=2 panic: malformed recipient request
+simnet recipient input size: exit=2 panic: oversize recipient request

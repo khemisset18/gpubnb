@@ -1,0 +1,67 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded errno v0.3.14
+  Downloaded bitflags v2.11.1
+  Downloaded fastrand v2.4.1
+  Downloaded textwrap v0.16.2
+  Downloaded heck v0.4.1
+  Downloaded strsim v0.10.0
+  Downloaded clap v3.2.25
+  Downloaded tempfile v3.27.0
+  Downloaded clap_lex v0.2.4
+  Downloaded getrandom v0.4.2
+  Downloaded os_str_bytes v6.6.1
+  Downloaded toml v0.5.11
+  Downloaded cbindgen v0.26.0
+  Downloaded rustix v1.1.4
+  Downloaded linux-raw-sys v0.12.1
+   Compiling syn v1.0.109
+   Compiling once_cell v1.21.4
+   Compiling rand v0.8.6
+   Compiling serde_core v1.0.228
+   Compiling const-random-macro v0.1.16
+   Compiling indexmap v1.9.3
+   Compiling num-bigint v0.4.6
+   Compiling serde v1.0.228
+   Compiling rustix v1.1.4
+   Compiling getrandom v0.4.2
+   Compiling num-complex v0.4.6
+   Compiling const-random v0.1.18
+   Compiling zmij v1.0.21
+   Compiling hashbrown v0.12.3
+   Compiling linux-raw-sys v0.12.1
+   Compiling num-rational v0.4.2
+   Compiling bitflags v2.11.1
+   Compiling os_str_bytes v6.6.1
+   Compiling clap_lex v0.2.4
+   Compiling num v0.4.3
+   Compiling proc-macro-error v1.0.4
+   Compiling ahash v0.8.12
+   Compiling unroll v0.1.5
+   Compiling serde_json v1.0.149
+   Compiling atty v0.2.14
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.0
+   Compiling fastrand v2.4.1
+   Compiling cbindgen v0.26.0
+   Compiling textwrap v0.16.2
+   Compiling termcolor v1.4.1
+   Compiling strsim v0.10.0
+   Compiling bitflags v1.3.2
+   Compiling clap v3.2.25
+   Compiling toml v0.5.11
+   Compiling tempfile v3.27.0
+   Compiling plonky2_field v1.0.0 (/workspace/scratch/3285715d1c94/runtime/rust-native/src/plonky2/field)
+   Compiling structopt-derive v0.4.18
+   Compiling hashbrown v0.14.5
+   Compiling log v0.4.29
+   Compiling heck v0.4.1
+   Compiling structopt v0.3.26
+   Compiling plonky2 v1.1.0 (/workspace/scratch/3285715d1c94/runtime/rust-native/src/plonky2/plonky2)
+   Compiling fixed-hash v0.8.0
+   Compiling primitive-types v0.12.2
+   Compiling layout-macro v0.1.0 (/workspace/scratch/3285715d1c94/runtime/rust-native/src/zk-pow/src/circuit/layout_macro)
+   Compiling zk-pow-go v0.1.0 (/workspace/scratch/3285715d1c94/runtime/rust-native/src/zk-pow/bindings/go)
+   Compiling starky v1.1.0 (/workspace/scratch/3285715d1c94/runtime/rust-native/src/plonky2/starky)
+   Compiling zk-pow v0.1.0 (/workspace/scratch/3285715d1c94/runtime/rust-native/src/zk-pow)
+    Finished `release` profile [optimized] target(s) in 1m 06s

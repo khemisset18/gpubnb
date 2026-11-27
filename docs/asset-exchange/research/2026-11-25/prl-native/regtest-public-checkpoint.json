@@ -1,0 +1,13 @@
+{
+  "archiveSha256": "3750b111b6f2e2ea1ad6d2741abec157d0592ba71d5fc344b43752608fe17dbf",
+  "funding": "7de9968af526b656f28f55f86c74bb34a7d09ad172334cabace80e3d6509c2c8",
+  "height": 104,
+  "magic": "0x50524c52",
+  "network": "regtest",
+  "payout": "rprl1pglwptqp390jku2kd3twengw04ahjke30y950wxzevqalea3jzjusyapmgw",
+  "recipient": "d67ec761de8979cf16704c2862f53961e77c4ee39fd7c121053dfb90b83808fe",
+  "recipientCommitment": "cbfa0a6244035d5fafaf159e44f8e7de919d1a44f95153f70643e5f4d93e579b",
+  "refund": "38899aeec15c8cbe970311eb34beff7516607a95722bf5c90d977a6ccb013e4a",
+  "refundCommitment": "a14ceeb72f0df9775d1b809c707f688895b266b93a23e7a7233edb046927d365",
+  "tip": "ab06c3068480ef23e6f419bdeeecd0ff8690bca9e79583794d6d23c81ff1a0c6"
+}

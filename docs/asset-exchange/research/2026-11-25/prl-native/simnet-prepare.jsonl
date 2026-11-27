@@ -1,0 +1,17 @@
+{"case": "identity", "genesis": "78d0ab27df6a51a8e9dbbdefffca1ebbbeb3818cb083ce2c2f43b047247e5832", "height": 0, "magic": "0x50524c53", "network": "simnet", "peers": 0, "rejectnonstd": true, "restart": false}
+{"case": "recipient-spend-commitment", "network": "simnet", "recipient_exited": 0, "sha256": "1afbe536472740350d8368a2ea1b35ac3a54bda0a227507bebd53008cf55ff06"}
+{"case": "recovery-intent-commitment", "network": "simnet", "sha256": "f4f89724554083dfb78ccfcc5572fd2b4675eb62aad137bb0ee4084df9d9cbf1"}
+{"case": "refund-verified-before-funding", "funding": "1ffbf9475489d90ad9e76acdedce5eb4322869723d217b82fa66167dc80cf58a", "network": "simnet", "refund": "1d516dbdcefe85c2a56c0bc26cabe6b184ca3d4404ee357285bc86c6c2e730a8", "signer_exited": 0, "submitted": false}
+{"block": "83c5a928a8f6693a4b5a5bc28cbe10403c996fc09fc9fcec67271805b56fc24f", "case": "generated", "height": 1, "network": "simnet"}
+{"block": "c34c6f7c4ebd38d488b654224f950eae73e1c6ba0e17f12b5bc1c6d4c2441c2b", "case": "generated", "height": 10, "network": "simnet"}
+{"block": "001d49a58887b629eae6e632e3c0be4222a1209b1231842cb25fbe9d0f9889b2", "case": "generated", "height": 20, "network": "simnet"}
+{"block": "bb592cc1a111a2cbb9cb66682e3ba692b22927ab86c001bf76bff4b794be29b0", "case": "generated", "height": 30, "network": "simnet"}
+{"block": "278e90795e2bc0421764919dabcfdaa29b6ceced8191322ce031b66773655ff8", "case": "generated", "height": 40, "network": "simnet"}
+{"block": "84e99c1effe7d955372aab018914ece67dfdd6269d365b8f2df9ae96961c0832", "case": "generated", "height": 50, "network": "simnet"}
+{"block": "addb6aaceed85394f899d5df58485c1a6b2e6591a7b972d73e6b238427ecc909", "case": "generated", "height": 60, "network": "simnet"}
+{"block": "abbd819f2e24b6a6e3464b3f3df711dc706a9418c08858e4ff0f0acd625f2747", "case": "generated", "height": 70, "network": "simnet"}
+{"block": "918cf1b5676873b701791616b8a85cbd7f285647baff7d07dbc0d9b980f1d872", "case": "generated", "height": 80, "network": "simnet"}
+{"block": "993dc2f0a487f4010601409b753e379814ecb7a3169ac072aed8a1aa17b43465", "case": "generated", "height": 90, "network": "simnet"}
+{"block": "c0e3029ad49b3570dd9c2e0172a1bec0697df6de9aaf4aea64179d6ba8529c09", "case": "generated", "height": 100, "network": "simnet"}
+{"case": "node-stopped", "exit": 0, "network": "simnet"}
+{"case": "preparation-complete", "data_removed": true, "network": "simnet"}

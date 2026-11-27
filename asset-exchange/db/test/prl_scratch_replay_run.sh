@@ -4,6 +4,7 @@
 # cluster and private data directory. NEVER use GPUbnb Core or a real DB.
 set -euo pipefail
 
+verify_socket_before_migrations() {
 if [[ "${PRL_SCRATCH_ACK:-}" != "DISPOSABLE_EXCHANGE_DB_ONLY" ]]; then
   echo "REFUSED: set PRL_SCRATCH_ACK=DISPOSABLE_EXCHANGE_DB_ONLY" >&2
   exit 2
@@ -97,7 +98,7 @@ if [[ "$(psql_scratch -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname='as
   echo "REFUSED: Exchange schema already exists; scratch DB must be empty." >&2
   exit 2
 fi
-if [[ "$(psql_scratch -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','public')")" != 0 ]] ||
+if [[ "$(psql_scratch -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','pg_toast','public')")" != 0 ]] ||
    [[ "$(psql_scratch -Atqc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'")" != 0 ]] ||
    [[ "$(psql_scratch -Atqc "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'")" != 0 ]]; then
   echo "REFUSED: scratch database contains unrelated user objects." >&2
@@ -107,10 +108,13 @@ if [[ "$(psql_scratch -Atqc 'SHOW server_version_num')" -lt 160000 ]]; then
   echo "REFUSED: PostgreSQL 16+ required." >&2
   exit 2
 fi
+}
 
+run_replay_cases() {
 echo "[PRL scratch] Applying 001..009 in the private disposable DB"
 for migration in asset-exchange/db/migrations/00[1-9]_*.sql; do
   [[ -f "$migration" ]] || { echo "Missing migration" >&2; exit 1; }
+  echo "  $migration"
   psql_scratch -f "$migration" >/dev/null
 done
 
@@ -126,5 +130,11 @@ echo "[PRL scratch] Checking PRL replay, SQL triggers and non-PRL behaviour"
 psql_scratch -f asset-exchange/db/test/prl_scratch_accept_replay_after_011.sql
 echo "[PRL scratch] Checking PostgreSQL-native publication, cancellation and terms replay"
 psql_scratch -f asset-exchange/db/test/idempotency_replay_after_012.sql
-echo "[PRL scratch] Completed without a production connection."
-echo "[PRL scratch] Dispose of scratch cluster/database independently."
+psql_scratch -f asset-exchange/db/test/prl_atomicity.sql
+echo "[PRL scratch] Replay and atomicity assertions passed."
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  verify_socket_before_migrations
+  run_replay_cases
+fi

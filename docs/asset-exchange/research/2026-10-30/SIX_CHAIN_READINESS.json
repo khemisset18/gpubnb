@@ -180,7 +180,9 @@
     },
     {
       "path": "asset-exchange/core/src/asset-registry.mjs",
-      "sha256": "1ba0f601292189be7d831fbd3130e8cf2173379e843227053cd2524f46ec4aef"
+      "sha256": "e535a5c743c89fa5087377d5021d48c57b17e7979eb2ba6bc1ff172044463148",
+      "originalInventorySha256": "1ba0f601292189be7d831fbd3130e8cf2173379e843227053cd2524f46ec4aef",
+      "pearlQuarantineReviewedAt": "19055e1a47296d611a950a20361341cc0e7b29f7"
     },
     {
       "path": "asset-exchange/qualification/dogecoin/d2/offline_candidate.py",

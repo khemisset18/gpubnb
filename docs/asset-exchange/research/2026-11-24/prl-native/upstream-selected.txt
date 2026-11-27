@@ -1,0 +1,3 @@
+ok  	github.com/pearl-research-labs/pearl/node/txscript	8.952s
+ok  	github.com/pearl-research-labs/pearl/node/chaincfg	0.012s
+ok  	github.com/pearl-research-labs/pearl/node/mempool	2.623s

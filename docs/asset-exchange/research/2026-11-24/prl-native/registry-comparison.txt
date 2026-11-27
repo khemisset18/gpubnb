@@ -1,0 +1,35 @@
+Compared a pre-quarantine registry at 0d89245d2bf954a165b424782c1bb3def7acad3e to a595d3cf6f6a1ba1ddb112b0de4cdbb4b7bece65
+25 non-Pearl records match under deep strict equality
+{
+  "registryId": "pearl-mainnet-native",
+  "canonicalName": "Pearl",
+  "symbol": "PRL",
+  "category": "EXPERIMENTAL_NATIVE",
+  "supportStatus": "MARKETPLACE_ONLY",
+  "riskLevel": "RESTRICTED",
+  "identityReady": false,
+  "identity": null,
+  "assetKey": null,
+  "issuerControlled": false,
+  "privacySensitive": false,
+  "capabilities": {
+    "marketplaceEnabled": true,
+    "newOffersEnabled": false,
+    "newTradesEnabled": false,
+    "ownershipProofSupported": false,
+    "lockSupported": false,
+    "redeemSupported": false,
+    "refundSupported": false,
+    "recoverySupported": false,
+    "automaticSettlementSupported": false
+  },
+  "routing": {
+    "discovery": "CENTRAL_ORDER_DISCOVERY_V1",
+    "settlement": null,
+    "researchFamily": "PEARL_R_AND_D"
+  },
+  "notes": [
+    "IDENTITY_PENDING_VERIFICATION",
+    "MARKETPLACE_ONLY"
+  ]
+}
