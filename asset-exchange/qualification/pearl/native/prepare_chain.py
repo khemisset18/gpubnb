@@ -107,12 +107,24 @@ def prepare(binary, signer, network, output, recipient_tool, fee_plan=False):
     record("preparation-complete", network=network, data_removed=not directory.exists())
 
 
-def resume(binary, network, output, expected_commitment):
+def resume(binary, network, output, expected_commitment, expected_plan=None):
     """Rebuild solely from public blocks; the preparation signer is already gone."""
     fixture = json.loads((output / "fixture.json").read_text())
     commitment = hashlib.sha256(json.dumps(recovery_input(fixture), sort_keys=True).encode()).hexdigest()
     require(commitment == expected_commitment and fixture["network"] == network
             and fixture["magic"] == MAGIC[network], "inconsistent recovery checkpoint")
+    plan_path = output / "recovery-plan.json"
+    if fixture.get("feePlan") or plan_path.exists() or expected_plan is not None:
+        require(expected_plan and plan_path.is_file(), "fee-plan checkpoint requires its separate commitment")
+        with plan_path.open("rb") as source:
+            raw_plan = source.read(32769)
+        require(len(raw_plan) <= 32768 and hashlib.sha256(raw_plan).hexdigest() == expected_plan,
+                "changed fee-plan checkpoint")
+        plan = json.loads(raw_plan)
+        require(plan["network"] == network and plan["genesis"] == GENESIS and
+                all(plan[key] == fixture[key] for key in ("magic", "payout", "height", "fundingTxid", "funding",
+                                                          "contractScript", "destination")), "fee plan refers to another checkpoint")
+        record("fee-plan-checkpoint-verified", network=network, sha256=expected_plan)
     with tempfile.TemporaryDirectory(prefix="prl-resume-") as tmp:
         directory = Path(tmp).resolve()
         with private_node(binary, directory / "node", network, fixture["payout"]) as node:
@@ -142,6 +154,7 @@ if __name__ == "__main__":
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--fixture-signer", type=Path)
     mode.add_argument("--resume-commitment", help="pinned SHA-256 from the preparation receipt")
+    parser.add_argument("--resume-plan-commitment", help="separate SHA-256 of all authorized payments for a fee-plan checkpoint")
     parser.add_argument("--network", choices=tuple(MAGIC), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--recipient-signer", type=Path, help="independent one-shot lab recipient for a new fixture")
@@ -149,10 +162,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.fee_plan and (args.resume_commitment or not args.recipient_signer):
         parser.error("a new fee plan requires both private lab signers")
+    if args.resume_plan_commitment and not args.resume_commitment:
+        parser.error("a plan checkpoint also requires its original recovery commitment")
     if args.resume_commitment and args.recipient_signer:
         parser.error("checkpoint recovery needs public data only")
     if args.resume_commitment:
-        resume(args.pearld.resolve(strict=True), args.network, args.output.resolve(), args.resume_commitment)
+        resume(args.pearld.resolve(strict=True), args.network, args.output.resolve(), args.resume_commitment, args.resume_plan_commitment)
     else:
         prepare(args.pearld.resolve(strict=True), args.fixture_signer.resolve(strict=True),
                 args.network, args.output.resolve(),

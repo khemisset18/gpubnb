@@ -1,6 +1,6 @@
 // recipient is a lab-only, one-shot process. It never receives an HTLC key.
-// It supplies a fresh public P2TR destination and preauthorizes a payment
-// from each agreed refund output to a second fresh public destination.
+// It supplies a fresh public P2TR destination and preauthorizes one payment
+// from its own exact refund output to a second fresh public destination.
 package main
 
 import (
