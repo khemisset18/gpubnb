@@ -31,6 +31,7 @@ type fixtureInput struct {
 	Height          uint32
 	Script          string
 	RecipientScript string
+	FeePlan         bool
 }
 
 func must[T any](value T, err error) T {
@@ -173,7 +174,7 @@ func main() {
 			panic(fmt.Sprintf("VM accepted %s", name))
 		}
 	}
-	emit(map[string]any{
+	result := map[string]any{
 		"funding": parentHex, "fundingTxid": parent.TxHash().String(), "contractScript": hex.EncodeToString(contract),
 		"destination": hex.EncodeToString(dest), "refund": checked(refund, fundingOut), "refundTxid": refund.TxHash().String(),
 		"claim": checked(claim, fundingOut), "claimTxid": claim.TxHash().String(), "badSecret": encode(badSecret),
@@ -186,5 +187,17 @@ func main() {
 		"feeFloorGrains": feeFloor, "dustFloorGrains": dustFloor,
 		"belowFee": claimWithValue(contractValue - feeFloor + 1), "atFee": claimWithValue(contractValue - feeFloor),
 		"belowDust": claimWithValue(dustFloor - 1), "atDust": claimWithValue(dustFloor),
-	})
+	}
+	if p.FeePlan {
+		if p.RecipientScript == "" {
+			panic("fee plan requires a separate recipient")
+		}
+		var choices []map[string]any
+		for _, fee := range []int64{1500, 2000, 3000} {
+			tx := buildSpend(refundLeaf, refundKey, p.Height, contractValue-fee, false, 0xfffffffd)
+			choices = append(choices, map[string]any{"feeGrains": fee, "raw": checked(tx, fundingOut), "txid": tx.TxHash().String()})
+		}
+		result["refundChoices"] = choices
+	}
+	emit(result)
 }

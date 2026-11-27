@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from qualify import recovery_input, submit_fixture_block
-from private_node import MAGIC, private_node, record, require
+from private_node import GENESIS, MAGIC, private_node, record, require
 
 MATURITY = 100
 REFUND_HEIGHT = MATURITY + 4
@@ -26,8 +26,22 @@ def signed_fixture(process, request, recipient_tool, directory):
         bundle = json.loads(response)
         if recipient:
             require(bundle["destination"] == public["recipientScript"], "refund recipient changed")
-            reply, _ = recipient.communicate(json.dumps({"Network": request["network"], "Refund": bundle["refund"]}), timeout=30)
+            payment_request = {"Network": request["network"]}
+            if request.get("feePlan"):
+                payment_request["RefundOptions"] = [choice["raw"] for choice in bundle["refundChoices"]]
+            else:
+                payment_request["Refund"] = bundle["refund"]
+            reply, _ = recipient.communicate(json.dumps(payment_request), timeout=30)
             require(recipient.returncode == 0, "independent recipient refused the refund")
+            if request.get("feePlan"):
+                payments = json.loads(reply)
+                require(len(payments) == len(bundle["refundChoices"]) == 3, "incomplete beneficiary plan")
+                bundle["feeOptions"] = [
+                    {"feeGrains": choice["feeGrains"], "refund": choice["raw"], "refundTxid": choice["txid"],
+                     "child": child["raw"], "childTxid": child["txid"]}
+                    for choice, child in zip(bundle["refundChoices"], payments, strict=True)]
+                bundle["nextScript"] = public["nextScript"]
+                return bundle
             child = {**json.loads(reply), **public, "network": request["network"], "refund": bundle["refundTxid"]}
             record("recipient-spend-commitment", network=request["network"],
                    sha256=hashlib.sha256(json.dumps(child, sort_keys=True).encode()).hexdigest(),
@@ -40,7 +54,7 @@ def signed_fixture(process, request, recipient_tool, directory):
             recipient.wait()
 
 
-def prepare(binary, signer, network, output, recipient_tool):
+def prepare(binary, signer, network, output, recipient_tool, fee_plan=False):
     output.mkdir(mode=0o700)
     with tempfile.TemporaryDirectory(prefix="prl-seed-") as tmp:
         directory = Path(tmp).resolve()
@@ -62,9 +76,21 @@ def prepare(binary, signer, network, output, recipient_tool):
                             request = {"network": network, "txid": coinbase_id, "output": out["n"],
                                        "value": int(out["value"] * 100_000_000),
                                        "height": REFUND_HEIGHT, "script": hello["script"]}
+                            if fee_plan:
+                                request["feePlan"] = True
                             bundle = signed_fixture(process, request, recipient_tool, directory)
                             fixture = {**hello, **request, **bundle, "magic": MAGIC[network]}
                             (output / "fixture.json").write_text(json.dumps(fixture, sort_keys=True))
+                            if fee_plan:
+                                plan = {name: fixture[name] for name in ("network", "magic", "height", "payout",
+                                        "funding", "fundingTxid", "contractScript", "destination", "nextScript")}
+                                plan.update(format="prl-lab-refund-plan-v1", genesis=GENESIS, contractGrains=1_000_000,
+                                            maxRefundFeeGrains=3_000, minRefundGrains=997_000, options=bundle["feeOptions"])
+                                encoded = json.dumps(plan, sort_keys=True).encode()
+                                (output / "recovery-plan.json").write_bytes(encoded)
+                                record("presigned-fee-plan", network=network, sha256=hashlib.sha256(encoded).hexdigest(),
+                                       fees_grains=[row["feeGrains"] for row in plan["options"]],
+                                       refund_signer_exited=process.returncode, recipient_exited=0, funding_submitted=False)
                             capsule = json.dumps(recovery_input(fixture), sort_keys=True).encode()
                             record("recovery-intent-commitment", network=network,
                                    sha256=hashlib.sha256(capsule).hexdigest())
@@ -119,7 +145,10 @@ if __name__ == "__main__":
     parser.add_argument("--network", choices=tuple(MAGIC), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--recipient-signer", type=Path, help="independent one-shot lab recipient for a new fixture")
+    parser.add_argument("--fee-plan", action="store_true", help="presign the three bounded private refund options")
     args = parser.parse_args()
+    if args.fee_plan and (args.resume_commitment or not args.recipient_signer):
+        parser.error("a new fee plan requires both private lab signers")
     if args.resume_commitment and args.recipient_signer:
         parser.error("checkpoint recovery needs public data only")
     if args.resume_commitment:
@@ -127,4 +156,4 @@ if __name__ == "__main__":
     else:
         prepare(args.pearld.resolve(strict=True), args.fixture_signer.resolve(strict=True),
                 args.network, args.output.resolve(),
-                args.recipient_signer.resolve(strict=True) if args.recipient_signer else None)
+                args.recipient_signer.resolve(strict=True) if args.recipient_signer else None, args.fee_plan)

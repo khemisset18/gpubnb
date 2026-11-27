@@ -59,15 +59,23 @@ def verified_fee_quote(verifier, capsule, refund_txid):
     return quote
 
 
+def relay_rate(node):
+    rate = node.rpc("getnetworkinfo")["relayfee"] * 100_000_000
+    require(rate == int(rate) and rate >= 0, "invalid relay fee from private observer")
+    return int(rate)
+
+
+def relay_minimum(rate, vsize):
+    # Pearl v1.5.8 calcMinRequiredTxRelayFee rounds down and substitutes
+    # the full rate when a positive rate rounds to zero.
+    return (rate * vsize // 1000) or rate
+
+
 def check_refund_relay_before_funding(node, observer, quote, funding_txid):
     require(not node.rpc("getrawmempool") and node.rpc("gettxout", funding_txid, 0) is None,
             "expected unfunded private observer")
-    rate = node.rpc("getnetworkinfo")["relayfee"] * 100_000_000
-    require(rate == int(rate) and rate >= 0, "invalid relay fee from private observer")
-    rate = int(rate)
-    # Pearl v1.5.8 calcMinRequiredTxRelayFee rounds down and substitutes
-    # the full rate when a positive rate rounds to zero.
-    required = (rate * quote["Vsize"] // 1000) or rate
+    rate = relay_rate(node)
+    required = relay_minimum(rate, quote["Vsize"])
     covered = quote["FeeGrains"] >= required
     record("refund-fee-check-before-funding", observer=observer, refund=quote["Txid"], vsize=quote["Vsize"],
            budget_grains=quote["FeeGrains"], min_relay_grains_per_kvb=rate, required_grains=required,

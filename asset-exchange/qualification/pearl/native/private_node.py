@@ -54,7 +54,7 @@ class Node:
 @contextmanager
 def private_node(binary, directory, network, payout, *, existing=False, standard=True, relay_grains_per_kvb=1_000):
     require(network in MAGIC, "only private lab networks supported")
-    require(relay_grains_per_kvb in (1_000, 11_000, 20_000), "unsupported lab relay policy")
+    require(relay_grains_per_kvb in (1_000, 11_000, 20_000, 21_746, 21_747), "unsupported lab relay policy")
     with Path(binary).open("rb") as binary_file:
         require(hashlib.file_digest(binary_file, "sha256").hexdigest() == DAEMON, "unverified pearld")
     if not existing:
